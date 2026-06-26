@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import { createTabulaMcpServer, resolveWriteEnabled } from "./index.js";
-import { roomViewAppResourceUri } from "./app-resource.js";
+import { tabulaDocumentAppResourceUri } from "./app-resource.js";
 
 const uiCapabilities = {
   extensions: {
@@ -17,7 +17,7 @@ const withClient = async <T>(
   callback: (client: Client) => Promise<T>,
   options: { mcpApps?: boolean } = {},
 ) => {
-  const { server, registry } = createTabulaMcpServer({ writeEnabled });
+  const { server, registry, documents } = createTabulaMcpServer({ writeEnabled });
   const client = new Client(
     { name: "tabula-mcp-test", version: "0.0.0" },
     options.mcpApps ? { capabilities: uiCapabilities } : undefined,
@@ -30,6 +30,7 @@ const withClient = async <T>(
   } finally {
     await Promise.allSettled([client.close(), server.close()]);
     registry.clear();
+    documents.clear();
   }
 };
 
@@ -84,19 +85,32 @@ describe("MCP tool registration", () => {
     const toolNames = tools.tools.map((tool) => tool.name);
 
     expect(toolNames).not.toContain("tabula_open_room_view");
+    expect(toolNames).not.toContain("tabula_create_document");
     expect(toolNames).not.toContain("tabula_app_room_snapshot");
+    expect(toolNames).not.toContain("tabula_app_document_snapshot");
+    expect(toolNames).not.toContain("tabula_app_save_document");
   });
 
-  it("registers a Tabula Room View MCP App for MCP Apps clients and keeps app snapshot reads app-only", async () => {
+  it("registers a Tabula Document MCP App for MCP Apps clients and keeps app helpers app-only", async () => {
     const tools = await listTools(false, { mcpApps: true });
+    const createDocumentTool = tools.tools.find((tool) => tool.name === "tabula_create_document");
     const roomViewTool = tools.tools.find((tool) => tool.name === "tabula_open_room_view");
     const appSnapshotTool = tools.tools.find((tool) => tool.name === "tabula_app_room_snapshot");
+    const appDocumentSnapshotTool = tools.tools.find((tool) => tool.name === "tabula_app_document_snapshot");
+    const appSaveDocumentTool = tools.tools.find((tool) => tool.name === "tabula_app_save_document");
 
+    expect(createDocumentTool?._meta).toMatchObject({
+      ui: {
+        resourceUri: tabulaDocumentAppResourceUri,
+      },
+      "ui/resourceUri": tabulaDocumentAppResourceUri,
+    });
+    expect(createDocumentTool?.annotations?.readOnlyHint).toBe(false);
     expect(roomViewTool?._meta).toMatchObject({
       ui: {
-        resourceUri: roomViewAppResourceUri,
+        resourceUri: tabulaDocumentAppResourceUri,
       },
-      "ui/resourceUri": roomViewAppResourceUri,
+      "ui/resourceUri": tabulaDocumentAppResourceUri,
     });
     expect(roomViewTool?.annotations?.readOnlyHint).toBe(true);
     expect(appSnapshotTool?._meta).toMatchObject({
@@ -104,19 +118,80 @@ describe("MCP tool registration", () => {
         visibility: ["app"],
       },
     });
+    expect(appDocumentSnapshotTool?._meta).toMatchObject({
+      ui: {
+        visibility: ["app"],
+      },
+    });
+    expect(appSaveDocumentTool?._meta).toMatchObject({
+      ui: {
+        visibility: ["app"],
+      },
+    });
   });
 
-  it("serves the Tabula Room View resource as an MCP App HTML resource", async () => {
+  it("serves the Tabula Document resource as an MCP App HTML resource", async () => {
     await withClient(false, async (client) => {
       const resources = await client.listResources();
-      expect(resources.resources.some((resource) => resource.uri === roomViewAppResourceUri)).toBe(true);
+      expect(resources.resources.some((resource) => resource.uri === tabulaDocumentAppResourceUri)).toBe(true);
 
-      const resource = await client.readResource({ uri: roomViewAppResourceUri });
+      const resource = await client.readResource({ uri: tabulaDocumentAppResourceUri });
       expect(resource.contents[0]).toMatchObject({
-        uri: roomViewAppResourceUri,
+        uri: tabulaDocumentAppResourceUri,
         mimeType: "text/html;profile=mcp-app",
       });
-      expect("text" in resource.contents[0] ? resource.contents[0].text : "").toContain("Tabula.md Room View");
+      expect("text" in resource.contents[0] ? resource.contents[0].text : "").toContain("Tabula.md Document");
     });
+  });
+
+  it("creates, snapshots, and saves local Tabula documents through MCP App tools", async () => {
+    await withClient(
+      false,
+      async (client) => {
+        const createResult = await client.callTool({
+          name: "tabula_create_document",
+          arguments: {
+            title: "Draft",
+            markdown: "# Draft\n\nBody",
+          },
+        });
+        const created = createResult.structuredContent as {
+          document: { documentId: string; title: string; sha256: string; textLength: number; outlineCount: number };
+          markdown: string;
+          outline: unknown[];
+        };
+
+        expect(created.document.title).toBe("Draft");
+        expect(created.document.textLength).toBe("# Draft\n\nBody".length);
+        expect(created.document.outlineCount).toBe(1);
+        expect(created.markdown).toBe("# Draft\n\nBody");
+
+        const snapshotResult = await client.callTool({
+          name: "tabula_app_document_snapshot",
+          arguments: { documentId: created.document.documentId },
+        });
+        const snapshot = snapshotResult.structuredContent as { document: { sha256: string }; markdown: string };
+
+        expect(snapshot.document.sha256).toBe(created.document.sha256);
+        expect(snapshot.markdown).toBe("# Draft\n\nBody");
+
+        const saveResult = await client.callTool({
+          name: "tabula_app_save_document",
+          arguments: {
+            documentId: created.document.documentId,
+            markdown: "# Draft\n\nUpdated body",
+          },
+        });
+        const saved = saveResult.structuredContent as {
+          document: { sha256: string; textLength: number };
+          markdown: string;
+        };
+
+        expect(saved.markdown).toBe("# Draft\n\nUpdated body");
+        expect(saved.document.sha256).not.toBe(created.document.sha256);
+        expect(saved.document.textLength).toBe("# Draft\n\nUpdated body".length);
+      },
+      { mcpApps: true },
+    );
   });
 });

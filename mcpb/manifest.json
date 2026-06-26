@@ -1,0 +1,63 @@
+{
+  "manifest_version": "0.3",
+  "name": "tabula-mcp",
+  "display_name": "Tabula.md MCP",
+  "version": "0.1.0",
+  "description": "Create Tabula.md Markdown documents and open encrypted live rooms from Claude Desktop.",
+  "long_description": "Tabula.md MCP is a local stdio MCP server and MCP App for drafting session-local Markdown documents in Claude Desktop and opening encrypted Tabula.md collaboration rooms. Local documents stay inside the MCP process. Room keys from invite URL fragments stay local, while the Tabula Room server receives only encrypted envelopes.",
+  "author": {
+    "name": "Tabula.md",
+    "url": "https://tabula.md"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tabula-md/tabula-mcp.git"
+  },
+  "homepage": "https://tabula.md",
+  "documentation": "https://github.com/tabula-md/tabula-mcp#readme",
+  "support": "https://github.com/tabula-md/tabula-mcp/issues",
+  "license": "MIT",
+  "keywords": ["tabula", "markdown", "collaboration", "mcp", "mcp-app"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"]
+    }
+  },
+  "tools": [
+    {
+      "name": "tabula_create_document",
+      "description": "Create a local Tabula.md Markdown document and open the interactive MCP App editor."
+    },
+    {
+      "name": "tabula_connect_room",
+      "description": "Connect Claude Desktop to an encrypted Tabula.md room invite URL."
+    },
+    {
+      "name": "tabula_read_markdown",
+      "description": "Read the current decrypted Markdown from a connected room."
+    },
+    {
+      "name": "tabula_get_outline",
+      "description": "Extract Markdown headings from the connected room."
+    },
+    {
+      "name": "tabula_room_status",
+      "description": "Inspect connection state, collaborators, hashes, and write mode."
+    },
+    {
+      "name": "tabula_open_room_view",
+      "description": "Open a connected room inside the Tabula.md MCP App for status, outline, Markdown preview, refresh, fullscreen, and selection handoff."
+    }
+  ],
+  "tools_generated": true,
+  "compatibility": {
+    "claude_desktop": ">=0.13.91",
+    "platforms": ["darwin", "win32"],
+    "runtimes": {
+      "node": ">=22.0.0"
+    }
+  }
+}

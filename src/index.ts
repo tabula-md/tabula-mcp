@@ -5,7 +5,8 @@ import { getUiCapability, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-a
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { registerRoomViewResource, registerRoomViewTools } from "./app-resource.js";
+import { registerDocumentAppResource, registerDocumentAppTools } from "./app-resource.js";
+import { DocumentRegistry } from "./document-registry.js";
 import { jsonContent, errorContent } from "./json.js";
 import { parseRoomShareUrl, resolveRoomServerUrl } from "./protocol.js";
 import { SessionRegistry } from "./registry.js";
@@ -25,6 +26,7 @@ export type TabulaMcpServerOptions = {
 export type TabulaMcpServerInstance = {
   server: McpServer;
   registry: SessionRegistry;
+  documents: DocumentRegistry;
   writeEnabled: boolean;
 };
 
@@ -54,22 +56,23 @@ export const resolveWriteEnabled = ({ env = process.env, argv = process.argv.sli
 export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): TabulaMcpServerInstance => {
   const writeEnabled = options.writeEnabled ?? resolveWriteEnabled();
   const registry = new SessionRegistry();
+  const documents = new DocumentRegistry();
   const server = new McpServer({
     name: "tabula-mcp",
     version: "0.1.0",
   });
 
-  registerRoomViewResource(server);
+  registerDocumentAppResource(server);
 
-  let roomViewToolsRegistered = false;
+  let documentAppToolsRegistered = false;
   server.server.oninitialized = () => {
     const uiCapability = getUiCapability(server.server.getClientCapabilities());
-    if (roomViewToolsRegistered || !uiCapability?.mimeTypes?.includes(RESOURCE_MIME_TYPE)) {
+    if (documentAppToolsRegistered || !uiCapability?.mimeTypes?.includes(RESOURCE_MIME_TYPE)) {
       return;
     }
 
-    registerRoomViewTools(server, registry);
-    roomViewToolsRegistered = true;
+    registerDocumentAppTools(server, registry, documents);
+    documentAppToolsRegistered = true;
     server.sendToolListChanged();
   };
 
@@ -272,7 +275,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
       })),
   );
 
-  return { server, registry, writeEnabled };
+  return { server, registry, documents, writeEnabled };
 };
 
 async function main() {
@@ -297,6 +300,7 @@ if (isDirectRun()) {
     .catch((error) => {
       console.error(error instanceof Error ? error.message : "Fatal Tabula MCP error.");
       instance?.registry.clear();
+      instance?.documents.clear();
       process.exit(1);
     });
 }
