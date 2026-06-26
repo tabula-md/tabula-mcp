@@ -236,7 +236,7 @@ export class TabulaRoomClient {
 
   async applyPatches({ patches, baseSha256 }: { patches: readonly TextPatch[]; baseSha256?: string }) {
     if (!this.writeAccess) {
-      throw new TabulaMcpError("This session is read-only. Reconnect with writeAccess: true before editing.");
+      throw new TabulaMcpError("This session is read-only. Restart tabula-mcp with write mode enabled before editing.");
     }
 
     const previousMarkdown = this.markdown;
