@@ -1,0 +1,37 @@
+{
+  "name": "@tabula-md/mcp",
+  "version": "0.1.0",
+  "description": "Local MCP server for joining Tabula.md encrypted collaboration rooms.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "tabula-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "socket.io-client": "^4.8.3",
+    "yjs": "^13.6.27",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.20.6",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
