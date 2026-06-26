@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tabula.md Room View</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="toolbar">
+        <div class="identity">
+          <span class="brand">Tabula.md</span>
+          <span id="roomId" class="room-id">Room View</span>
+        </div>
+        <div class="actions">
+          <button id="refreshButton" type="button">Refresh</button>
+          <button id="sendSelectionButton" type="button">Send Selection</button>
+          <button id="displayModeButton" type="button">Fullscreen</button>
+        </div>
+      </header>
+
+      <section class="status-grid" aria-label="Room status">
+        <div>
+          <span class="label">Connection</span>
+          <strong id="connectionStatus">Waiting</strong>
+        </div>
+        <div>
+          <span class="label">Mode</span>
+          <strong id="writeMode">Read-only</strong>
+        </div>
+        <div>
+          <span class="label">Hash</span>
+          <strong id="shaValue">-</strong>
+        </div>
+        <div>
+          <span class="label">People</span>
+          <strong id="peerCount">0</strong>
+        </div>
+      </section>
+
+      <section id="message" class="message" aria-live="polite"></section>
+
+      <section class="workspace">
+        <aside class="outline-pane">
+          <div class="pane-heading">
+            <h2>Outline</h2>
+          </div>
+          <ol id="outlineList" class="outline-list"></ol>
+        </aside>
+
+        <section class="markdown-pane">
+          <div class="pane-heading">
+            <h2>Markdown</h2>
+            <span id="textLength" class="meta">0 chars</span>
+          </div>
+          <pre id="markdownPreview" class="markdown-preview"></pre>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./room-view.js"></script>
+  </body>
+</html>

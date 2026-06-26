@@ -67,31 +67,65 @@ https://tabula.md/r/<roomId>#key=<roomKey>
 The `#key` fragment is a secret. Anyone or any agent with that URL can decrypt
 the room, and write access can edit it. Treat room links like bearer tokens.
 
+Write access is disabled by default at the MCP process level. To start a
+write-enabled server, opt in when launching the process:
+
+```json
+{
+  "mcpServers": {
+    "tabula": {
+      "command": "node",
+      "args": ["/absolute/path/to/tabula-mcp/dist/index.js"],
+      "env": {
+        "TABULA_ROOM_URL": "http://localhost:3002",
+        "TABULA_MCP_ENABLE_WRITE": "1"
+      }
+    }
+  }
+}
+```
+
+You can also pass `--enable-write` in `args`. If both are present,
+`--read-only` forces read-only mode.
+
 ## Tools
 
-- `tabula_connect_room`: connect to a room URL. Read-only by default.
+- `tabula_connect_room`: connect to a room URL using the server's current write mode. Read-only by default.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
 - `tabula_room_status`: inspect connection state, room metadata, hash, and collaborators.
 - `tabula_read_markdown`: read the current decrypted Markdown.
 - `tabula_get_outline`: extract Markdown headings.
-- `tabula_apply_text_patches`: edit with guarded non-overlapping text patches.
+- `tabula_open_room_view`: open an MCP App Room View for status, outline, Markdown preview, refresh, and selection handoff in clients that support MCP Apps.
+- `tabula_apply_text_patches`: edit with guarded non-overlapping text patches. Only exposed when the MCP process starts with write mode enabled.
 - `tabula_set_presence`: publish cursor/selection presence to collaborators.
 - `tabula_wait_for_changes`: wait until the room text hash changes.
 - `tabula_disconnect_room`: close a session.
 
+## MCP App Room View
+
+Tabula MCP includes a progressive MCP Apps surface in the same package. After
+connecting a room, call `tabula_open_room_view` to render an interactive
+read-only view when the MCP client supports `text/html;profile=mcp-app`.
+
+The Room View is bundled into `dist/room-view.html` during `npm run build`.
+It does not replace the text tools: clients without MCP Apps support can keep
+using `tabula_read_markdown`, `tabula_get_outline`, and
+`tabula_apply_text_patches` normally.
+
+The app uses an internal `tabula_app_room_snapshot` tool for refreshes. It is
+marked app-only so model-facing tool lists stay focused, while the normal
+read/write tools remain the compatibility path for Codex, Claude, and other
+MCP clients.
+
 ## Editing Model
 
-`tabula_connect_room` defaults to:
+Editing is a server startup decision, not a per-tool argument. In the default
+read-only mode, the MCP server does not expose `tabula_apply_text_patches`, so
+an agent cannot grant itself write access by changing `tabula_connect_room`
+arguments.
 
-```json
-{ "writeAccess": false }
-```
-
-To edit, connect with:
-
-```json
-{ "writeAccess": true }
-```
+To edit, start the MCP process with `TABULA_MCP_ENABLE_WRITE=1` or
+`--enable-write`, then connect to the room normally.
 
 Edits must use `tabula_apply_text_patches` with the latest `baseSha256` returned
 by `tabula_read_markdown` or `tabula_room_status`. This avoids blind full-file
