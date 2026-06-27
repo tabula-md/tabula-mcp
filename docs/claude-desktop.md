@@ -11,6 +11,8 @@ npm install
 npm run release:pack
 ```
 
+Build and release packaging require Node.js `^20.19.0 || >=22.12.0`.
+
 The bundle includes `assets/icon.png` for the Claude Desktop extension listing
 and is written to `dist/tabula-mcp-<version>.mcpb`, with a matching
 `dist/tabula-mcp-<version>.mcpb.sha256` checksum.
