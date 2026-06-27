@@ -1,8 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { tabulaDocumentAppResourceUri } from "./app/types.js";
 import { createTabulaMcpServer, resolveWriteEnabled } from "./index.js";
+
+const originalFetch = globalThis.fetch;
 
 const uiCapabilities = {
   extensions: {
@@ -36,6 +38,11 @@ const withClient = async <T>(
 
 const listTools = async (writeEnabled: boolean, options: { mcpApps?: boolean } = {}) =>
   withClient(writeEnabled, (client) => client.listTools(), options);
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  vi.restoreAllMocks();
+});
 
 describe("write access configuration", () => {
   it("defaults to read-only", () => {
@@ -86,6 +93,7 @@ describe("MCP tool registration", () => {
 
     expect(toolNames).not.toContain("tabula_open_room_view");
     expect(toolNames).not.toContain("tabula_create_document");
+    expect(toolNames).not.toContain("tabula_share_document");
     expect(toolNames).not.toContain("tabula_app_room_snapshot");
     expect(toolNames).not.toContain("tabula_app_document_snapshot");
     expect(toolNames).not.toContain("tabula_app_save_document");
@@ -95,6 +103,7 @@ describe("MCP tool registration", () => {
     const tools = await listTools(false, { mcpApps: true });
     const createDocumentTool = tools.tools.find((tool) => tool.name === "tabula_create_document");
     const roomViewTool = tools.tools.find((tool) => tool.name === "tabula_open_room_view");
+    const shareDocumentTool = tools.tools.find((tool) => tool.name === "tabula_share_document");
     const appSnapshotTool = tools.tools.find((tool) => tool.name === "tabula_app_room_snapshot");
     const appDocumentSnapshotTool = tools.tools.find((tool) => tool.name === "tabula_app_document_snapshot");
     const appSaveDocumentTool = tools.tools.find((tool) => tool.name === "tabula_app_save_document");
@@ -113,6 +122,10 @@ describe("MCP tool registration", () => {
       "ui/resourceUri": tabulaDocumentAppResourceUri,
     });
     expect(roomViewTool?.annotations?.readOnlyHint).toBe(true);
+    expect(shareDocumentTool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      openWorldHint: true,
+    });
     expect(appSnapshotTool?._meta).toMatchObject({
       ui: {
         visibility: ["app"],
@@ -190,6 +203,58 @@ describe("MCP tool registration", () => {
         expect(saved.markdown).toBe("# Draft\n\nUpdated body");
         expect(saved.document.sha256).not.toBe(created.document.sha256);
         expect(saved.document.textLength).toBe("# Draft\n\nUpdated body".length);
+      },
+      { mcpApps: true },
+    );
+  });
+
+  it("exports local Tabula documents as encrypted room share links", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 201 }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await withClient(
+      false,
+      async (client) => {
+        const createResult = await client.callTool({
+          name: "tabula_create_document",
+          arguments: {
+            title: "Share Draft",
+            markdown: "# Share Draft\n\nKeep plaintext local",
+          },
+        });
+        const created = createResult.structuredContent as {
+          document: { documentId: string };
+        };
+
+        const shareResult = await client.callTool({
+          name: "tabula_share_document",
+          arguments: { documentId: created.document.documentId },
+        });
+        const shared = shareResult.structuredContent as {
+          share: {
+            title: string;
+            roomId: string;
+            shareUrl: string;
+            roomServerUrl: string;
+            encrypted: boolean;
+          };
+        };
+
+        expect(shared.share).toMatchObject({
+          title: "Share Draft",
+          roomServerUrl: "https://rooms.tabula.md",
+          encrypted: true,
+        });
+        expect(shared.share.shareUrl).toMatch(new RegExp(`^https://tabula\\.md/r/${shared.share.roomId}#key=`));
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        const [url, init] = fetchMock.mock.calls[0] ?? [];
+        expect(String(url)).toBe(`https://rooms.tabula.md/v1/rooms/${shared.share.roomId}/snapshot`);
+
+        const body = String((init as RequestInit | undefined)?.body);
+        expect(body).toContain('"kind":"snapshot"');
+        expect(body).not.toContain("Keep plaintext local");
+        expect(body).not.toContain(new URL(shared.share.shareUrl).hash.replace(/^#key=/, ""));
       },
       { mcpApps: true },
     );
