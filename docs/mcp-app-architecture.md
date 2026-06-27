@@ -14,6 +14,7 @@ The primary product surface is the Tabula.md Document App:
 - Markdown editor
 - Editor, Split, and Preview modes
 - outline navigation
+- Markdown comment marker context
 - local draft recovery
 - local plaintext document checkpointing
 - save into the local MCP session
@@ -168,6 +169,11 @@ The Document App uses `updateModelContext` for explicit model handoff.
 The App should not send the full Markdown document on every keystroke. It should
 send bounded summaries, hashes, changed ranges, and short excerpts. Full text
 handoff should remain a deliberate tool or user action.
+
+The Comments context tab is local to the bundled App. It extracts
+`<!-- tabula-comment: ... -->` and `> [!comment] ...` markers from the current
+Markdown and sends only the selected comment, location, and hash to model
+context.
 
 ## Dev Harness
 

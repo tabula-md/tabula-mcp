@@ -117,7 +117,7 @@ button:disabled {
 }
 
 .status-grid > div,
-.outline-pane,
+.context-pane,
 .markdown-pane,
 .message {
   border: 1px solid var(--tabula-border);
@@ -174,11 +174,11 @@ button:disabled {
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
   gap: 10px;
 }
 
-.outline-pane,
+.context-pane,
 .markdown-pane {
   min-height: 0;
   display: flex;
@@ -207,6 +207,34 @@ button:disabled {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.context-pane .pane-heading {
+  align-items: stretch;
+  flex-direction: column;
+  padding: 8px 10px;
+}
+
+.context-pane .pane-tools {
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.context-pane .segmented-control {
+  flex: 1 1 auto;
+}
+
+.context-pane .segmented-control button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+#sendCommentButton {
+  flex: 0 0 auto;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 
 .segmented-control {
@@ -248,7 +276,24 @@ button:disabled {
   list-style: none;
 }
 
-.outline-list li {
+.comments-list {
+  display: none;
+  overflow: auto;
+  margin: 0;
+  padding: 8px 10px 10px;
+  list-style: none;
+}
+
+.context-pane[data-context-view="comments"] .outline-list {
+  display: none;
+}
+
+.context-pane[data-context-view="comments"] .comments-list {
+  display: block;
+}
+
+.outline-list li,
+.comments-list li {
   padding: 5px 4px 5px calc((var(--depth, 1) - 1) * 12px + 4px);
   border-radius: 5px;
   color: var(--tabula-text);
@@ -256,8 +301,31 @@ button:disabled {
   line-height: 1.35;
 }
 
-.outline-list .empty {
+.comments-list li {
+  cursor: pointer;
+  padding: 7px 8px;
+}
+
+.comments-list li[aria-selected="true"] {
+  background: color-mix(in srgb, var(--tabula-accent) 14%, var(--tabula-surface));
+}
+
+.comment-line {
+  display: block;
   color: var(--tabula-muted);
+  font-size: 11px;
+  line-height: 1.25;
+  margin-bottom: 3px;
+}
+
+.comment-text {
+  display: block;
+}
+
+.outline-list .empty,
+.comments-list .empty {
+  color: var(--tabula-muted);
+  cursor: default;
 }
 
 .document-surface {
@@ -407,7 +475,7 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .outline-pane {
+  .context-pane {
     max-height: 180px;
   }
 

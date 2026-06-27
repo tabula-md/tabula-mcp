@@ -48,13 +48,6 @@
       <section id="message" class="message" aria-live="polite"></section>
 
       <section class="workspace">
-        <aside class="outline-pane">
-          <div class="pane-heading">
-            <h2>Outline</h2>
-          </div>
-          <ol id="outlineList" class="outline-list"></ol>
-        </aside>
-
         <section class="markdown-pane">
           <div class="pane-heading">
             <h2>Document</h2>
@@ -72,6 +65,21 @@
             <article id="markdownPreview" class="markdown-preview" aria-label="Markdown preview"></article>
           </div>
         </section>
+
+        <aside id="contextPane" class="context-pane" data-context-view="outline">
+          <div class="pane-heading">
+            <h2>Context</h2>
+            <div class="pane-tools">
+              <div class="segmented-control" role="tablist" aria-label="Context view">
+                <button type="button" data-context-tab="outline" aria-pressed="true">Outline</button>
+                <button type="button" data-context-tab="comments" aria-pressed="false">Comments</button>
+              </div>
+              <button id="sendCommentButton" type="button" disabled>Send Comment</button>
+            </div>
+          </div>
+          <ol id="outlineList" class="outline-list"></ol>
+          <ol id="commentsList" class="comments-list"></ol>
+        </aside>
       </section>
     </main>
 

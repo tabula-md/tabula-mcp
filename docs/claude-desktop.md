@@ -105,13 +105,15 @@ After installing the MCPB in Claude Desktop:
 2. Ask Claude: `Create a Tabula.md document titled Release Notes.`
 3. Edit the Markdown in the App.
 4. Click Save.
-5. Ask Claude to call `tabula_list_documents` and confirm the saved document is
+5. Switch to the Comments context tab if the Markdown contains
+   `tabula-comment` markers, select a comment, and send it to Claude.
+6. Ask Claude to call `tabula_list_documents` and confirm the saved document is
    listed.
-6. Ask Claude to call `tabula_open_document` and confirm the App reopens it.
-7. Click Send Changes and confirm Claude sees the edit summary.
-8. Click Share and confirm Claude receives a room URL with `#key=`.
-9. Open the share URL in Tabula.md or reconnect it with `tabula_connect_room`.
-10. Open the room view and confirm Markdown preview and outline render.
+7. Ask Claude to call `tabula_open_document` and confirm the App reopens it.
+8. Click Send Changes and confirm Claude sees the edit summary.
+9. Click Share and confirm Claude receives a room URL with `#key=`.
+10. Open the share URL in Tabula.md or reconnect it with `tabula_connect_room`.
+11. Open the room view and confirm Markdown preview and outline render.
 
 If the App fails to open, verify that the MCPB contains `server/document-app.html`
 and that `npm run check:mcpb` passes.

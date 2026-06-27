@@ -20,7 +20,7 @@ const main = async () => {
     readText("dist/document-app.html"),
   ]);
 
-  for (const expected of ["titleInput", "markdownPreview", "data-view-mode", "shareDocumentButton"]) {
+  for (const expected of ["titleInput", "markdownPreview", "data-view-mode", "shareDocumentButton", "commentsList"]) {
     assertIncludes(appHtml, expected, "document app source");
     assertIncludes(devHtml, expected, "dev harness");
     assertIncludes(builtHtml, expected, "built document app");
@@ -32,6 +32,7 @@ const main = async () => {
 
   assertIncludes(devHtml, "/src/app-dev/main.js", "dev harness");
   assertIncludes(builtHtml, "No Markdown content", "built document app");
+  assertIncludes(builtHtml, "tabula-comment", "built document app");
   if (builtHtml.includes("dev-only-not-a-real-key")) {
     throw new Error("built document app includes dev-only share fixture");
   }
