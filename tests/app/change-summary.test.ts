@@ -35,6 +35,39 @@ describe("document change summaries", () => {
     expect(summary.currentExcerpt.length).toBeLessThan(180);
   });
 
+  it("bounds large outline lists while preserving counts", () => {
+    const currentMarkdown = Array.from({ length: 120 }, (_, index) => `## Section ${index}`).join("\n\n");
+    const summary = createMarkdownChangeSummary("", currentMarkdown, {
+      maxExcerptChars: 80,
+      maxOutlineItems: 5,
+    });
+
+    expect(summary.outline.after).toEqual([
+      "## Section 0",
+      "## Section 1",
+      "## Section 2",
+      "## Section 3",
+      "## Section 4",
+    ]);
+    expect(summary.outline.added).toEqual(summary.outline.after);
+    expect(summary.outline.afterCount).toBe(120);
+    expect(summary.outline.addedCount).toBe(120);
+    expect(summary.outline.omitted.after).toBe(115);
+    expect(summary.outline.omitted.added).toBe(115);
+    expect(summary.outline.truncated).toBe(true);
+
+    const message = formatDocumentChangeMessage({
+      title: "Large Draft",
+      documentId: "doc-1",
+      baseSha256: "abc123",
+      summary,
+    });
+
+    expect(message).toContain("Outline added: ## Section 0, ## Section 1, ## Section 2, ## Section 3, ## Section 4 (115 more)");
+    expect(message).toContain("Outline count: 0 -> 120");
+    expect(message).not.toContain("## Section 60");
+  });
+
   it("formats model context without requiring the full document", () => {
     const summary = createMarkdownChangeSummary("old", "new");
     const message = formatDocumentChangeMessage({
