@@ -9,7 +9,7 @@ export default defineConfig({
     emptyOutDir: false,
     copyPublicDir: false,
     rollupOptions: {
-      input: "src/app/room-view.html",
+      input: "src/app/document-app.html",
     },
   },
 });

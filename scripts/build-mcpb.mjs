@@ -29,15 +29,25 @@ const run = async (command, args, options = {}) => {
   }
 };
 
-const copyServerFiles = async () => {
-  const entries = await readdir(distDir, { withFileTypes: true });
+const copyServerFiles = async (sourceDir = distDir, relativeDir = "") => {
+  const entries = await readdir(sourceDir, { withFileTypes: true });
   for (const entry of entries) {
-    if (!entry.isFile()) {
+    if (relativeDir === "" && entry.name === "mcpb") {
       continue;
     }
 
-    if (entry.name.endsWith(".js") || entry.name === "room-view.html") {
-      await cp(path.join(distDir, entry.name), path.join(serverDir, entry.name));
+    const sourcePath = path.join(sourceDir, entry.name);
+    const relativePath = path.join(relativeDir, entry.name);
+    const targetPath = path.join(serverDir, relativePath);
+
+    if (entry.isDirectory()) {
+      await copyServerFiles(sourcePath, relativePath);
+      continue;
+    }
+
+    if (entry.isFile() && (entry.name.endsWith(".js") || entry.name.endsWith(".html"))) {
+      await mkdir(path.dirname(targetPath), { recursive: true });
+      await cp(sourcePath, targetPath);
     }
   }
 };

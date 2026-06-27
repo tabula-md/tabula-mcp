@@ -110,7 +110,7 @@ Tabula MCP includes a progressive MCP Apps surface in the same package. Call
 `tabula_create_document` to open an editable local Markdown document when the
 MCP client supports `text/html;profile=mcp-app`.
 
-The Document App is bundled into `dist/room-view.html` during `npm run build`.
+The Document App is bundled into `dist/document-app.html` during `npm run build`.
 It also opens connected rooms through `tabula_open_room_view` as a read-only
 room mode. It does not replace the text tools: clients without MCP Apps support
 can keep using `tabula_read_markdown`, `tabula_get_outline`, and
