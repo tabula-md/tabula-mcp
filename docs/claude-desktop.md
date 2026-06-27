@@ -43,8 +43,13 @@ Expected behavior:
 5. Send Changes posts a compact edit summary back into model context.
 6. Share creates an encrypted `https://tabula.md/r/...#key=...` link.
 
-Local App documents are not uploaded to Tabula.md room infrastructure until the
-user explicitly shares them.
+Local App documents are checkpointed as plaintext files on this machine so they
+can recover across MCP process restarts. They are not uploaded to Tabula.md room
+infrastructure until the user explicitly shares them.
+
+To resume a local document after restarting Claude Desktop or the MCP server,
+ask Claude to list local Tabula.md documents with `tabula_list_documents`, then
+open one with `tabula_open_document`.
 
 ## Open A Room
 
@@ -98,10 +103,13 @@ After installing the MCPB in Claude Desktop:
 2. Ask Claude: `Create a Tabula.md document titled Release Notes.`
 3. Edit the Markdown in the App.
 4. Click Save.
-5. Click Send Changes and confirm Claude sees the edit summary.
-6. Click Share and confirm Claude receives a room URL with `#key=`.
-7. Open the share URL in Tabula.md or reconnect it with `tabula_connect_room`.
-8. Open the room view and confirm Markdown preview and outline render.
+5. Ask Claude to call `tabula_list_documents` and confirm the saved document is
+   listed.
+6. Ask Claude to call `tabula_open_document` and confirm the App reopens it.
+7. Click Send Changes and confirm Claude sees the edit summary.
+8. Click Share and confirm Claude receives a room URL with `#key=`.
+9. Open the share URL in Tabula.md or reconnect it with `tabula_connect_room`.
+10. Open the room view and confirm Markdown preview and outline render.
 
 If the App fails to open, verify that the MCPB contains `server/document-app.html`
 and that `npm run check:mcpb` passes.

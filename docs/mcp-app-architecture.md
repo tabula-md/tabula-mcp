@@ -15,6 +15,7 @@ The primary product surface is the Tabula.md Document App:
 - Editor, Split, and Preview modes
 - outline navigation
 - local draft recovery
+- local plaintext document checkpointing
 - save into the local MCP session
 - Send Changes back into model context
 - encrypted share/export to a Tabula.md room link
@@ -104,6 +105,8 @@ Model-facing tools:
 
 - `tabula_read_me`
 - `tabula_create_document`
+- `tabula_list_documents`
+- `tabula_open_document`
 - `tabula_share_document`
 - `tabula_connect_room`
 - `tabula_list_sessions`

@@ -86,6 +86,73 @@ export const registerDocumentAppTools = (
 
   registerAppTool(
     server,
+    "tabula_list_documents",
+    {
+      title: "List Tabula Documents",
+      description:
+        "List local Tabula.md MCP App documents saved in this local server checkpoint store, newest first.",
+      inputSchema: {},
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      _meta: {
+        ui: {},
+      },
+    },
+    async () =>
+      runStructuredTool(async () => {
+        const localDocuments = await documents.list();
+
+        return {
+          value: {
+            documents: localDocuments,
+          },
+          text: localDocuments.length
+            ? `Found ${localDocuments.length} local Tabula.md document checkpoint(s).`
+            : "No local Tabula.md document checkpoints found.",
+        };
+      }),
+  );
+
+  registerAppTool(
+    server,
+    "tabula_open_document",
+    {
+      title: "Open Tabula Document",
+      description:
+        "Open the latest or selected local Tabula.md document checkpoint in the interactive MCP App editor.",
+      inputSchema: optionalDocumentSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      _meta: {
+        ui: {
+          resourceUri: tabulaDocumentAppResourceUri,
+        },
+      },
+    },
+    async ({ documentId }) =>
+      runStructuredTool(async () => {
+        const document = await documents.get(documentId);
+
+        return {
+          value: {
+            ...documentSnapshotContent(document),
+            resourceUri: tabulaDocumentAppResourceUri,
+          },
+          text: `Opening local Tabula.md document checkpoint "${document.title}".`,
+        };
+      }),
+  );
+
+  registerAppTool(
+    server,
     "tabula_open_room_view",
     {
       title: "Open Tabula Room View",

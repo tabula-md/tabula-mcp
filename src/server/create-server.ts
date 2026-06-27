@@ -4,6 +4,7 @@ import { z } from "zod";
 import { registerDocumentAppResource } from "../app/resource.js";
 import { registerDocumentAppTools } from "../app/tools.js";
 import { DocumentRegistry } from "../documents/registry.js";
+import { createDefaultDocumentStore, type DocumentStore } from "../documents/store.js";
 import { formatTabulaReadMe, getTabulaReadMe, tabulaReadMeTopics } from "../guidance.js";
 import { SessionRegistry } from "../registry.js";
 import { registerRoomTools } from "./register-room-tools.js";
@@ -11,6 +12,7 @@ import { resolveWriteEnabled } from "./write-access.js";
 
 export type TabulaMcpServerOptions = {
   writeEnabled?: boolean;
+  documentStore?: DocumentStore;
 };
 
 export type TabulaMcpServerInstance = {
@@ -58,7 +60,7 @@ const registerReadMeTool = (server: McpServer) => {
 export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): TabulaMcpServerInstance => {
   const writeEnabled = options.writeEnabled ?? resolveWriteEnabled();
   const registry = new SessionRegistry();
-  const documents = new DocumentRegistry();
+  const documents = new DocumentRegistry(options.documentStore ?? createDefaultDocumentStore());
   const server = new McpServer({
     name: "tabula-mcp",
     version: "0.1.0",

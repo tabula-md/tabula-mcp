@@ -4,7 +4,7 @@
   "display_name": "Tabula.md MCP",
   "version": "0.1.0",
   "description": "Create Tabula.md Markdown documents and open encrypted live rooms from Claude Desktop.",
-  "long_description": "Tabula.md MCP is a local stdio MCP server and MCP App for drafting session-local Markdown documents in Claude Desktop and opening encrypted Tabula.md collaboration rooms. Local documents stay inside the MCP process. Room keys from invite URL fragments stay local, while the Tabula Room server receives only encrypted envelopes.",
+  "long_description": "Tabula.md MCP is a local stdio MCP server and MCP App for drafting Markdown documents in Claude Desktop and opening encrypted Tabula.md collaboration rooms. Local documents are checkpointed as plaintext on this machine for local recovery. Room keys from invite URL fragments stay local, while the Tabula Room server receives only encrypted envelopes.",
   "author": {
     "name": "Tabula.md",
     "url": "https://tabula.md"
@@ -30,6 +30,14 @@
     {
       "name": "tabula_create_document",
       "description": "Create a local Tabula.md Markdown document and open the interactive MCP App editor."
+    },
+    {
+      "name": "tabula_list_documents",
+      "description": "List local Tabula.md document checkpoints saved by this MCP server."
+    },
+    {
+      "name": "tabula_open_document",
+      "description": "Open the latest or selected local Tabula.md document checkpoint in the MCP App editor."
     },
     {
       "name": "tabula_read_me",

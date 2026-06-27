@@ -46,9 +46,22 @@ Tabula.md link. The room server URL is the encrypted envelope transport.
 
 ## Local Documents
 
-`tabula_create_document` creates a session-local document in the MCP server's
-document registry. The current server store is in memory, so saved local
-documents are lost when the MCP process exits.
+`tabula_create_document` creates a local document in the MCP server's document
+registry. By default, saved local documents are checkpointed as plaintext files
+in this machine's local application state so a restarted MCP process can recover
+the latest documents.
+
+Default checkpoint locations:
+
+- macOS: `~/Library/Application Support/Tabula.md MCP/documents`
+- Windows: `%LOCALAPPDATA%\Tabula.md MCP\documents`
+- Linux: `$XDG_STATE_HOME/tabula-mcp/documents` or `~/.local/state/tabula-mcp/documents`
+
+Set `TABULA_MCP_DOCUMENT_STORE_DIR` to choose a different local plaintext
+checkpoint directory. Set `TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS=1` to keep
+saved local documents memory-only for the MCP server session.
+Use `tabula_list_documents` and `tabula_open_document` to resume checkpoints in
+MCP Apps clients.
 
 The Document App also stores unsaved plaintext drafts in the local MCP App
 host's browser storage. Draft recovery is scoped by document id, size-limited,
@@ -57,8 +70,9 @@ and is not uploaded to Tabula.md servers.
 
 Implications:
 
-- local drafts may persist after closing or reopening the App host
-- saved MCP session documents disappear when the MCP server exits
+- local document checkpoints may persist after the MCP server exits
+- local browser drafts may persist after closing or reopening the App host
+- memory-only mode loses saved MCP session documents when the MCP server exits
 - users should share/export when they want a durable Tabula.md room link
 
 ## Encrypted Share

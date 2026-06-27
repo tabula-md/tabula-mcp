@@ -30,7 +30,7 @@ const summaries: Record<TabulaReadMeTopic, string> = {
   overview:
     "Tabula.md MCP is for Markdown-first collaboration with people and agents. Use local App documents for drafting, encrypted room tools for existing Tabula.md rooms, and encrypted share export when a local draft should become a Tabula.md room link.",
   documents:
-    "For a new draft, call tabula_create_document. The App editor can save into the local MCP session, recover unsaved browser drafts, send compact changes back into model context, and share the saved document as an encrypted room link.",
+    "For a new draft, call tabula_create_document. To resume a saved local checkpoint, call tabula_list_documents, then tabula_open_document. The App editor can save into the local MCP session, recover unsaved browser drafts, send compact changes back into model context, and share the saved document as an encrypted room link.",
   rooms:
     "For an existing Tabula.md room link, call tabula_connect_room with the full URL including #key. Open tabula_open_room_view for a read-only App view, or use read_markdown/get_outline/wait_for_changes for text workflows.",
   sharing:
@@ -42,6 +42,7 @@ const summaries: Record<TabulaReadMeTopic, string> = {
 const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
   overview: [
     "Use tabula_create_document for a new local Markdown draft.",
+    "Use tabula_list_documents and tabula_open_document to resume a saved local checkpoint.",
     "Use tabula_connect_room for an existing Tabula.md room URL.",
     "Use tabula_read_me with topic=security before changing room links, write mode, or sharing behavior.",
   ],

@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { tabulaDocumentAppResourceUri } from "./app/types.js";
+import { MemoryDocumentStore } from "./documents/store.js";
 import { createTabulaMcpServer, resolveWriteEnabled } from "./index.js";
 
 const originalFetch = globalThis.fetch;
@@ -19,7 +20,10 @@ const withClient = async <T>(
   callback: (client: Client) => Promise<T>,
   options: { mcpApps?: boolean } = {},
 ) => {
-  const { server, registry, documents } = createTabulaMcpServer({ writeEnabled });
+  const { server, registry, documents } = createTabulaMcpServer({
+    writeEnabled,
+    documentStore: new MemoryDocumentStore(),
+  });
   const client = new Client(
     { name: "tabula-mcp-test", version: "0.0.0" },
     options.mcpApps ? { capabilities: uiCapabilities } : undefined,
@@ -119,6 +123,8 @@ describe("MCP tool registration", () => {
 
     expect(toolNames).not.toContain("tabula_open_room_view");
     expect(toolNames).not.toContain("tabula_create_document");
+    expect(toolNames).not.toContain("tabula_list_documents");
+    expect(toolNames).not.toContain("tabula_open_document");
     expect(toolNames).not.toContain("tabula_share_document");
     expect(toolNames).not.toContain("tabula_app_room_snapshot");
     expect(toolNames).not.toContain("tabula_app_document_snapshot");
@@ -128,6 +134,8 @@ describe("MCP tool registration", () => {
   it("registers a Tabula Document MCP App for MCP Apps clients and keeps app helpers app-only", async () => {
     const tools = await listTools(false, { mcpApps: true });
     const createDocumentTool = tools.tools.find((tool) => tool.name === "tabula_create_document");
+    const listDocumentsTool = tools.tools.find((tool) => tool.name === "tabula_list_documents");
+    const openDocumentTool = tools.tools.find((tool) => tool.name === "tabula_open_document");
     const roomViewTool = tools.tools.find((tool) => tool.name === "tabula_open_room_view");
     const shareDocumentTool = tools.tools.find((tool) => tool.name === "tabula_share_document");
     const appSnapshotTool = tools.tools.find((tool) => tool.name === "tabula_app_room_snapshot");
@@ -141,6 +149,14 @@ describe("MCP tool registration", () => {
       "ui/resourceUri": tabulaDocumentAppResourceUri,
     });
     expect(createDocumentTool?.annotations?.readOnlyHint).toBe(false);
+    expect(listDocumentsTool?.annotations?.readOnlyHint).toBe(true);
+    expect(openDocumentTool?._meta).toMatchObject({
+      ui: {
+        resourceUri: tabulaDocumentAppResourceUri,
+      },
+      "ui/resourceUri": tabulaDocumentAppResourceUri,
+    });
+    expect(openDocumentTool?.annotations?.readOnlyHint).toBe(true);
     expect(roomViewTool?._meta).toMatchObject({
       ui: {
         resourceUri: tabulaDocumentAppResourceUri,
@@ -229,6 +245,35 @@ describe("MCP tool registration", () => {
         expect(saved.markdown).toBe("# Draft\n\nUpdated body");
         expect(saved.document.sha256).not.toBe(created.document.sha256);
         expect(saved.document.textLength).toBe("# Draft\n\nUpdated body".length);
+
+        const listResult = await client.callTool({
+          name: "tabula_list_documents",
+          arguments: {},
+        });
+        const listed = listResult.structuredContent as {
+          documents: Array<{ documentId: string; title: string; textLength: number }>;
+        };
+
+        expect(listed.documents).toEqual([
+          expect.objectContaining({
+            documentId: created.document.documentId,
+            title: "Draft",
+            textLength: "# Draft\n\nUpdated body".length,
+          }),
+        ]);
+
+        const openResult = await client.callTool({
+          name: "tabula_open_document",
+          arguments: { documentId: created.document.documentId },
+        });
+        const opened = openResult.structuredContent as {
+          document: { documentId: string; sha256: string };
+          markdown: string;
+        };
+
+        expect(opened.document.documentId).toBe(created.document.documentId);
+        expect(opened.document.sha256).toBe(saved.document.sha256);
+        expect(opened.markdown).toBe("# Draft\n\nUpdated body");
       },
       { mcpApps: true },
     );
