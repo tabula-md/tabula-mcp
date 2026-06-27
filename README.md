@@ -117,10 +117,11 @@ or verify security boundaries. It returns concise topic-specific guidance for
 local documents, encrypted rooms, sharing, and write policy.
 
 The Document App is bundled into `dist/document-app.html` during `npm run build`.
-It also opens connected rooms through `tabula_open_room_view` as a read-only
-room mode. It does not replace the text tools: clients without MCP Apps support
-can keep using `tabula_read_markdown`, `tabula_get_outline`, and
-`tabula_apply_text_patches` normally.
+It provides title editing, outline navigation, and Editor/Split/Preview modes
+for local Markdown drafts. It also opens connected rooms through
+`tabula_open_room_view` as a read-only room mode. It does not replace the text
+tools: clients without MCP Apps support can keep using `tabula_read_markdown`,
+`tabula_get_outline`, and `tabula_apply_text_patches` normally.
 
 Local App documents are session-local: the saved copy lives in the local MCP
 process and is lost when that process exits. The MCP App also keeps an unsaved

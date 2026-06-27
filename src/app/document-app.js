@@ -6,10 +6,11 @@ import {
   loadDocumentDraft,
   saveDocumentDraft,
 } from "./draft-storage.js";
+import { renderMarkdownPreview } from "./markdown-preview.js";
 import "./document-app.css";
 
 const elements = {
-  itemId: document.getElementById("itemId"),
+  titleInput: document.getElementById("titleInput"),
   connectionStatus: document.getElementById("connectionStatus"),
   writeMode: document.getElementById("writeMode"),
   shaValue: document.getElementById("shaValue"),
@@ -18,6 +19,9 @@ const elements = {
   message: document.getElementById("message"),
   outlineList: document.getElementById("outlineList"),
   markdownEditor: document.getElementById("markdownEditor"),
+  markdownPane: document.querySelector(".markdown-pane"),
+  markdownPreview: document.getElementById("markdownPreview"),
+  viewModeButtons: document.querySelectorAll("[data-view-mode]"),
   textLength: document.getElementById("textLength"),
   saveDocumentButton: document.getElementById("saveDocumentButton"),
   sendChangesButton: document.getElementById("sendChangesButton"),
@@ -36,8 +40,10 @@ const state = {
   roomId: "",
   sha256: "",
   lastSavedMarkdown: "",
+  lastSavedTitle: "",
   lastContextMarkdown: "",
   displayMode: "inline",
+  viewMode: "split",
 };
 
 const setMessage = (text, tone = "neutral") => {
@@ -65,13 +71,32 @@ const getErrorText = (result) => {
   return textBlock?.text || "Tabula Document App could not load the current content.";
 };
 
+const currentTitle = () => elements.titleInput.value.trim() || "Untitled Document";
+
 const updateDocumentActionState = () => {
   const isDocument = state.mode === "document" && Boolean(state.documentId);
   const hasContextChanges = isDocument && elements.markdownEditor.value !== state.lastContextMarkdown;
+  const hasSavedContentChanges =
+    isDocument &&
+    (elements.markdownEditor.value !== state.lastSavedMarkdown || currentTitle() !== state.lastSavedTitle);
 
-  elements.saveDocumentButton.disabled = !isDocument;
+  elements.saveDocumentButton.disabled = !isDocument || !hasSavedContentChanges;
   elements.sendChangesButton.disabled = !hasContextChanges;
   elements.shareDocumentButton.disabled = !isDocument;
+};
+
+const renderDocumentContent = (markdown) => {
+  elements.markdownEditor.value = markdown;
+  elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
+  elements.textLength.textContent = `${markdown.length} chars`;
+};
+
+const setViewMode = (viewMode) => {
+  state.viewMode = viewMode;
+  elements.markdownPane.dataset.viewMode = viewMode;
+  for (const button of elements.viewModeButtons) {
+    button.setAttribute("aria-pressed", button.dataset.viewMode === viewMode ? "true" : "false");
+  }
 };
 
 const extractOutline = (markdown) => {
@@ -105,7 +130,9 @@ const renderDocumentSummary = (summary) => {
   state.title = summary.title || state.title;
   state.sha256 = summary.sha256 || state.sha256;
 
-  elements.itemId.textContent = state.title || "Document";
+  elements.titleInput.value = state.title || "Untitled Document";
+  elements.titleInput.disabled = false;
+  elements.titleInput.readOnly = false;
   elements.connectionStatus.textContent = "Local";
   elements.writeMode.textContent = "Editable";
   elements.shaValue.textContent = shortHash(summary.sha256);
@@ -125,7 +152,9 @@ const renderRoomSummary = (summary) => {
   state.roomId = summary.roomId || state.roomId;
   state.sha256 = summary.sha256 || state.sha256;
 
-  elements.itemId.textContent = state.roomId || "Room";
+  elements.titleInput.value = state.roomId || "Room";
+  elements.titleInput.disabled = false;
+  elements.titleInput.readOnly = true;
   elements.connectionStatus.textContent = summary.status || "unknown";
   elements.writeMode.textContent = summary.writeAccess ? "Write-enabled" : "Read-only";
   elements.shaValue.textContent = shortHash(summary.sha256);
@@ -133,6 +162,7 @@ const renderRoomSummary = (summary) => {
   elements.textLength.textContent = `${summary.textLength ?? 0} chars`;
   setDraftStatus("Not used");
   state.lastSavedMarkdown = "";
+  state.lastSavedTitle = state.roomId || "Room";
   elements.markdownEditor.readOnly = true;
   updateDocumentActionState();
 };
@@ -157,10 +187,12 @@ const renderOutline = (outline) => {
 };
 
 const applyStoredDraft = (document, savedMarkdown) => {
+  const savedTitle = document.title || "Untitled Document";
   const storage = getDraftStorage();
   if (!storage) {
     setDraftStatus("Unavailable", "warning");
     return {
+      title: savedTitle,
       markdown: savedMarkdown,
       draftRestored: false,
       hasConflict: false,
@@ -172,6 +204,7 @@ const applyStoredDraft = (document, savedMarkdown) => {
   if (!draft) {
     setDraftStatus("Saved");
     return {
+      title: savedTitle,
       markdown: savedMarkdown,
       draftRestored: false,
       hasConflict: false,
@@ -179,10 +212,12 @@ const applyStoredDraft = (document, savedMarkdown) => {
     };
   }
 
-  if (draft.markdown === savedMarkdown) {
+  const draftTitle = draft.title || savedTitle;
+  if (draft.markdown === savedMarkdown && draftTitle === savedTitle) {
     clearDocumentDraft(storage, document.documentId);
     setDraftStatus("Saved");
     return {
+      title: savedTitle,
       markdown: savedMarkdown,
       draftRestored: false,
       hasConflict: false,
@@ -194,6 +229,7 @@ const applyStoredDraft = (document, savedMarkdown) => {
   setDraftStatus(hasConflict ? "Conflict" : "Restored", "warning");
 
   return {
+    title: draftTitle,
     markdown: draft.markdown,
     draftRestored: true,
     hasConflict,
@@ -210,7 +246,8 @@ const persistCurrentDraft = () => {
 
   const storage = getDraftStorage();
   const markdown = elements.markdownEditor.value;
-  if (markdown === state.lastSavedMarkdown) {
+  const title = currentTitle();
+  if (markdown === state.lastSavedMarkdown && title === state.lastSavedTitle) {
     clearDocumentDraft(storage, state.documentId);
     setDraftStatus("Saved");
     return;
@@ -218,7 +255,7 @@ const persistCurrentDraft = () => {
 
   const result = saveDocumentDraft(storage, {
     documentId: state.documentId,
-    title: state.title,
+    title,
     markdown,
     baseSha256: state.sha256,
   });
@@ -239,6 +276,7 @@ const renderSnapshot = (snapshot, options = {}) => {
   let markdown = snapshot.markdown || "";
   const previousContextMarkdown = state.lastContextMarkdown;
   let draftState = {
+    title: state.title,
     draftRestored: false,
     hasConflict: false,
     message: "",
@@ -247,10 +285,13 @@ const renderSnapshot = (snapshot, options = {}) => {
   if (snapshot.document) {
     renderDocumentSummary(snapshot.document);
     state.lastSavedMarkdown = markdown;
+    state.lastSavedTitle = snapshot.document.title || "Untitled Document";
     if (resetContextBaseline) {
       state.lastContextMarkdown = markdown;
     }
     draftState = applyStoredDraft(snapshot.document, markdown);
+    state.title = draftState.title || state.title;
+    elements.titleInput.value = state.title;
     markdown = draftState.markdown;
     if (draftState.draftRestored && previousContextMarkdown === markdown) {
       state.lastContextMarkdown = markdown;
@@ -259,11 +300,10 @@ const renderSnapshot = (snapshot, options = {}) => {
     renderRoomSummary(snapshot.room || snapshot.status);
   }
 
-  elements.markdownEditor.value = markdown;
+  renderDocumentContent(markdown);
   if (!snapshot.document) {
     state.lastContextMarkdown = markdown;
   }
-  elements.textLength.textContent = `${markdown.length} chars`;
   renderOutline(snapshot.document ? extractOutline(markdown) : snapshot.outline || []);
   updateDocumentActionState();
   return draftState;
@@ -325,6 +365,7 @@ const saveDocument = async () => {
       name: "tabula_app_save_document",
       arguments: {
         documentId: state.documentId,
+        title: currentTitle(),
         markdown: elements.markdownEditor.value,
       },
     });
@@ -359,6 +400,7 @@ const shareDocument = async () => {
       name: "tabula_app_save_document",
       arguments: {
         documentId: state.documentId,
+        title: currentTitle(),
         markdown: elements.markdownEditor.value,
       },
     });
@@ -428,7 +470,7 @@ const sendChanges = async () => {
         {
           type: "text",
           text: formatDocumentChangeMessage({
-            title: state.title,
+            title: currentTitle(),
             documentId: state.documentId,
             baseSha256: state.sha256,
             summary,
@@ -439,7 +481,7 @@ const sendChanges = async () => {
         tabulaDocumentChange: {
           mode: "document",
           documentId: state.documentId,
-          title: state.title,
+          title: currentTitle(),
           baseSha256: state.sha256,
           summary,
         },
@@ -476,7 +518,7 @@ const sendSelection = async () => {
 
   const source =
     state.mode === "document"
-      ? `document ${state.title || state.documentId}`
+      ? `document ${currentTitle() || state.documentId}`
       : `room ${state.roomId || state.sessionId}`;
 
   try {
@@ -584,6 +626,19 @@ const boot = async () => {
   elements.refreshButton.addEventListener("click", () => void loadSnapshot());
   elements.sendSelectionButton.addEventListener("click", () => void sendSelection());
   elements.displayModeButton.addEventListener("click", () => void toggleDisplayMode());
+  for (const button of elements.viewModeButtons) {
+    button.addEventListener("click", () => setViewMode(button.dataset.viewMode || "split"));
+  }
+  elements.titleInput.addEventListener("input", () => {
+    if (state.mode !== "document") {
+      return;
+    }
+
+    state.title = currentTitle();
+    persistCurrentDraft();
+    updateDocumentActionState();
+    setMessage("Document has unsaved changes.", "warning");
+  });
   elements.markdownEditor.addEventListener("input", () => {
     if (state.mode !== "document") {
       return;
@@ -591,12 +646,14 @@ const boot = async () => {
 
     const markdown = elements.markdownEditor.value;
     elements.textLength.textContent = `${markdown.length} chars`;
+    elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
     renderOutline(extractOutline(markdown));
     persistCurrentDraft();
     updateDocumentActionState();
     setMessage("Document has unsaved changes.", "warning");
   });
 
+  setViewMode(state.viewMode);
   await app.connect();
   applyHostContext(app.getHostContext?.());
 };
