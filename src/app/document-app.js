@@ -1,6 +1,7 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps/app-with-deps";
 import { createMarkdownChangeSummary, formatDocumentChangeMessage } from "./change-summary.js";
 import { extractCommentMarkers, formatCommentContextMessage } from "./comment-markers.js";
+import { createSelectionContext, formatSelectionContextMessage } from "./selection-context.js";
 import {
   clearDocumentDraft,
   formatDraftStorageReason,
@@ -614,13 +615,18 @@ const sendSelection = async () => {
     state.mode === "document"
       ? `document ${currentTitle() || state.documentId}`
       : `room ${state.roomId || state.sessionId}`;
+  const selection = createSelectionContext(selectedText);
 
   try {
     await state.app.updateModelContext({
       content: [
         {
           type: "text",
-          text: `Selected Tabula.md text from ${source} at ${state.sha256}:\n\n${selectedText}`,
+          text: formatSelectionContextMessage({
+            source,
+            sha256: state.sha256,
+            selection,
+          }),
         },
       ],
       structuredContent: {
@@ -630,7 +636,10 @@ const sendSelection = async () => {
           sessionId: state.sessionId,
           roomId: state.roomId,
           sha256: state.sha256,
-          text: selectedText,
+          text: selection.text,
+          originalLength: selection.originalLength,
+          excerptLength: selection.excerptLength,
+          truncated: selection.truncated,
         },
       },
     });

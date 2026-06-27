@@ -112,6 +112,10 @@ const runDocumentFlow = async (baseUrl, browser) => {
     "",
     "Edited from browser smoke.",
     "",
+    "## Long Selection",
+    "",
+    `Start ${"large selection body ".repeat(240)}End`,
+    "",
     "<!-- tabula-comment: check browser flow -->",
     "",
     "## Next",
@@ -128,6 +132,16 @@ const runDocumentFlow = async (baseUrl, browser) => {
 
   await page.getByRole("button", { name: "Send Changes" }).click();
   await waitForMessage(page, "Document changes sent to the model context.");
+
+  await page.locator("#markdownEditor").evaluate((element) => {
+    const text = element.value;
+    const start = text.indexOf("Start ");
+    const end = text.indexOf("End", start) + "End".length;
+    element.focus();
+    element.setSelectionRange(start, end);
+  });
+  await page.getByRole("button", { name: "Send Selection" }).click();
+  await waitForMessage(page, "Selection sent to the model context.");
 
   await page.getByRole("button", { name: "Comments" }).click();
   await page.locator("#commentsList").getByText("check browser flow", { exact: true }).click();
@@ -164,6 +178,23 @@ const runDocumentFlow = async (baseUrl, browser) => {
   assert(
     !JSON.stringify(comment).includes("Edited from browser smoke"),
     "comment context should not include unrelated Markdown body text",
+  );
+
+  const selection = events.modelContexts.find((payload) => payload?.structuredContent?.tabulaSelection);
+  assert(selection, "document flow should send selected text context");
+  assert.equal(selection.structuredContent.tabulaSelection.truncated, true);
+  assert(
+    selection.structuredContent.tabulaSelection.originalLength >
+      selection.structuredContent.tabulaSelection.excerptLength,
+    "selection context should report truncation lengths",
+  );
+  assert(
+    selection.structuredContent.tabulaSelection.text.includes("[truncated selection]"),
+    "selection context should include an explicit truncation marker",
+  );
+  assert(
+    !JSON.stringify(selection).includes("large selection body ".repeat(120)),
+    "selection context should not include the full selected text",
   );
 
   const share = events.modelContexts.find((payload) => payload?.structuredContent?.tabulaShare);
