@@ -8,6 +8,7 @@
     "tabula-mcp": "./dist/index.js"
   },
   "files": [
+    "assets",
     "dist",
     "docs",
     "README.md",

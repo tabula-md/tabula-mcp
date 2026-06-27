@@ -11,7 +11,8 @@ npm install
 npm run release:pack
 ```
 
-The bundle is written to `dist/tabula-mcp-<version>.mcpb`, with a matching
+The bundle includes `assets/icon.png` for the Claude Desktop extension listing
+and is written to `dist/tabula-mcp-<version>.mcpb`, with a matching
 `dist/tabula-mcp-<version>.mcpb.sha256` checksum.
 
 `release:pack` builds the TypeScript server, bundles the Document App, stages
