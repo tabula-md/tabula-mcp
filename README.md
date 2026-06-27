@@ -139,7 +139,7 @@ or verify security boundaries. It returns concise topic-specific guidance for
 local documents, encrypted rooms, sharing, and write policy.
 
 The Document App is bundled into `dist/document-app.html` during `npm run build`.
-It provides title editing, outline navigation, and Editor/Split/Preview modes
+It provides title editing, Outline/Comments context tabs, and Editor/Split/Preview modes
 for local Markdown drafts. It also opens connected rooms through
 `tabula_open_room_view` as a read-only room mode. It does not replace the text
 tools: clients without MCP Apps support can keep using `tabula_read_markdown`,
@@ -166,6 +166,10 @@ other MCP clients.
 For local App documents, the `Send Changes` control sends a compact Markdown
 change summary back into model context. It uses changed ranges and bounded
 excerpts instead of sending the whole document on every edit.
+
+The Comments context tab detects local Markdown comment markers such as
+`<!-- tabula-comment: ... -->` and `> [!comment] ...`, then can send a selected
+comment back into model context without uploading the full document.
 
 If a recovered browser draft differs from the latest saved MCP session snapshot,
 the App marks the draft as restored or conflicted and asks the user to review it

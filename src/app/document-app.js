@@ -1,5 +1,6 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps/app-with-deps";
 import { createMarkdownChangeSummary, formatDocumentChangeMessage } from "./change-summary.js";
+import { extractCommentMarkers, formatCommentContextMessage } from "./comment-markers.js";
 import {
   clearDocumentDraft,
   formatDraftStorageReason,
@@ -17,17 +18,21 @@ const elements = {
   peerCount: document.getElementById("peerCount"),
   draftStatus: document.getElementById("draftStatus"),
   message: document.getElementById("message"),
+  contextPane: document.getElementById("contextPane"),
   outlineList: document.getElementById("outlineList"),
+  commentsList: document.getElementById("commentsList"),
   markdownEditor: document.getElementById("markdownEditor"),
   markdownPane: document.querySelector(".markdown-pane"),
   markdownPreview: document.getElementById("markdownPreview"),
   viewModeButtons: document.querySelectorAll("[data-view-mode]"),
+  contextTabButtons: document.querySelectorAll("[data-context-tab]"),
   textLength: document.getElementById("textLength"),
   saveDocumentButton: document.getElementById("saveDocumentButton"),
   sendChangesButton: document.getElementById("sendChangesButton"),
   shareDocumentButton: document.getElementById("shareDocumentButton"),
   refreshButton: document.getElementById("refreshButton"),
   sendSelectionButton: document.getElementById("sendSelectionButton"),
+  sendCommentButton: document.getElementById("sendCommentButton"),
   displayModeButton: document.getElementById("displayModeButton"),
 };
 
@@ -44,6 +49,9 @@ const state = {
   lastContextMarkdown: "",
   displayMode: "inline",
   viewMode: "split",
+  contextView: "outline",
+  comments: [],
+  selectedCommentId: "",
 };
 
 const setMessage = (text, tone = "neutral") => {
@@ -83,12 +91,14 @@ const updateDocumentActionState = () => {
   elements.saveDocumentButton.disabled = !isDocument || !hasSavedContentChanges;
   elements.sendChangesButton.disabled = !hasContextChanges;
   elements.shareDocumentButton.disabled = !isDocument;
+  elements.sendCommentButton.disabled = !state.selectedCommentId;
 };
 
 const renderDocumentContent = (markdown) => {
   elements.markdownEditor.value = markdown;
   elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
   elements.textLength.textContent = `${markdown.length} chars`;
+  renderComments(extractCommentMarkers(markdown));
 };
 
 const setViewMode = (viewMode) => {
@@ -96,6 +106,14 @@ const setViewMode = (viewMode) => {
   elements.markdownPane.dataset.viewMode = viewMode;
   for (const button of elements.viewModeButtons) {
     button.setAttribute("aria-pressed", button.dataset.viewMode === viewMode ? "true" : "false");
+  }
+};
+
+const setContextView = (contextView) => {
+  state.contextView = contextView;
+  elements.contextPane.dataset.contextView = contextView;
+  for (const button of elements.contextTabButtons) {
+    button.setAttribute("aria-pressed", button.dataset.contextTab === contextView ? "true" : "false");
   }
 };
 
@@ -118,6 +136,49 @@ const extractOutline = (markdown) => {
   }
 
   return headings;
+};
+
+const selectComment = (commentId) => {
+  state.selectedCommentId = commentId;
+  for (const item of elements.commentsList.querySelectorAll("[data-comment-id]")) {
+    item.setAttribute("aria-selected", item.dataset.commentId === commentId ? "true" : "false");
+  }
+  updateDocumentActionState();
+};
+
+const renderComments = (comments) => {
+  state.comments = comments;
+  if (!comments.some((comment) => comment.id === state.selectedCommentId)) {
+    state.selectedCommentId = "";
+  }
+
+  elements.commentsList.replaceChildren();
+
+  if (!comments.length) {
+    const item = document.createElement("li");
+    item.className = "empty";
+    item.textContent = "No comments";
+    elements.commentsList.append(item);
+    updateDocumentActionState();
+    return;
+  }
+
+  for (const comment of comments) {
+    const item = document.createElement("li");
+    item.dataset.commentId = comment.id;
+    item.setAttribute("aria-selected", comment.id === state.selectedCommentId ? "true" : "false");
+    const line = document.createElement("span");
+    line.className = "comment-line";
+    line.textContent = `Line ${comment.line}`;
+    const text = document.createElement("span");
+    text.className = "comment-text";
+    text.textContent = comment.text;
+    item.append(line, text);
+    item.addEventListener("click", () => selectComment(comment.id));
+    elements.commentsList.append(item);
+  }
+
+  updateDocumentActionState();
 };
 
 const renderDocumentSummary = (summary) => {
@@ -546,6 +607,48 @@ const sendSelection = async () => {
   }
 };
 
+const sendSelectedComment = async () => {
+  if (!state.app) {
+    return;
+  }
+
+  const comment = state.comments.find((item) => item.id === state.selectedCommentId);
+  if (!comment) {
+    setMessage("Select a comment first.", "warning");
+    return;
+  }
+
+  const source = state.mode === "room" ? "room" : "document";
+  try {
+    await state.app.updateModelContext({
+      content: [
+        {
+          type: "text",
+          text: formatCommentContextMessage({
+            title: state.mode === "room" ? state.roomId : currentTitle(),
+            source,
+            sha256: state.sha256,
+            comment,
+          }),
+        },
+      ],
+      structuredContent: {
+        tabulaComment: {
+          mode: state.mode,
+          documentId: state.documentId || undefined,
+          sessionId: state.sessionId || undefined,
+          roomId: state.roomId || undefined,
+          sha256: state.sha256,
+          comment,
+        },
+      },
+    });
+    setMessage("Comment sent to the model context.");
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : "Could not send comment.", "error");
+  }
+};
+
 const toggleDisplayMode = async () => {
   if (!state.app) {
     return;
@@ -633,9 +736,13 @@ const boot = async () => {
   elements.shareDocumentButton.addEventListener("click", () => void shareDocument());
   elements.refreshButton.addEventListener("click", () => void loadSnapshot());
   elements.sendSelectionButton.addEventListener("click", () => void sendSelection());
+  elements.sendCommentButton.addEventListener("click", () => void sendSelectedComment());
   elements.displayModeButton.addEventListener("click", () => void toggleDisplayMode());
   for (const button of elements.viewModeButtons) {
     button.addEventListener("click", () => setViewMode(button.dataset.viewMode || "split"));
+  }
+  for (const button of elements.contextTabButtons) {
+    button.addEventListener("click", () => setContextView(button.dataset.contextTab || "outline"));
   }
   elements.titleInput.addEventListener("input", () => {
     if (state.mode !== "document") {
@@ -656,12 +763,14 @@ const boot = async () => {
     elements.textLength.textContent = `${markdown.length} chars`;
     elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
     renderOutline(extractOutline(markdown));
+    renderComments(extractCommentMarkers(markdown));
     persistCurrentDraft();
     updateDocumentActionState();
     setMessage("Document has unsaved changes.", "warning");
   });
 
   setViewMode(state.viewMode);
+  setContextView(state.contextView);
   await app.connect();
   applyHostContext(app.getHostContext?.());
 };
