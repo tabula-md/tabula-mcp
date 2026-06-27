@@ -176,6 +176,25 @@ The MCPB is intentionally read-only. Use manual MCP client configuration with
 `TABULA_MCP_ENABLE_WRITE=1` only for explicit write-enabled development or
 review sessions.
 
+## MCP App Dev Harness
+
+To inspect the App UI without an MCP host, run:
+
+```sh
+npm run dev:app
+```
+
+Then open `http://127.0.0.1:5174/index-dev.html?tabula-dev=1` for a local
+document fixture, or add `&fixture=room` for the read-only room fixture. The
+mock bridge implements App inputs, snapshots, save, share, display mode, and
+model context updates inside the browser only.
+
+For a static harness smoke check:
+
+```sh
+npm run test:app
+```
+
 ## Editing Model
 
 Editing is a server startup decision, not a per-tool argument. In the default

@@ -574,11 +574,19 @@ const applyHostContext = (context = {}) => {
   }
 };
 
-const boot = async () => {
-  const app = new App(
+const createAppClient = () => {
+  if (typeof window.__TABULA_CREATE_APP__ === "function") {
+    return window.__TABULA_CREATE_APP__();
+  }
+
+  return new App(
     { name: "Tabula Document", version: "0.1.0" },
     { availableDisplayModes: ["inline", "fullscreen"] },
   );
+};
+
+const boot = async () => {
+  const app = createAppClient();
   state.app = app;
 
   app.ontoolinput = (input) => {
