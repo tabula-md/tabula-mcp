@@ -14,6 +14,7 @@ const requiredFiles = [
   "server/app/tools.js",
   "server/app/resource.js",
   "server/documents/registry.js",
+  "server/documents/store.js",
   "server/server/create-server.js",
   "server/server/register-room-tools.js",
   "server/server/write-access.js",
@@ -30,6 +31,8 @@ const requiredFiles = [
 const requiredTools = [
   "tabula_read_me",
   "tabula_create_document",
+  "tabula_list_documents",
+  "tabula_open_document",
   "tabula_share_document",
   "tabula_connect_room",
   "tabula_read_markdown",

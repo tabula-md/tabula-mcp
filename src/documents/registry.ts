@@ -3,6 +3,7 @@ import {
   assertMarkdownSize,
   createDocumentSnapshot,
   inferDocumentTitle,
+  summarizeDocument,
 } from "./snapshot.js";
 import { MemoryDocumentStore, requireStoredDocument, type DocumentStore } from "./store.js";
 
@@ -32,6 +33,11 @@ export class DocumentRegistry {
 
   async get(documentId?: string) {
     return createDocumentSnapshot(requireStoredDocument(this.#store, documentId));
+  }
+
+  async list() {
+    const snapshots = await Promise.all(this.#store.list().map(createDocumentSnapshot));
+    return snapshots.map(summarizeDocument);
   }
 
   async update({ documentId, title, markdown }: { documentId: string; title?: string; markdown: string }) {

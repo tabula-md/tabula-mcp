@@ -63,12 +63,14 @@ After installing the generated `.mcpb`:
 3. Edit title and Markdown in the App.
 4. Switch between Editor, Split, and Preview.
 5. Save the document.
-6. Click Send Changes and confirm Claude receives a compact summary.
-7. Click Share and confirm Claude receives a `https://tabula.md/r/...#key=...`
+6. Call `tabula_list_documents` and confirm the document checkpoint appears.
+7. Call `tabula_open_document` and confirm the App reopens the checkpoint.
+8. Click Send Changes and confirm Claude receives a compact summary.
+9. Click Share and confirm Claude receives a `https://tabula.md/r/...#key=...`
    link.
-8. Connect that link with `tabula_connect_room`.
-9. Open the room view with `tabula_open_room_view`.
-10. Confirm Markdown preview, outline, refresh, and selection handoff work.
+10. Connect that link with `tabula_connect_room`.
+11. Open the room view with `tabula_open_room_view`.
+12. Confirm Markdown preview, outline, refresh, and selection handoff work.
 
 For local Tabula.md development, run the room server separately and use local
 links such as:
@@ -98,6 +100,7 @@ Before release, inspect security-sensitive changes for:
 - hash fragment handling
 - room server request bodies
 - encrypted snapshot upload
+- local plaintext document checkpointing
 - local draft storage
 - write-mode gating
 - App-only tool visibility
