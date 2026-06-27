@@ -170,6 +170,11 @@ The App should not send the full Markdown document on every keystroke. It should
 send bounded summaries, hashes, changed ranges, and short excerpts. Full text
 handoff should remain a deliberate tool or user action.
 
+When the user shares a local App document with unsent edits, the App saves the
+current document, creates the encrypted room link, and includes the compact
+change summary in the same `updateModelContext` payload. This keeps the common
+"edit, then share" flow closed without requiring a separate Send Changes click.
+
 The Comments context tab is local to the bundled App. It extracts
 `<!-- tabula-comment: ... -->` and `> [!comment] ...` markers from the current
 Markdown and sends only the selected comment, location, and hash to model

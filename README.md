@@ -178,7 +178,10 @@ upload plaintext Markdown to Tabula.md room infrastructure.
 
 The `Share` control saves the current App document into the local MCP session,
 then uploads only an encrypted Yjs snapshot to the Tabula Room server. It sends
-the resulting `https://tabula.md/r/...#key=...` link back into model context.
+the resulting `https://tabula.md/r/...#key=...` link back into model context. If
+the user has unsent App edits, the share handoff also includes the same compact
+change summary used by `Send Changes`, so the model can understand what changed
+without receiving the full Markdown body.
 The share result also includes `share.connect.arguments`, which can be passed
 directly to `tabula_connect_room` when the model needs to reopen the encrypted
 room without reparsing the link text.
