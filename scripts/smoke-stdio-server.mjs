@@ -8,7 +8,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const serverEntrypoint = path.join(rootDir, "dist", "index.js");
+const defaultServerEntrypoint = path.join(rootDir, "dist", "index.js");
 const documentAppResourceUri = "ui://tabula/document.html";
 
 const uiCapabilities = {
@@ -58,7 +58,51 @@ const createShareCaptureServer = async () => {
   };
 };
 
-const withStdioClient = async ({ storeDir, roomServerUrl, mcpApps = false }, callback) => {
+const parseArgs = (argv) => {
+  const parsed = {
+    label: "MCP stdio server",
+    serverCwd: rootDir,
+    serverEntrypoint: defaultServerEntrypoint,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const next = argv[index + 1];
+
+    if (arg === "--server-entrypoint") {
+      if (!next) {
+        throw new Error("--server-entrypoint requires a value");
+      }
+      parsed.serverEntrypoint = path.resolve(next);
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--server-cwd") {
+      if (!next) {
+        throw new Error("--server-cwd requires a value");
+      }
+      parsed.serverCwd = path.resolve(next);
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--label") {
+      if (!next) {
+        throw new Error("--label requires a value");
+      }
+      parsed.label = next;
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option: ${arg}`);
+  }
+
+  return parsed;
+};
+
+const withStdioClient = async ({ storeDir, roomServerUrl, mcpApps = false, serverCwd, serverEntrypoint }, callback) => {
   const client = new Client(
     { name: "tabula-mcp-stdio-smoke", version: "0.0.0" },
     mcpApps ? { capabilities: uiCapabilities } : undefined,
@@ -66,7 +110,7 @@ const withStdioClient = async ({ storeDir, roomServerUrl, mcpApps = false }, cal
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [serverEntrypoint],
-    cwd: rootDir,
+    cwd: serverCwd,
     env: {
       TABULA_MCP_DOCUMENT_STORE_DIR: storeDir,
       TABULA_ROOM_URL: roomServerUrl,
@@ -90,8 +134,8 @@ const withStdioClient = async ({ storeDir, roomServerUrl, mcpApps = false }, cal
 
 const toolNamesFrom = (tools) => tools.tools.map((tool) => tool.name);
 
-const runNonAppClientSmoke = async ({ storeDir, roomServerUrl }) => {
-  await withStdioClient({ storeDir, roomServerUrl }, async (client) => {
+const runNonAppClientSmoke = async ({ storeDir, roomServerUrl, serverCwd, serverEntrypoint }) => {
+  await withStdioClient({ storeDir, roomServerUrl, serverCwd, serverEntrypoint }, async (client) => {
     const tools = await client.listTools();
     const toolNames = toolNamesFrom(tools);
     assert(toolNames.includes("tabula_read_me"), "read_me should be available without MCP Apps");
@@ -108,8 +152,8 @@ const runNonAppClientSmoke = async ({ storeDir, roomServerUrl }) => {
   });
 };
 
-const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads }) => {
-  return withStdioClient({ storeDir, roomServerUrl, mcpApps: true }, async (client) => {
+const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads, serverCwd, serverEntrypoint }) => {
+  return withStdioClient({ storeDir, roomServerUrl, mcpApps: true, serverCwd, serverEntrypoint }, async (client) => {
     const tools = await client.listTools();
     const toolNames = toolNamesFrom(tools);
     for (const toolName of [
@@ -187,8 +231,16 @@ const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads }) => {
   });
 };
 
-const runRestartPersistenceSmoke = async ({ storeDir, roomServerUrl, documentId, title, updatedMarkdown }) => {
-  await withStdioClient({ storeDir, roomServerUrl, mcpApps: true }, async (client) => {
+const runRestartPersistenceSmoke = async ({
+  storeDir,
+  roomServerUrl,
+  documentId,
+  title,
+  updatedMarkdown,
+  serverCwd,
+  serverEntrypoint,
+}) => {
+  await withStdioClient({ storeDir, roomServerUrl, mcpApps: true, serverCwd, serverEntrypoint }, async (client) => {
     const listResult = await client.callTool({ name: "tabula_list_documents", arguments: {} });
     const restored = listResult.structuredContent?.documents?.find((document) => document.documentId === documentId);
     assert(restored, "restarted stdio server should list the saved local checkpoint");
@@ -206,19 +258,26 @@ const runRestartPersistenceSmoke = async ({ storeDir, roomServerUrl, documentId,
 };
 
 const main = async () => {
+  const options = parseArgs(process.argv.slice(2));
   const storeDir = await mkdtemp(path.join(tmpdir(), "tabula-mcp-stdio-"));
   const shareServer = await createShareCaptureServer();
+  const runtime = {
+    serverCwd: options.serverCwd,
+    serverEntrypoint: options.serverEntrypoint,
+  };
 
   try {
-    await runNonAppClientSmoke({ storeDir, roomServerUrl: shareServer.url });
+    await runNonAppClientSmoke({ storeDir, roomServerUrl: shareServer.url, ...runtime });
     const checkpoint = await runAppClientSmoke({
       storeDir,
       roomServerUrl: shareServer.url,
       uploads: shareServer.uploads,
+      ...runtime,
     });
     await runRestartPersistenceSmoke({
       storeDir,
       roomServerUrl: shareServer.url,
+      ...runtime,
       ...checkpoint,
     });
   } finally {
@@ -226,7 +285,7 @@ const main = async () => {
     await rm(storeDir, { recursive: true, force: true });
   }
 
-  console.log("MCP stdio server smoke passed");
+  console.log(`${options.label} smoke passed`);
 };
 
 main().catch((error) => {
