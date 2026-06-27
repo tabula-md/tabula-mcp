@@ -100,6 +100,16 @@ You can also pass `--enable-write` in `args`. If both are present,
 For the one-click Claude Desktop path, use the MCPB flow instead. It is
 zero-config and intentionally read-only for room writes.
 
+## Package Exports
+
+The package is primarily a `tabula-mcp` stdio server, but it also exposes a
+small ESM surface for tests and local embedding:
+
+- `@tabula-md/mcp`: server factory plus document-store helpers
+- `@tabula-md/mcp/server`: server factory and write-mode helpers
+- `@tabula-md/mcp/protocol`: room URL and room server resolution helpers
+- `@tabula-md/mcp/documents`: local document registry, snapshots, and stores
+
 ## Tools
 
 - `tabula_create_document`: create a local Tabula.md Markdown document and open the interactive MCP App editor in clients that support MCP Apps.

@@ -39,6 +39,8 @@ const main = async () => {
   const checksumPath = `${mcpbPath}.sha256`;
 
   await runNpmScript("build:mcpb");
+  await runNpmScript("check:exports");
+  await runNpmScript("check:pack");
   await runNpmScript("check:mcpb");
 
   const checksum = await sha256File(mcpbPath);

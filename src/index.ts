@@ -1,20 +1,32 @@
 #!/usr/bin/env node
 
-export { createTabulaMcpServer } from "./server/create-server.js";
-export type { TabulaMcpServerInstance, TabulaMcpServerOptions } from "./server/create-server.js";
+export {
+  createTabulaMcpServer,
+  type TabulaMcpServerInstance,
+  type TabulaMcpServerOptions,
+  resolveWriteEnabled,
+  type WriteAccessConfig,
+} from "./server/index.js";
 export {
   FileDocumentStore,
   MemoryDocumentStore,
   createDefaultDocumentStore,
+  defaultMaxStoredDocuments,
   resolveDefaultDocumentStoreDirectory,
-} from "./documents/store.js";
+  DocumentRegistry,
+  assertMarkdownSize,
+  createDocumentSnapshot,
+  inferDocumentTitle,
+  summarizeDocument,
+} from "./documents/index.js";
 export type {
   DefaultDocumentStoreConfig,
   DocumentStore,
   FileDocumentStoreOptions,
-} from "./documents/store.js";
-export { resolveWriteEnabled } from "./server/write-access.js";
-export type { WriteAccessConfig } from "./server/write-access.js";
+  StoredDocument,
+  TabulaDocumentSnapshot,
+  TabulaDocumentSummary,
+} from "./documents/index.js";
 
 import { isDirectRun, runCli } from "./cli.js";
 
