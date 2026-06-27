@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderMarkdownPreview } from "./markdown-preview.js";
+import { renderMarkdownPreview } from "../../src/app/markdown-preview.js";
 
 describe("Markdown preview rendering", () => {
   it("renders common Markdown blocks", () => {

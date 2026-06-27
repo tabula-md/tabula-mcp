@@ -3,7 +3,7 @@ import {
   createMarkdownChangeSummary,
   extractHeadingLabels,
   formatDocumentChangeMessage,
-} from "./change-summary.js";
+} from "../../src/app/change-summary.js";
 
 describe("document change summaries", () => {
   it("extracts Markdown heading labels with depth", () => {

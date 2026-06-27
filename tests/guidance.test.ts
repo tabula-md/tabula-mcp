@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTabulaReadMe, getTabulaReadMe, tabulaReadMeTopics } from "./guidance.js";
+import { formatTabulaReadMe, getTabulaReadMe, tabulaReadMeTopics } from "../src/guidance.js";
 
 describe("Tabula read_me guidance", () => {
   it("returns guidance for every supported topic", () => {

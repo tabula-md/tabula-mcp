@@ -1,9 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { tabulaDocumentAppResourceUri } from "./app/types.js";
-import { MemoryDocumentStore } from "./documents/store.js";
-import { createTabulaMcpServer, resolveWriteEnabled } from "./index.js";
+import { tabulaDocumentAppResourceUri } from "../src/app/types.js";
+import { MemoryDocumentStore } from "../src/documents/store.js";
+import { createTabulaMcpServer, resolveWriteEnabled } from "../src/index.js";
 
 const originalFetch = globalThis.fetch;
 

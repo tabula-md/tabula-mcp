@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRoomShareUrl, resolveRoomServerUrl } from "./protocol.js";
+import { parseRoomShareUrl, resolveRoomServerUrl } from "../src/protocol.js";
 
 const roomKey = Buffer.from(new Uint8Array(32).fill(7)).toString("base64url");
 

@@ -7,7 +7,7 @@ import {
   loadDocumentDraft,
   readDraftIndex,
   saveDocumentDraft,
-} from "./draft-storage.js";
+} from "../../src/app/draft-storage.js";
 
 class MemoryStorage implements Storage {
   readonly #values = new Map<string, string>();

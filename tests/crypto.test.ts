@@ -5,7 +5,7 @@ import {
   encryptBytesForRoom,
   importRoomKey,
   sha256Text,
-} from "./crypto.js";
+} from "../src/crypto.js";
 
 const roomKey = Buffer.from(new Uint8Array(32).fill(11)).toString("base64url");
 
