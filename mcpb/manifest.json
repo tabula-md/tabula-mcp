@@ -16,6 +16,13 @@
   "homepage": "https://tabula.md",
   "documentation": "https://github.com/tabula-md/tabula-mcp#readme",
   "support": "https://github.com/tabula-md/tabula-mcp/issues",
+  "icon": "assets/icon.png",
+  "icons": [
+    {
+      "src": "assets/icon.png",
+      "size": "512x512"
+    }
+  ],
   "license": "MIT",
   "keywords": ["tabula", "markdown", "collaboration", "mcp", "mcp-app"],
   "server": {

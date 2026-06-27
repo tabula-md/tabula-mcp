@@ -47,11 +47,14 @@ The staged bundle must include:
 - document domain files
 - share/export files
 - guidance files
+- `assets/icon.png`
 - `README.md`
 - `docs/`
 - `LICENSE`
 
 The manifest must not contain installer `user_config`.
+The manifest must point `icon` and a `512x512` `icons` entry at
+`assets/icon.png`.
 
 The default MCPB must be read-only for room writes. Write-enabled testing uses
 manual stdio configuration, not installer prompts.

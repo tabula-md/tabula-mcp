@@ -179,7 +179,8 @@ For Claude Desktop experiments, build a one-click MCP Bundle:
 npm run release:pack
 ```
 
-The bundle is written to `dist/tabula-mcp-<version>.mcpb`, with a matching
+The bundle includes `assets/icon.png` for Claude Desktop extension listings and
+is written to `dist/tabula-mcp-<version>.mcpb`, with a matching
 `dist/tabula-mcp-<version>.mcpb.sha256` checksum. Install the `.mcpb` by
 double-clicking the file, dragging it into Claude Desktop, or using Settings ->
 Extensions -> Advanced settings -> Install Extension.

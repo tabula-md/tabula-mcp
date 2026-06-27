@@ -179,3 +179,10 @@ http://127.0.0.1:5174/index-dev.html?tabula-dev=1&fixture=room
 
 The MCPB checker verifies that dev-only fixtures are not included in the
 production bundled App.
+
+## Release Assets
+
+Release-facing assets live under `assets/`. The MCPB manifest points to
+`assets/icon.png` and the packaging script copies that directory into the staged
+bundle root. Keep generated `dist/` bundle output out of git; commit only the
+source asset and packaging scripts.

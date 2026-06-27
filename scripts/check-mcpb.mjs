@@ -8,6 +8,7 @@ const bundleDir = path.join(rootDir, "dist", "mcpb", "tabula-mcp");
 
 const requiredFiles = [
   "manifest.json",
+  "assets/icon.png",
   "server/index.js",
   "server/cli.js",
   "server/document-app.html",
@@ -57,6 +58,11 @@ const main = async () => {
 
   const manifest = await readJson("manifest.json");
   assert(!("user_config" in manifest), "MCPB manifest must not include installer user_config");
+  assert(manifest.icon === "assets/icon.png", "MCPB manifest must point icon to assets/icon.png");
+  assert(
+    manifest.icons?.some((icon) => icon.src === "assets/icon.png" && icon.size === "512x512"),
+    "MCPB manifest must include a 512x512 icon entry",
+  );
   assert(manifest.server?.mcp_config?.command === "node", "MCPB server command must be node");
   assert(
     manifest.server?.mcp_config?.args?.includes("${__dirname}/server/index.js"),
@@ -69,6 +75,8 @@ const main = async () => {
   }
 
   const appHtml = await readFile(path.join(bundleDir, "server", "document-app.html"), "utf8");
+  const icon = await readFile(path.join(bundleDir, "assets", "icon.png"));
+  assert(icon.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")), "MCPB icon must be a PNG file");
   for (const expected of ["titleInput", "markdownPreview", "data-view-mode", "shareDocumentButton"]) {
     assert(appHtml.includes(expected), `bundled Document App is missing ${expected}`);
   }
