@@ -82,7 +82,10 @@ The manifest must point `icon` and a `512x512` `icons` entry at
 The manifest must list all default model-facing tools exposed by the read-only
 MCPB server, including document, sharing, room status, presence, wait, and
 disconnect tools. It must not list App-only helper tools or the write-only
-`tabula_apply_text_patches` tool.
+`tabula_apply_text_patches` tool. `check:mcpb` starts the bundled read-only
+server from the staged and unpacked bundle layouts and compares the actual
+model-facing tool list against the manifest so future tool registration drift is
+caught automatically.
 The packed artifact must not include packaging-only lockfiles.
 
 The packed artifact must also start successfully over stdio from its unpacked

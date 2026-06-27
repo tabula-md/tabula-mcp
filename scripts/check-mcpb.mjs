@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = path.join(rootDir, "dist");
@@ -64,6 +66,14 @@ const forbiddenManifestTools = [
 
 const forbiddenArtifactFiles = ["package-lock.json", "node_modules/.package-lock.json"];
 
+const uiCapabilities = {
+  extensions: {
+    "io.modelcontextprotocol/ui": {
+      mimeTypes: ["text/html;profile=mcp-app"],
+    },
+  },
+};
+
 const readJson = async (baseDir, relativePath) => JSON.parse(await readFile(path.join(baseDir, relativePath), "utf8"));
 
 const readRootJson = async (relativePath) =>
@@ -88,6 +98,53 @@ const run = async (command, args) => {
   if (stderr) {
     process.stderr.write(stderr);
   }
+};
+
+const isAppOnlyTool = (tool) => tool._meta?.ui?.visibility?.includes("app");
+
+const listBundledModelFacingTools = async (bundleDir) => {
+  const client = new Client(
+    { name: "tabula-mcp-mcpb-check", version: "0.0.0" },
+    { capabilities: uiCapabilities },
+  );
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [path.join(bundleDir, "server", "index.js")],
+    cwd: bundleDir,
+    env: {
+      TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS: "1",
+    },
+    stderr: "pipe",
+  });
+  const stderr = [];
+  transport.stderr?.on("data", (chunk) => stderr.push(String(chunk)));
+
+  try {
+    await client.connect(transport);
+    const tools = await client.listTools();
+    return tools.tools
+      .filter((tool) => !isAppOnlyTool(tool))
+      .map((tool) => tool.name)
+      .sort();
+  } finally {
+    await client.close();
+    assert(
+      stderr.every((line) => line.includes("ExperimentalWarning: localStorage is not available")),
+      `MCPB bundled server wrote unexpected stderr: ${stderr.join("")}`,
+    );
+  }
+};
+
+const assertMatchingToolNames = (actual, expected, messagePrefix) => {
+  const actualSet = new Set(actual);
+  const expectedSet = new Set(expected);
+  const missing = expected.filter((toolName) => !actualSet.has(toolName));
+  const extra = actual.filter((toolName) => !expectedSet.has(toolName));
+
+  assert(
+    missing.length === 0 && extra.length === 0,
+    `${messagePrefix}. Missing: ${missing.join(", ") || "none"}. Extra: ${extra.join(", ") || "none"}`,
+  );
 };
 
 const checkBundleDir = async (bundleDir, label, rootPackage) => {
@@ -135,6 +192,12 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   for (const toolName of forbiddenManifestTools) {
     assert(!toolNames.has(toolName), `MCPB ${label} manifest must not list ${toolName}`);
   }
+  const modelFacingTools = await listBundledModelFacingTools(bundleDir);
+  assertMatchingToolNames(
+    manifest.tools.map((tool) => tool.name).sort(),
+    modelFacingTools,
+    `MCPB ${label} manifest tools must match the bundled read-only server's model-facing tools`,
+  );
 
   const appHtml = await readFile(path.join(bundleDir, "server", "document-app.html"), "utf8");
   const icon = await readFile(path.join(bundleDir, "assets", "icon.png"));
