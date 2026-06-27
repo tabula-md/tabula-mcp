@@ -1,4 +1,5 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps/app-with-deps";
+import { createMarkdownChangeSummary, formatDocumentChangeMessage } from "./change-summary.js";
 import "./document-app.css";
 
 const elements = {
@@ -12,6 +13,7 @@ const elements = {
   markdownEditor: document.getElementById("markdownEditor"),
   textLength: document.getElementById("textLength"),
   saveDocumentButton: document.getElementById("saveDocumentButton"),
+  sendChangesButton: document.getElementById("sendChangesButton"),
   refreshButton: document.getElementById("refreshButton"),
   sendSelectionButton: document.getElementById("sendSelectionButton"),
   displayModeButton: document.getElementById("displayModeButton"),
@@ -25,6 +27,7 @@ const state = {
   sessionId: "",
   roomId: "",
   sha256: "",
+  lastContextMarkdown: "",
   displayMode: "inline",
 };
 
@@ -38,6 +41,14 @@ const shortHash = (value) => (value ? `${value.slice(0, 10)}...${value.slice(-6)
 const getErrorText = (result) => {
   const textBlock = result?.content?.find((item) => item.type === "text");
   return textBlock?.text || "Tabula Document App could not load the current content.";
+};
+
+const updateDocumentActionState = () => {
+  const isDocument = state.mode === "document" && Boolean(state.documentId);
+  const hasContextChanges = isDocument && elements.markdownEditor.value !== state.lastContextMarkdown;
+
+  elements.saveDocumentButton.disabled = !isDocument;
+  elements.sendChangesButton.disabled = !hasContextChanges;
 };
 
 const extractOutline = (markdown) => {
@@ -78,7 +89,7 @@ const renderDocumentSummary = (summary) => {
   elements.peerCount.textContent = "MCP";
   elements.textLength.textContent = `${summary.textLength ?? 0} chars`;
   elements.markdownEditor.readOnly = false;
-  elements.saveDocumentButton.disabled = false;
+  updateDocumentActionState();
 };
 
 const renderRoomSummary = (summary) => {
@@ -98,7 +109,7 @@ const renderRoomSummary = (summary) => {
   elements.peerCount.textContent = String(summary.peerCount ?? 0);
   elements.textLength.textContent = `${summary.textLength ?? 0} chars`;
   elements.markdownEditor.readOnly = true;
-  elements.saveDocumentButton.disabled = true;
+  updateDocumentActionState();
 };
 
 const renderOutline = (outline) => {
@@ -120,7 +131,9 @@ const renderOutline = (outline) => {
   }
 };
 
-const renderSnapshot = (snapshot) => {
+const renderSnapshot = (snapshot, options = {}) => {
+  const { resetContextBaseline = true } = options;
+
   if (snapshot.document) {
     renderDocumentSummary(snapshot.document);
   } else {
@@ -128,7 +141,11 @@ const renderSnapshot = (snapshot) => {
   }
 
   elements.markdownEditor.value = snapshot.markdown || "";
+  if (snapshot.document && resetContextBaseline) {
+    state.lastContextMarkdown = elements.markdownEditor.value;
+  }
   renderOutline(snapshot.outline || []);
+  updateDocumentActionState();
 };
 
 const loadSnapshot = async () => {
@@ -191,12 +208,64 @@ const saveDocument = async () => {
       throw new Error(getErrorText(result));
     }
 
-    renderSnapshot(result.structuredContent);
-    setMessage("Document saved in this MCP session.");
+    renderSnapshot(result.structuredContent, { resetContextBaseline: false });
+    setMessage(
+      elements.sendChangesButton.disabled
+        ? "Document saved in this MCP session."
+        : "Document saved in this MCP session. Send changes to update the model context.",
+    );
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Save failed.", "error");
   } finally {
     elements.saveDocumentButton.disabled = state.mode !== "document";
+  }
+};
+
+const sendChanges = async () => {
+  if (!state.app || state.mode !== "document" || !state.documentId) {
+    setMessage("Create a local Tabula.md document first.", "warning");
+    return;
+  }
+
+  const currentMarkdown = elements.markdownEditor.value;
+  const summary = createMarkdownChangeSummary(state.lastContextMarkdown, currentMarkdown);
+  if (!summary.changed) {
+    setMessage("No document changes to send.", "warning");
+    updateDocumentActionState();
+    return;
+  }
+
+  elements.sendChangesButton.disabled = true;
+  setMessage("Sending document changes to the model context...");
+  try {
+    await state.app.updateModelContext({
+      content: [
+        {
+          type: "text",
+          text: formatDocumentChangeMessage({
+            title: state.title,
+            documentId: state.documentId,
+            baseSha256: state.sha256,
+            summary,
+          }),
+        },
+      ],
+      structuredContent: {
+        tabulaDocumentChange: {
+          mode: "document",
+          documentId: state.documentId,
+          title: state.title,
+          baseSha256: state.sha256,
+          summary,
+        },
+      },
+    });
+    state.lastContextMarkdown = currentMarkdown;
+    updateDocumentActionState();
+    setMessage("Document changes sent to the model context.");
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : "Could not send document changes.", "error");
+    updateDocumentActionState();
   }
 };
 
@@ -320,6 +389,7 @@ const boot = async () => {
   app.onhostcontextchanged = applyHostContext;
 
   elements.saveDocumentButton.addEventListener("click", () => void saveDocument());
+  elements.sendChangesButton.addEventListener("click", () => void sendChanges());
   elements.refreshButton.addEventListener("click", () => void loadSnapshot());
   elements.sendSelectionButton.addEventListener("click", () => void sendSelection());
   elements.displayModeButton.addEventListener("click", () => void toggleDisplayMode());
@@ -331,6 +401,7 @@ const boot = async () => {
     const markdown = elements.markdownEditor.value;
     elements.textLength.textContent = `${markdown.length} chars`;
     renderOutline(extractOutline(markdown));
+    updateDocumentActionState();
     setMessage("Document has unsaved changes.", "warning");
   });
 
