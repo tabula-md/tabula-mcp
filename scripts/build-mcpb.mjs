@@ -12,6 +12,7 @@ const serverDir = path.join(stageDir, "server");
 const packageJsonPath = path.join(rootDir, "package.json");
 const packageLockPath = path.join(rootDir, "package-lock.json");
 const manifestTemplatePath = path.join(rootDir, "mcpb", "manifest.json");
+const docsDir = path.join(rootDir, "docs");
 
 const readJson = async (filePath) => JSON.parse(await readFile(filePath, "utf8"));
 
@@ -67,6 +68,7 @@ const main = async () => {
 
   await copyServerFiles();
   await cp(path.join(rootDir, "README.md"), path.join(stageDir, "README.md"));
+  await cp(docsDir, path.join(stageDir, "docs"), { recursive: true });
   await cp(path.join(rootDir, "LICENSE"), path.join(stageDir, "LICENSE"));
   await cp(packageLockPath, path.join(stageDir, "package-lock.json"));
   await writeBundlePackage(pkg);

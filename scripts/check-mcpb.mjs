@@ -20,6 +20,10 @@ const requiredFiles = [
   "server/share.js",
   "server/guidance.js",
   "README.md",
+  "docs/claude-desktop.md",
+  "docs/security-model.md",
+  "docs/mcp-app-architecture.md",
+  "docs/release.md",
   "LICENSE",
 ];
 

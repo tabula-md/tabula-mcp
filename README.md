@@ -12,10 +12,17 @@ Room server still receives only encrypted envelopes.
 
 ## Status
 
-Initial implementation. The server supports local MCP App documents, encrypted
+Early implementation. The server supports local MCP App documents, encrypted
 share links for local documents, one-file live rooms, Markdown reads, outline
 extraction, presence, and guarded text patches. Comment sync is not part of
 this first version.
+
+## Documentation
+
+- [Claude Desktop](docs/claude-desktop.md): MCPB build, install, and manual smoke test.
+- [Security Model](docs/security-model.md): local trust boundary, room keys, share/export, and write policy.
+- [MCP App Architecture](docs/mcp-app-architecture.md): bundled App shape, tool visibility, and source layout.
+- [Release](docs/release.md): validation commands, MCPB checks, runtime support, and handoff notes.
 
 ## Quick Start
 
@@ -90,6 +97,9 @@ write-enabled server, opt in when launching the process:
 You can also pass `--enable-write` in `args`. If both are present,
 `--read-only` forces read-only mode.
 
+For the one-click Claude Desktop path, use the MCPB flow instead. It is
+zero-config and intentionally read-only for room writes.
+
 ## Tools
 
 - `tabula_create_document`: create a local Tabula.md Markdown document and open the interactive MCP App editor in clients that support MCP Apps.
@@ -151,6 +161,10 @@ then uploads only an encrypted Yjs snapshot to the Tabula Room server. It sends
 the resulting `https://tabula.md/r/...#key=...` link back into model context.
 Treat that link as a bearer secret.
 
+See [MCP App Architecture](docs/mcp-app-architecture.md) for the bundled App
+resource structure and [Security Model](docs/security-model.md) for plaintext
+and room key boundaries.
+
 ## Claude Desktop MCPB
 
 For Claude Desktop experiments, build a one-click MCP Bundle:
@@ -175,6 +189,9 @@ creates an encrypted room snapshot without installer configuration.
 The MCPB is intentionally read-only. Use manual MCP client configuration with
 `TABULA_MCP_ENABLE_WRITE=1` only for explicit write-enabled development or
 review sessions.
+
+For step-by-step installation and manual verification, see
+[Claude Desktop](docs/claude-desktop.md).
 
 ## MCP App Dev Harness
 
@@ -243,6 +260,9 @@ sharing.
 the local Markdown as a Yjs snapshot, and uploads only that encrypted envelope to
 the configured room server. The returned share URL includes the room key in the
 fragment, so it should be shared only with intended collaborators or agents.
+
+See [Security Model](docs/security-model.md) for the complete trust boundary and
+release-blocking security checks.
 
 ## Validation
 
