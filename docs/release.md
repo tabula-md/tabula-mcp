@@ -11,6 +11,7 @@ Run:
 npm run typecheck
 npm test
 npm run test:app
+npm run test:stdio
 npm run check:exports
 npm run check:pack
 npm run release:pack
@@ -24,6 +25,8 @@ Expected results:
 - Vitest passes.
 - App smoke test passes, including static bundle checks and the Playwright
   document/room flow smoke.
+- Built stdio server smoke passes, including tool gating, App resource reads,
+  local document save/open, and encrypted share upload checks.
 - Package ESM subpath exports import from built `dist/`.
 - npm package dry-run includes built package files and excludes generated MCPB artifacts.
 - MCPB validates, packs, and passes `check:mcpb`.

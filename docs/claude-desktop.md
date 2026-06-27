@@ -21,6 +21,9 @@ and is written to `dist/tabula-mcp-<version>.mcpb`, with a matching
 the MCPB directory, validates the manifest, packs the bundle, and runs the
 local MCPB checker, then writes the checksum file.
 
+Before installing in Claude Desktop, run `npm run test:stdio` to smoke-test the
+built stdio server with the same MCP transport shape Claude Desktop uses.
+
 ## Install
 
 Install the generated `.mcpb` in Claude Desktop by double-clicking it, dragging
