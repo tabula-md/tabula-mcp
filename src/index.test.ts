@@ -67,6 +67,7 @@ describe("MCP tool registration", () => {
     const toolNames = tools.tools.map((tool) => tool.name);
     const connectTool = tools.tools.find((tool) => tool.name === "tabula_connect_room");
 
+    expect(toolNames).toContain("tabula_read_me");
     expect(toolNames).not.toContain("tabula_apply_text_patches");
     expect(connectTool?.inputSchema.properties).not.toHaveProperty("writeAccess");
     expect(connectTool?.annotations).toMatchObject({
@@ -84,6 +85,31 @@ describe("MCP tool registration", () => {
       readOnlyHint: false,
       destructiveHint: true,
       openWorldHint: true,
+    });
+  });
+
+  it("returns model guidance through tabula_read_me without requiring MCP Apps", async () => {
+    await withClient(false, async (client) => {
+      const result = await client.callTool({
+        name: "tabula_read_me",
+        arguments: {
+          topic: "sharing",
+        },
+      });
+      const text = result.content?.[0]?.type === "text" ? result.content[0].text : "";
+      const structured = result.structuredContent as {
+        readMe: {
+          topic: string;
+          nextActions: string[];
+          securityRules: string[];
+        };
+      };
+
+      expect(text).toContain("Tabula.md MCP read_me (sharing)");
+      expect(text).toContain("bearer secret");
+      expect(structured.readMe.topic).toBe("sharing");
+      expect(structured.readMe.nextActions.length).toBeGreaterThan(0);
+      expect(structured.readMe.securityRules.join("\n")).toContain("#key");
     });
   });
 
