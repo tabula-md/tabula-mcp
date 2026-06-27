@@ -109,7 +109,7 @@ const runNonAppClientSmoke = async ({ storeDir, roomServerUrl }) => {
 };
 
 const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads }) => {
-  await withStdioClient({ storeDir, roomServerUrl, mcpApps: true }, async (client) => {
+  return withStdioClient({ storeDir, roomServerUrl, mcpApps: true }, async (client) => {
     const tools = await client.listTools();
     const toolNames = toolNamesFrom(tools);
     for (const toolName of [
@@ -178,6 +178,30 @@ const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads }) => {
     assert(uploads[0].body.includes('"kind":"snapshot"'), "share upload should contain an encrypted snapshot envelope");
     assert(!uploads[0].body.includes("Updated local checkpoint"), "share upload must not include plaintext Markdown");
     assert(!uploads[0].body.includes(new URL(share.shareUrl).hash.replace(/^#key=/, "")), "share upload must not include the room key");
+
+    return {
+      documentId,
+      updatedMarkdown,
+      title: "Stdio Smoke Saved",
+    };
+  });
+};
+
+const runRestartPersistenceSmoke = async ({ storeDir, roomServerUrl, documentId, title, updatedMarkdown }) => {
+  await withStdioClient({ storeDir, roomServerUrl, mcpApps: true }, async (client) => {
+    const listResult = await client.callTool({ name: "tabula_list_documents", arguments: {} });
+    const restored = listResult.structuredContent?.documents?.find((document) => document.documentId === documentId);
+    assert(restored, "restarted stdio server should list the saved local checkpoint");
+    assert.equal(restored.title, title);
+    assert.equal(restored.textLength, updatedMarkdown.length);
+
+    const openResult = await client.callTool({
+      name: "tabula_open_document",
+      arguments: { documentId },
+    });
+    assert.equal(openResult.structuredContent?.document?.documentId, documentId);
+    assert.equal(openResult.structuredContent?.document?.title, title);
+    assert.equal(openResult.structuredContent?.markdown, updatedMarkdown);
   });
 };
 
@@ -187,10 +211,15 @@ const main = async () => {
 
   try {
     await runNonAppClientSmoke({ storeDir, roomServerUrl: shareServer.url });
-    await runAppClientSmoke({
+    const checkpoint = await runAppClientSmoke({
       storeDir,
       roomServerUrl: shareServer.url,
       uploads: shareServer.uploads,
+    });
+    await runRestartPersistenceSmoke({
+      storeDir,
+      roomServerUrl: shareServer.url,
+      ...checkpoint,
     });
   } finally {
     await shareServer.close();
