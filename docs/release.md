@@ -8,6 +8,12 @@ MCP server, bundled App, packaging, or security behavior.
 Run:
 
 ```sh
+npm run release:verify
+```
+
+Equivalent individual commands:
+
+```sh
 npm run typecheck
 npm test
 npm run test:app
@@ -29,12 +35,13 @@ Expected results:
   local document save/open, and encrypted share upload checks.
 - Package ESM subpath exports import from built `dist/`.
 - npm package dry-run includes built package files and excludes generated MCPB artifacts.
-- MCPB validates, packs, and passes `check:mcpb`.
+- MCPB validates, packs, and passes `check:mcpb` against both the staging
+  directory and unpacked `.mcpb` artifact.
 - `npm audit --json` reports zero vulnerabilities.
 - `git diff --check` reports no whitespace errors.
 
 `npm run release:pack` validates the MCPB staging directory, packs the MCPB,
-runs the bundle checker, and writes:
+unpacks the generated artifact for the same bundle checks, and writes:
 
 ```txt
 dist/tabula-mcp-<version>.mcpb
@@ -48,7 +55,7 @@ declaration files, and bundled App HTML needed by package exports and the CLI.
 
 ## MCPB Checks
 
-The staged bundle must include:
+The staged bundle and unpacked `.mcpb` artifact must include:
 
 - `manifest.json`
 - server entrypoint files
@@ -65,6 +72,7 @@ The staged bundle must include:
 The manifest must not contain installer `user_config`.
 The manifest must point `icon` and a `512x512` `icons` entry at
 `assets/icon.png`.
+The packed artifact must not include packaging-only lockfiles.
 
 The default MCPB must be read-only for room writes. Write-enabled testing uses
 manual stdio configuration, not installer prompts.

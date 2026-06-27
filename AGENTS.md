@@ -30,6 +30,7 @@ Tabula.md live rooms from agent clients.
 - Build: `npm run build`
 - MCPB build: `npm run build:mcpb`
 - Release pack: `npm run release:pack`
+- Full release gate: `npm run release:verify`
 - Bundle check: `npm run check:mcpb`
 - Typecheck: `npm run typecheck`
 - Dev stdio server: `npm run dev`
@@ -50,13 +51,7 @@ Tabula.md live rooms from agent clients.
 Run focused checks for small changes. Before release-facing handoff, run:
 
 ```sh
-npm run typecheck
-npm test
-npm run test:app
-npm run test:stdio
-npm run release:pack
-npm audit --json
-git diff --check
+npm run release:verify
 ```
 
 Run `npm run check:mcpb` after MCPB packaging changes. Run `npm run
