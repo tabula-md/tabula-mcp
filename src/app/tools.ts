@@ -3,6 +3,13 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { DocumentRegistry } from "../documents/registry.js";
 import { errorContent } from "../json.js";
+import {
+  documentListOutputShape,
+  documentSnapshotOutputShape,
+  roomSnapshotOutputShape,
+  roomViewOutputShape,
+  shareOutputShape,
+} from "../output-schemas.js";
 import type { SessionRegistry } from "../registry.js";
 import { shareMarkdownDocument } from "../share.js";
 import {
@@ -58,6 +65,7 @@ export const registerDocumentAppTools = (
         title: z.string().min(1).max(120).optional().describe("Optional document title. Defaults to the first H1 or Untitled Document."),
         markdown: z.string().default("").describe("Initial Markdown content for the local document."),
       },
+      outputSchema: documentSnapshotOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -92,6 +100,7 @@ export const registerDocumentAppTools = (
       description:
         "List local Tabula.md MCP App documents saved in this local server checkpoint store, newest first.",
       inputSchema: {},
+      outputSchema: documentListOutputShape,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -125,6 +134,7 @@ export const registerDocumentAppTools = (
       description:
         "Open the latest or selected local Tabula.md document checkpoint in the interactive MCP App editor.",
       inputSchema: optionalDocumentSchema,
+      outputSchema: documentSnapshotOutputShape,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -159,6 +169,7 @@ export const registerDocumentAppTools = (
       description:
         "Open a read-only MCP App view for a connected Tabula.md room, including status, outline, Markdown preview, refresh, and selection handoff.",
       inputSchema: optionalSessionSchema,
+      outputSchema: roomViewOutputShape,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -205,6 +216,7 @@ export const registerDocumentAppTools = (
           .optional()
           .describe("Tabula Room service URL. Defaults from appOrigin or TABULA_ROOM_URL."),
       },
+      outputSchema: shareOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -245,6 +257,7 @@ export const registerDocumentAppTools = (
     {
       description: "Read a connected room snapshot for the Tabula Document MCP App.",
       inputSchema: optionalSessionSchema,
+      outputSchema: roomSnapshotOutputShape,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -268,6 +281,7 @@ export const registerDocumentAppTools = (
     {
       description: "Read a local document snapshot for the Tabula Document MCP App.",
       inputSchema: optionalDocumentSchema,
+      outputSchema: documentSnapshotOutputShape,
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
@@ -295,6 +309,7 @@ export const registerDocumentAppTools = (
         title: z.string().min(1).max(120).optional().describe("Optional updated document title."),
         markdown: z.string().describe("Full Markdown content to keep in the local MCP App document."),
       },
+      outputSchema: documentSnapshotOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

@@ -28,6 +28,7 @@ const requiredFiles = [
   "server/server/write-access.js",
   "server/share.js",
   "server/guidance.js",
+  "server/output-schemas.js",
   "README.md",
   "docs/claude-desktop.md",
   "docs/security-model.md",
