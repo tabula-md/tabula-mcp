@@ -176,12 +176,13 @@ and room key boundaries.
 For Claude Desktop experiments, build a one-click MCP Bundle:
 
 ```sh
-npm run build:mcpb
+npm run release:pack
 ```
 
-The bundle is written to `dist/tabula-mcp-<version>.mcpb`. Install it by
-double-clicking the file, dragging it into Claude Desktop, or using
-Settings -> Extensions -> Advanced settings -> Install Extension.
+The bundle is written to `dist/tabula-mcp-<version>.mcpb`, with a matching
+`dist/tabula-mcp-<version>.mcpb.sha256` checksum. Install the `.mcpb` by
+double-clicking the file, dragging it into Claude Desktop, or using Settings ->
+Extensions -> Advanced settings -> Install Extension.
 
 No installation settings are required for normal use. After installation, create
 a local document with `tabula_create_document` or connect a room with
@@ -277,7 +278,6 @@ release-blocking security checks.
 npm run typecheck
 npm test
 npm run test:app
-npm run build:mcpb
-npm run check:mcpb
+npm run release:pack
 npm audit --json
 ```

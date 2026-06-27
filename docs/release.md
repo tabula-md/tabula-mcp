@@ -25,14 +25,16 @@ Expected results:
 - `npm audit --json` reports zero vulnerabilities.
 - `git diff --check` reports no whitespace errors.
 
-`npm run release:pack` writes:
+`npm run release:pack` validates the MCPB staging directory, packs the MCPB,
+runs the bundle checker, and writes:
 
 ```txt
 dist/tabula-mcp-<version>.mcpb
+dist/tabula-mcp-<version>.mcpb.sha256
 ```
 
-Generated `dist/` output and `.mcpb` files are not source artifacts and should
-not be committed.
+Generated `dist/` output, `.mcpb` files, and `.sha256` checksum files are not
+source artifacts and should not be committed.
 
 ## MCPB Checks
 

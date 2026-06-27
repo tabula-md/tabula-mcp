@@ -11,11 +11,12 @@ npm install
 npm run release:pack
 ```
 
-The bundle is written to `dist/tabula-mcp-<version>.mcpb`.
+The bundle is written to `dist/tabula-mcp-<version>.mcpb`, with a matching
+`dist/tabula-mcp-<version>.mcpb.sha256` checksum.
 
 `release:pack` builds the TypeScript server, bundles the Document App, stages
 the MCPB directory, validates the manifest, packs the bundle, and runs the
-local MCPB checker.
+local MCPB checker, then writes the checksum file.
 
 ## Install
 
