@@ -20,9 +20,11 @@
     "build": "npm run clean && npm run build:app && tsc -p tsconfig.json",
     "build:app": "vite build --config vite.config.app.mjs",
     "build:mcpb": "npm run build && node scripts/build-mcpb.mjs",
+    "dev:app": "vite --config vite.config.dev.mjs",
     "dev": "npm run build:app && tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "npm run build:app && vitest run",
+    "test:app": "npm run build:app && node scripts/smoke-mcp-app.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

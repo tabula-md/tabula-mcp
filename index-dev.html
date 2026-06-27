@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tabula.md Document Dev Harness</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="toolbar">
+        <div class="identity">
+          <span class="brand">Tabula.md</span>
+          <input id="titleInput" class="title-input" type="text" value="Document" maxlength="120" aria-label="Document title" disabled />
+        </div>
+        <div class="actions">
+          <button id="saveDocumentButton" type="button" disabled>Save</button>
+          <button id="sendChangesButton" type="button" disabled>Send Changes</button>
+          <button id="shareDocumentButton" type="button" disabled>Share</button>
+          <button id="refreshButton" type="button">Refresh</button>
+          <button id="sendSelectionButton" type="button">Send Selection</button>
+          <button id="displayModeButton" type="button">Fullscreen</button>
+        </div>
+      </header>
+
+      <section class="status-grid" aria-label="Document status">
+        <div>
+          <span class="label">Source</span>
+          <strong id="connectionStatus">Waiting</strong>
+        </div>
+        <div>
+          <span class="label">Mode</span>
+          <strong id="writeMode">Read-only</strong>
+        </div>
+        <div>
+          <span class="label">Hash</span>
+          <strong id="shaValue">-</strong>
+        </div>
+        <div>
+          <span class="label">Scope</span>
+          <strong id="peerCount">0</strong>
+        </div>
+        <div>
+          <span class="label">Draft</span>
+          <strong id="draftStatus">None</strong>
+        </div>
+      </section>
+
+      <section id="message" class="message" aria-live="polite"></section>
+
+      <section class="workspace">
+        <aside class="outline-pane">
+          <div class="pane-heading">
+            <h2>Outline</h2>
+          </div>
+          <ol id="outlineList" class="outline-list"></ol>
+        </aside>
+
+        <section class="markdown-pane">
+          <div class="pane-heading">
+            <h2>Document</h2>
+            <div class="pane-tools">
+              <div class="segmented-control" role="group" aria-label="View mode">
+                <button type="button" data-view-mode="editor" aria-pressed="false">Editor</button>
+                <button type="button" data-view-mode="split" aria-pressed="true">Split</button>
+                <button type="button" data-view-mode="preview" aria-pressed="false">Preview</button>
+              </div>
+              <span id="textLength" class="meta">0 chars</span>
+            </div>
+          </div>
+          <div class="document-surface">
+            <textarea id="markdownEditor" class="markdown-editor" spellcheck="false" readonly></textarea>
+            <article id="markdownPreview" class="markdown-preview" aria-label="Markdown preview"></article>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/src/app-dev/main.js"></script>
+  </body>
+</html>
