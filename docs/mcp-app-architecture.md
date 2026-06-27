@@ -200,6 +200,11 @@ http://127.0.0.1:5174/index-dev.html?tabula-dev=1&fixture=room
 The MCPB checker verifies that dev-only fixtures are not included in the
 production bundled App.
 
+`npm run test:app` also starts the dev harness in a real Playwright Chromium
+session. It verifies the local document edit -> save -> model-context -> share
+loop, the selected comment handoff, the read-only room refresh path, and
+fullscreen display mode requests.
+
 ## Release Assets
 
 Release-facing assets live under `assets/`. The MCPB manifest points to

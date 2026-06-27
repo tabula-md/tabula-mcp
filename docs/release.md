@@ -22,7 +22,8 @@ Expected results:
 
 - TypeScript passes.
 - Vitest passes.
-- App smoke test passes.
+- App smoke test passes, including static bundle checks and the Playwright
+  document/room flow smoke.
 - Package ESM subpath exports import from built `dist/`.
 - npm package dry-run includes built package files and excludes generated MCPB artifacts.
 - MCPB validates, packs, and passes `check:mcpb`.
