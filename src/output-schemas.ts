@@ -3,6 +3,24 @@ import { tabulaReadMeTopics } from "./guidance.js";
 
 const isoDateStringSchema = z.string().datetime();
 const sha256Schema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+const possiblyClearedSha256Schema = z.union([sha256Schema, z.literal("")]);
+
+const sessionIdOutputSchema = z.string().uuid();
+const roomIdOutputSchema = z.string();
+
+const liveSelectionOutputSchema = z.object({
+  from: z.number().int().nonnegative(),
+  to: z.number().int().nonnegative(),
+});
+
+const collaboratorOutputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.string(),
+  lastSeen: z.number().int().nonnegative(),
+  fileTitle: z.string().optional(),
+  selection: liveSelectionOutputSchema.optional(),
+});
 
 export const markdownHeadingOutputSchema = z.object({
   depth: z.number().int().min(1).max(6),
@@ -36,8 +54,8 @@ export const documentListOutputShape = {
 };
 
 export const roomSummaryOutputSchema = z.object({
-  sessionId: z.string().uuid(),
-  roomId: z.string(),
+  sessionId: sessionIdOutputSchema,
+  roomId: roomIdOutputSchema,
   status: z.string(),
   writeAccess: z.boolean(),
   textLength: z.number().int().nonnegative(),
@@ -45,6 +63,71 @@ export const roomSummaryOutputSchema = z.object({
   peerCount: z.number().int().nonnegative(),
   collaboratorCount: z.number().int().nonnegative(),
 });
+
+export const roomStatusOutputShape = {
+  sessionId: sessionIdOutputSchema,
+  roomId: roomIdOutputSchema,
+  roomServerUrl: z.string().url(),
+  status: z.enum(["connecting", "connected", "offline", "closed"]),
+  writeAccess: z.boolean(),
+  textLength: z.number().int().nonnegative(),
+  sha256: sha256Schema,
+  socketConnected: z.boolean(),
+  peerCount: z.number().int().nonnegative(),
+  collaborators: z.array(collaboratorOutputSchema),
+  metadata: z.unknown().nullable(),
+  lastError: z.string().optional(),
+};
+
+export const connectRoomOutputShape = {
+  ...roomStatusOutputShape,
+  snapshotStatus: z.enum(["missing", "restored"]),
+  note: z.string(),
+};
+
+export const listSessionsOutputShape = {
+  sessions: z.array(z.object(roomStatusOutputShape)),
+};
+
+export const readMarkdownOutputShape = {
+  sessionId: sessionIdOutputSchema,
+  roomId: roomIdOutputSchema,
+  markdown: z.string(),
+  textLength: z.number().int().nonnegative(),
+  sha256: sha256Schema,
+};
+
+export const outlineOutputShape = {
+  sessionId: sessionIdOutputSchema,
+  roomId: roomIdOutputSchema,
+  outline: z.array(markdownHeadingOutputSchema),
+  sha256: sha256Schema,
+};
+
+export const applyTextPatchesOutputShape = {
+  sessionId: sessionIdOutputSchema,
+  roomId: roomIdOutputSchema,
+  changed: z.boolean(),
+  textLength: z.number().int().nonnegative(),
+  previousSha256: sha256Schema,
+  sha256: sha256Schema,
+};
+
+export const setPresenceOutputShape = {
+  sessionId: sessionIdOutputSchema,
+  roomId: roomIdOutputSchema,
+  identity: collaboratorOutputSchema,
+};
+
+export const waitForChangesOutputShape = {
+  changed: z.boolean(),
+  markdown: z.string(),
+  sha256: possiblyClearedSha256Schema,
+};
+
+export const disconnectRoomOutputShape = {
+  disconnectedSessionId: sessionIdOutputSchema,
+};
 
 export const roomViewOutputShape = {
   mode: z.literal("room"),

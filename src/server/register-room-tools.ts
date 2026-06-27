@@ -1,6 +1,17 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { jsonContent, errorContent } from "../json.js";
+import {
+  applyTextPatchesOutputShape,
+  connectRoomOutputShape,
+  disconnectRoomOutputShape,
+  listSessionsOutputShape,
+  outlineOutputShape,
+  readMarkdownOutputShape,
+  roomStatusOutputShape,
+  setPresenceOutputShape,
+  waitForChangesOutputShape,
+} from "../output-schemas.js";
 import { parseRoomShareUrl, resolveRoomServerUrl } from "../protocol.js";
 import type { SessionRegistry } from "../registry.js";
 import { TabulaRoomClient } from "../room-client.js";
@@ -41,6 +52,7 @@ export const registerRoomTools = (
           .optional()
           .describe("Presence color as a hex value."),
       },
+      outputSchema: connectRoomOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -81,6 +93,7 @@ export const registerRoomTools = (
     {
       description: "List Tabula room sessions currently connected in this MCP process.",
       inputSchema: {},
+      outputSchema: listSessionsOutputShape,
       annotations: {
         readOnlyHint: true,
       },
@@ -96,6 +109,7 @@ export const registerRoomTools = (
     {
       description: "Return connection, metadata, collaborator, hash, and write-access state for a connected Tabula room.",
       inputSchema: optionalSessionSchema,
+      outputSchema: roomStatusOutputShape,
       annotations: {
         readOnlyHint: true,
       },
@@ -108,6 +122,7 @@ export const registerRoomTools = (
     {
       description: "Read the current decrypted Markdown text from a connected Tabula room.",
       inputSchema: optionalSessionSchema,
+      outputSchema: readMarkdownOutputShape,
       annotations: {
         readOnlyHint: true,
       },
@@ -120,6 +135,7 @@ export const registerRoomTools = (
     {
       description: "Return Markdown headings for the current room text.",
       inputSchema: optionalSessionSchema,
+      outputSchema: outlineOutputShape,
       annotations: {
         readOnlyHint: true,
       },
@@ -147,6 +163,7 @@ export const registerRoomTools = (
             .min(1)
             .describe("Patches in old-document character offsets. They must not overlap."),
         },
+        outputSchema: applyTextPatchesOutputShape,
         annotations: {
           readOnlyHint: false,
           destructiveHint: true,
@@ -173,6 +190,7 @@ export const registerRoomTools = (
           })
           .optional(),
       },
+      outputSchema: setPresenceOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -194,6 +212,7 @@ export const registerRoomTools = (
         sinceSha256: z.string().min(1).optional(),
         timeoutMs: z.number().int().min(0).max(30_000).default(15_000),
       },
+      outputSchema: waitForChangesOutputShape,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -208,6 +227,7 @@ export const registerRoomTools = (
     {
       description: "Disconnect one connected Tabula room session.",
       inputSchema: optionalSessionSchema,
+      outputSchema: disconnectRoomOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
