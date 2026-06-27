@@ -36,7 +36,11 @@ Expected results:
 - App smoke test passes, including static bundle checks and the Playwright
   document/room flow smoke.
 - Built stdio server smoke passes, including tool gating, App resource reads,
-  local document save/open, and encrypted share upload checks.
+  local document save/open, and encrypted share upload checks. The stdio smoke
+  also runs a zero-config path with no Tabula-specific environment variables:
+  it creates a document, writes the default local checkpoint, restarts the
+  server, reopens the checkpoint, and shares with an explicit room server
+  argument.
 - Package ESM subpath exports import from built `dist/`.
 - npm package dry-run includes built package files and excludes generated MCPB artifacts.
 - MCPB validates, packs, and passes `check:mcpb` against both the staging
@@ -92,6 +96,12 @@ The packed artifact must also start successfully over stdio from its unpacked
 bundle layout. This catches missing bundled dependencies, broken server
 entrypoints, missing App resources, and accidental installer-only assumptions
 before manual Claude Desktop testing.
+
+The packed artifact smoke also covers the zero-config document flow without
+`TABULA_MCP_DOCUMENT_STORE_DIR`, `TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS`,
+`TABULA_ROOM_URL`, or write-mode environment variables. Share tests pass the
+room server URL as a tool argument, matching the no-installer-settings MCPB
+model.
 
 The default MCPB must be read-only for room writes. Write-enabled testing uses
 manual stdio configuration, not installer prompts.
