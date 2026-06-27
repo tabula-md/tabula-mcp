@@ -55,6 +55,7 @@
     "test": "npm run build:app && vitest run",
     "test:app": "npm run build:app && node scripts/smoke-mcp-app.mjs && npm run test:app:flow",
     "test:app:flow": "node scripts/smoke-mcp-app-flow.mjs",
+    "test:stdio": "npm run build && node scripts/smoke-stdio-server.mjs",
     "release:pack": "node scripts/pack-release.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

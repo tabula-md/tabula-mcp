@@ -309,6 +309,7 @@ release-blocking security checks.
 npm run typecheck
 npm test
 npm run test:app
+npm run test:stdio
 npm run release:pack
 npm audit --json
 ```
