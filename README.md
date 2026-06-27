@@ -247,6 +247,10 @@ fragment, so it should be shared only with intended collaborators or agents.
 ## Validation
 
 ```sh
+npm run typecheck
 npm test
-npm run build
+npm run test:app
+npm run build:mcpb
+npm run check:mcpb
+npm audit --json
 ```
