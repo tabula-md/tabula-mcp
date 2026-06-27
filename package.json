@@ -19,12 +19,14 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && npm run build:app && tsc -p tsconfig.json",
     "build:app": "vite build --config vite.config.app.mjs",
+    "check:mcpb": "node scripts/check-mcpb.mjs",
     "build:mcpb": "npm run build && node scripts/build-mcpb.mjs",
     "dev:app": "vite --config vite.config.dev.mjs",
     "dev": "npm run build:app && tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "npm run build:app && vitest run",
     "test:app": "npm run build:app && node scripts/smoke-mcp-app.mjs",
+    "release:pack": "npm run build:mcpb && npm run check:mcpb",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
