@@ -99,6 +99,20 @@ Responsibilities:
 
 Room protocol and crypto modules should stay independent from the App UI.
 
+## Package Exports
+
+The npm package keeps `tabula-mcp` as the main CLI/bin entrypoint and exposes a
+small ESM surface for tests and local embedding:
+
+- `@tabula-md/mcp`
+- `@tabula-md/mcp/server`
+- `@tabula-md/mcp/protocol`
+- `@tabula-md/mcp/documents`
+
+These exports point at built `dist/` modules and include TypeScript declaration
+files. Keep the surface narrow until a broader public API is intentionally
+designed.
+
 ## Test Layout
 
 Tests live outside production source under `tests/`:

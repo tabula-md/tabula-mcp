@@ -11,6 +11,8 @@ Run:
 npm run typecheck
 npm test
 npm run test:app
+npm run check:exports
+npm run check:pack
 npm run release:pack
 npm audit --json
 git diff --check
@@ -21,6 +23,8 @@ Expected results:
 - TypeScript passes.
 - Vitest passes.
 - App smoke test passes.
+- Package ESM subpath exports import from built `dist/`.
+- npm package dry-run includes built package files and excludes generated MCPB artifacts.
 - MCPB validates, packs, and passes `check:mcpb`.
 - `npm audit --json` reports zero vulnerabilities.
 - `git diff --check` reports no whitespace errors.
@@ -33,8 +37,10 @@ dist/tabula-mcp-<version>.mcpb
 dist/tabula-mcp-<version>.mcpb.sha256
 ```
 
-Generated `dist/` output, `.mcpb` files, and `.sha256` checksum files are not
-source artifacts and should not be committed.
+Generated `dist/` output, staged `dist/mcpb/` contents, `.mcpb` files, and
+`.sha256` checksum files are not source artifacts and should not be committed.
+They are also excluded from npm package contents except for the built JS,
+declaration files, and bundled App HTML needed by package exports and the CLI.
 
 ## MCPB Checks
 

@@ -9,6 +9,7 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "noUncheckedIndexedAccess": true,
+    "declaration": true,
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": "src",

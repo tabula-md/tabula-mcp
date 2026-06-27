@@ -7,9 +7,33 @@
   "bin": {
     "tabula-mcp": "./dist/index.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "default": "./dist/protocol.js"
+    },
+    "./documents": {
+      "types": "./dist/documents/index.d.ts",
+      "default": "./dist/documents/index.js"
+    }
+  },
   "files": [
     "assets",
-    "dist",
+    "dist/**/*.d.ts",
+    "dist/**/*.js",
+    "dist/document-app.html",
+    "!dist/mcpb",
+    "!dist/mcpb/**",
+    "!dist/*.mcpb",
+    "!dist/*.mcpb.sha256",
     "docs",
     "README.md",
     "LICENSE"
@@ -21,7 +45,9 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && npm run build:app && tsc -p tsconfig.json",
     "build:app": "vite build --config vite.config.app.mjs",
+    "check:exports": "node scripts/check-package-exports.mjs",
     "check:mcpb": "node scripts/check-mcpb.mjs",
+    "check:pack": "node scripts/check-npm-pack.mjs",
     "build:mcpb": "npm run build && node scripts/build-mcpb.mjs",
     "dev:app": "vite --config vite.config.dev.mjs",
     "dev": "npm run build:app && tsx src/index.ts",
