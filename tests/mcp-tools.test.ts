@@ -330,4 +330,41 @@ describe("MCP tool registration", () => {
       { mcpApps: true },
     );
   });
+
+  it("returns model-readable error content when encrypted document sharing fails", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await withClient(
+      false,
+      async (client) => {
+        const createResult = await client.callTool({
+          name: "tabula_create_document",
+          arguments: {
+            title: "Failed Share",
+            markdown: "# Failed Share\n\nThis plaintext must stay local.",
+          },
+        });
+        const created = createResult.structuredContent as {
+          document: { documentId: string };
+        };
+
+        const shareResult = await client.callTool({
+          name: "tabula_share_document",
+          arguments: { documentId: created.document.documentId },
+        });
+        const errorText = shareResult.content?.[0]?.type === "text" ? shareResult.content[0].text : "";
+
+        expect(shareResult.isError).toBe(true);
+        expect(errorText).toContain("Encrypted Tabula.md share upload failed with HTTP 503.");
+        expect(errorText).not.toContain("This plaintext must stay local");
+        expect(shareResult.structuredContent).toBeUndefined();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        const body = String((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body);
+        expect(body).not.toContain("This plaintext must stay local");
+      },
+      { mcpApps: true },
+    );
+  });
 });
