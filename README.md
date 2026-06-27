@@ -12,10 +12,10 @@ Room server still receives only encrypted envelopes.
 
 ## Status
 
-Initial implementation. The server supports local MCP App documents, one-file
-live rooms, Markdown reads, outline extraction, presence, and guarded text
-patches. Comment sync and encrypted room sharing from a local App document are
-not part of this first version.
+Initial implementation. The server supports local MCP App documents, encrypted
+share links for local documents, one-file live rooms, Markdown reads, outline
+extraction, presence, and guarded text patches. Comment sync is not part of
+this first version.
 
 ## Quick Start
 
@@ -93,6 +93,7 @@ You can also pass `--enable-write` in `args`. If both are present,
 ## Tools
 
 - `tabula_create_document`: create a local Tabula.md Markdown document and open the interactive MCP App editor in clients that support MCP Apps.
+- `tabula_share_document`: export a local App document to an encrypted Tabula.md room link. The server receives only an encrypted snapshot; the room key stays in the returned URL fragment.
 - `tabula_connect_room`: connect to a room URL using the server's current write mode. Read-only by default.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
 - `tabula_room_status`: inspect connection state, room metadata, hash, and collaborators.
@@ -121,7 +122,8 @@ process and is lost when that process exits. The MCP App also keeps an unsaved
 plaintext draft in the host browser's local storage, scoped by document id, so
 refreshing or reopening the App can recover recent edits. Saving clears the
 matching local draft. Exporting a local App document into an encrypted Tabula.md
-share link is a follow-up feature, not part of this patch.
+share link is available through `tabula_share_document` and the App's `Share`
+control.
 
 The app uses internal `tabula_app_document_snapshot`,
 `tabula_app_save_document`, and `tabula_app_room_snapshot` tools for App state.
@@ -137,6 +139,11 @@ If a recovered browser draft differs from the latest saved MCP session snapshot,
 the App marks the draft as restored or conflicted and asks the user to review it
 before saving. This draft recovery is local to the MCP App host; it does not
 upload plaintext Markdown to Tabula.md room infrastructure.
+
+The `Share` control saves the current App document into the local MCP session,
+then uploads only an encrypted Yjs snapshot to the Tabula Room server. It sends
+the resulting `https://tabula.md/r/...#key=...` link back into model context.
+Treat that link as a bearer secret.
 
 ## Claude Desktop MCPB
 
@@ -155,7 +162,9 @@ a local document with `tabula_create_document` or connect a room with
 `tabula_connect_room`. Hosted `https://tabula.md/r/...` links use
 `https://rooms.tabula.md`, and local development links use
 `http://localhost:3002`. Clients that support MCP Apps can then open the
-interactive Tabula.md document surface.
+interactive Tabula.md document surface. To share a local App document, use the
+App's `Share` control or ask the model to call `tabula_share_document`; this
+creates an encrypted room snapshot without installer configuration.
 
 The MCPB is intentionally read-only. Use manual MCP client configuration with
 `TABULA_MCP_ENABLE_WRITE=1` only for explicit write-enabled development or
@@ -204,6 +213,11 @@ Local App draft recovery stores plaintext Markdown in the MCP App host browser's
 local storage. This is intended only as local recovery for Claude Desktop or
 another trusted local MCP Apps host, and is separate from encrypted room
 sharing.
+
+`tabula_share_document` creates a room id and 32-byte room key locally, encrypts
+the local Markdown as a Yjs snapshot, and uploads only that encrypted envelope to
+the configured room server. The returned share URL includes the room key in the
+fragment, so it should be shared only with intended collaborators or agents.
 
 ## Validation
 

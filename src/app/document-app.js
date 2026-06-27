@@ -21,6 +21,7 @@ const elements = {
   textLength: document.getElementById("textLength"),
   saveDocumentButton: document.getElementById("saveDocumentButton"),
   sendChangesButton: document.getElementById("sendChangesButton"),
+  shareDocumentButton: document.getElementById("shareDocumentButton"),
   refreshButton: document.getElementById("refreshButton"),
   sendSelectionButton: document.getElementById("sendSelectionButton"),
   displayModeButton: document.getElementById("displayModeButton"),
@@ -70,6 +71,7 @@ const updateDocumentActionState = () => {
 
   elements.saveDocumentButton.disabled = !isDocument;
   elements.sendChangesButton.disabled = !hasContextChanges;
+  elements.shareDocumentButton.disabled = !isDocument;
 };
 
 const extractOutline = (markdown) => {
@@ -343,6 +345,67 @@ const saveDocument = async () => {
   }
 };
 
+const shareDocument = async () => {
+  if (!state.app || state.mode !== "document" || !state.documentId) {
+    setMessage("Create a local Tabula.md document first.", "warning");
+    return;
+  }
+
+  elements.shareDocumentButton.disabled = true;
+  elements.saveDocumentButton.disabled = true;
+  setMessage("Preparing encrypted Tabula.md share link...");
+  try {
+    const saveResult = await state.app.callServerTool({
+      name: "tabula_app_save_document",
+      arguments: {
+        documentId: state.documentId,
+        markdown: elements.markdownEditor.value,
+      },
+    });
+    if (saveResult.isError) {
+      throw new Error(getErrorText(saveResult));
+    }
+    renderSnapshot(saveResult.structuredContent, { resetContextBaseline: false });
+
+    const shareResult = await state.app.callServerTool({
+      name: "tabula_share_document",
+      arguments: {
+        documentId: state.documentId,
+      },
+    });
+    if (shareResult.isError) {
+      throw new Error(getErrorText(shareResult));
+    }
+
+    const share = shareResult.structuredContent?.share;
+    if (!share?.shareUrl) {
+      throw new Error("Share tool did not return an encrypted Tabula.md link.");
+    }
+
+    await state.app.updateModelContext({
+      content: [
+        {
+          type: "text",
+          text: [
+            `Encrypted Tabula.md share link for "${state.title || "Untitled Document"}":`,
+            share.shareUrl,
+            "",
+            "Treat this URL as a bearer secret because the #key fragment can decrypt the room.",
+          ].join("\n"),
+        },
+      ],
+      structuredContent: {
+        tabulaShare: share,
+      },
+    });
+    setMessage("Encrypted share link sent to the model context.");
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : "Could not create encrypted share link.", "error");
+  } finally {
+    updateDocumentActionState();
+  }
+};
+
 const sendChanges = async () => {
   if (!state.app || state.mode !== "document" || !state.documentId) {
     setMessage("Create a local Tabula.md document first.", "warning");
@@ -517,6 +580,7 @@ const boot = async () => {
 
   elements.saveDocumentButton.addEventListener("click", () => void saveDocument());
   elements.sendChangesButton.addEventListener("click", () => void sendChanges());
+  elements.shareDocumentButton.addEventListener("click", () => void shareDocument());
   elements.refreshButton.addEventListener("click", () => void loadSnapshot());
   elements.sendSelectionButton.addEventListener("click", () => void sendSelection());
   elements.displayModeButton.addEventListener("click", () => void toggleDisplayMode());

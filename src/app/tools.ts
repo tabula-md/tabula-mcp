@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { DocumentRegistry } from "../documents/registry.js";
 import { errorContent } from "../json.js";
 import type { SessionRegistry } from "../registry.js";
+import { shareMarkdownDocument } from "../share.js";
 import {
   documentSnapshotContent,
   readDocumentSnapshot,
@@ -113,6 +114,60 @@ export const registerDocumentAppTools = (
             resourceUri: tabulaDocumentAppResourceUri,
           },
           text: `Opening Tabula Room View for room ${status.roomId}.`,
+        };
+      }),
+  );
+
+  registerAppTool(
+    server,
+    "tabula_share_document",
+    {
+      title: "Share Tabula Document",
+      description:
+        "Export a local Tabula.md App document as an encrypted Tabula.md room link. The room key stays in the URL fragment, and the room server receives only an encrypted snapshot.",
+      inputSchema: {
+        ...optionalDocumentSchema,
+        appOrigin: z
+          .string()
+          .url()
+          .optional()
+          .describe("Tabula.md app origin for the returned share URL. Defaults to https://tabula.md."),
+        roomServerUrl: z
+          .string()
+          .url()
+          .optional()
+          .describe("Tabula Room service URL. Defaults from appOrigin or TABULA_ROOM_URL."),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+      _meta: {
+        ui: {},
+      },
+    },
+    async ({ documentId, appOrigin, roomServerUrl }) =>
+      runStructuredTool(async () => {
+        const document = await documents.get(documentId);
+        const sharedDocument = await shareMarkdownDocument({
+          title: document.title,
+          markdown: document.markdown,
+          appOrigin,
+          roomServerUrl,
+        });
+
+        return {
+          value: {
+            share: sharedDocument,
+          },
+          text: [
+            `Encrypted Tabula.md share link for "${document.title}":`,
+            sharedDocument.shareUrl,
+            "",
+            "Treat this URL as a bearer secret because the #key fragment can decrypt the room.",
+          ].join("\n"),
         };
       }),
   );

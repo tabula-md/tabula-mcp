@@ -32,6 +32,10 @@
       "description": "Create a local Tabula.md Markdown document and open the interactive MCP App editor."
     },
     {
+      "name": "tabula_share_document",
+      "description": "Export a local Tabula.md document as an encrypted room share link."
+    },
+    {
       "name": "tabula_connect_room",
       "description": "Connect Claude Desktop to an encrypted Tabula.md room invite URL."
     },
