@@ -14,8 +14,8 @@ Room server still receives only encrypted envelopes.
 
 Early implementation. The server supports local MCP App documents, encrypted
 share links for local documents, one-file live rooms, Markdown reads, outline
-extraction, presence, and guarded text patches. Comment sync is not part of
-this first version.
+extraction, presence, guarded text patches, and comment marker context handoff
+from the bundled App.
 
 ## Documentation
 
@@ -28,7 +28,7 @@ this first version.
 
 Requirements:
 
-- Node.js 22 or newer
+- Node.js `^20.19.0 || >=22.12.0`
 - npm
 - A Tabula.md room link or room server only if you want to open live rooms
 
@@ -214,6 +214,16 @@ review sessions.
 
 For step-by-step installation and manual verification, see
 [Claude Desktop](docs/claude-desktop.md).
+
+## Runtime Support
+
+The stdio server and npm package are intended to run on macOS, Windows, and
+Linux with Node.js `^20.19.0 || >=22.12.0`.
+
+The generated Claude Desktop `.mcpb` declares macOS and Windows compatibility
+because those are the one-click install targets verified for this package.
+Linux remains supported through manual stdio configuration until Claude Desktop
+MCPB installation behavior is verified there.
 
 ## MCP App Dev Harness
 

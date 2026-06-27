@@ -47,6 +47,9 @@ const requiredTools = [
 const readJson = async (relativePath) =>
   JSON.parse(await readFile(path.join(bundleDir, relativePath), "utf8"));
 
+const readRootJson = async (relativePath) =>
+  JSON.parse(await readFile(path.join(rootDir, relativePath), "utf8"));
+
 const assert = (condition, message) => {
   if (!condition) {
     throw new Error(message);
@@ -59,6 +62,8 @@ const main = async () => {
   }
 
   const manifest = await readJson("manifest.json");
+  const bundlePackage = await readJson("package.json");
+  const rootPackage = await readRootJson("package.json");
   assert(!("user_config" in manifest), "MCPB manifest must not include installer user_config");
   assert(manifest.icon === "assets/icon.png", "MCPB manifest must point icon to assets/icon.png");
   assert(
@@ -69,6 +74,18 @@ const main = async () => {
   assert(
     manifest.server?.mcp_config?.args?.includes("${__dirname}/server/index.js"),
     "MCPB server args must point to bundled server/index.js",
+  );
+  assert(
+    manifest.compatibility?.runtimes?.node === rootPackage.engines?.node,
+    "MCPB manifest Node runtime must match package engines.node",
+  );
+  assert(
+    bundlePackage.engines?.node === rootPackage.engines?.node,
+    "MCPB bundled package Node engine must match root package engines.node",
+  );
+  assert(
+    JSON.stringify(manifest.compatibility?.platforms) === JSON.stringify(["darwin", "win32"]),
+    "MCPB one-click compatibility must stay limited to verified macOS and Windows targets",
   );
 
   const toolNames = new Set(manifest.tools?.map((tool) => tool.name));

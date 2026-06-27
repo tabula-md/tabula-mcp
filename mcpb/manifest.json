@@ -80,7 +80,7 @@
     "claude_desktop": ">=0.13.91",
     "platforms": ["darwin", "win32"],
     "runtimes": {
-      "node": ">=22.0.0"
+      "node": "^20.19.0 || >=22.12.0"
     }
   }
 }

@@ -98,12 +98,14 @@ Those links route to `http://localhost:3002` by default.
 
 Current policy:
 
-- Node.js 22 or newer
-- Claude Desktop MCPB compatibility: macOS and Windows
-- Linux: manual stdio testing only until MCPB installation behavior is verified
+- Stdio server and npm package: macOS, Windows, and Linux on Node.js
+  `^20.19.0 || >=22.12.0`
+- Claude Desktop MCPB one-click compatibility: macOS and Windows
+- Linux: manual stdio configuration only until Claude Desktop MCPB installation
+  behavior is verified there
 
-Do not lower the Node version or broaden platform claims without testing the
-full App, MCPB, and room flows on that runtime.
+Do not lower the Node version, broaden MCPB platform claims, or remove the
+Linux caveat without testing the full App, MCPB, and room flows on that runtime.
 
 ## Security Review
 
