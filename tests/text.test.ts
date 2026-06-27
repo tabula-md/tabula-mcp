@@ -3,7 +3,7 @@ import {
   applyTextPatchesToString,
   areTextPatchesApplicable,
   getMarkdownOutline,
-} from "./text.js";
+} from "../src/text.js";
 
 describe("text patches", () => {
   it("applies non-overlapping patches in old-document coordinates", () => {

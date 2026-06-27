@@ -1,14 +1,14 @@
 import * as Y from "yjs";
 import { describe, expect, it } from "vitest";
-import { decryptEnvelopeForRoom, importRoomKey } from "./crypto.js";
-import { decodeBase64Url, encodeBase64Url, type EncryptedEnvelope } from "./protocol.js";
+import { decryptEnvelopeForRoom, importRoomKey } from "../src/crypto.js";
+import { decodeBase64Url, encodeBase64Url, type EncryptedEnvelope } from "../src/protocol.js";
 import {
   createEncryptedMarkdownSnapshot,
   createRoomShareUrl,
   generateRoomId,
   generateRoomKey,
   shareMarkdownDocument,
-} from "./share.js";
+} from "../src/share.js";
 
 const roomId = "room_123";
 const roomKey = encodeBase64Url(new Uint8Array(32).fill(7));

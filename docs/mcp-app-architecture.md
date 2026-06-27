@@ -99,6 +99,25 @@ Responsibilities:
 
 Room protocol and crypto modules should stay independent from the App UI.
 
+## Test Layout
+
+Tests live outside production source under `tests/`:
+
+```txt
+tests/
+  app/
+  documents/
+  crypto.test.ts
+  guidance.test.ts
+  mcp-tools.test.ts
+  protocol.test.ts
+  share.test.ts
+  text.test.ts
+```
+
+Keeping tests outside `src/` makes the packaged server source easier to scan and
+keeps production module names aligned with runtime responsibilities.
+
 ## Tool Visibility
 
 Model-facing tools:

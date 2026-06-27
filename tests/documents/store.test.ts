@@ -7,7 +7,7 @@ import {
   MemoryDocumentStore,
   createDefaultDocumentStore,
   resolveDefaultDocumentStoreDirectory,
-} from "./store.js";
+} from "../../src/documents/store.js";
 
 const tempDirs: string[] = [];
 
