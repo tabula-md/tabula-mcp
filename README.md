@@ -116,9 +116,12 @@ room mode. It does not replace the text tools: clients without MCP Apps support
 can keep using `tabula_read_markdown`, `tabula_get_outline`, and
 `tabula_apply_text_patches` normally.
 
-Local App documents are session-local: they live in the local MCP process and
-are lost when that process exits. Exporting a local App document into an
-encrypted Tabula.md share link is a follow-up feature, not part of this patch.
+Local App documents are session-local: the saved copy lives in the local MCP
+process and is lost when that process exits. The MCP App also keeps an unsaved
+plaintext draft in the host browser's local storage, scoped by document id, so
+refreshing or reopening the App can recover recent edits. Saving clears the
+matching local draft. Exporting a local App document into an encrypted Tabula.md
+share link is a follow-up feature, not part of this patch.
 
 The app uses internal `tabula_app_document_snapshot`,
 `tabula_app_save_document`, and `tabula_app_room_snapshot` tools for App state.
@@ -129,6 +132,11 @@ other MCP clients.
 For local App documents, the `Send Changes` control sends a compact Markdown
 change summary back into model context. It uses changed ranges and bounded
 excerpts instead of sending the whole document on every edit.
+
+If a recovered browser draft differs from the latest saved MCP session snapshot,
+the App marks the draft as restored or conflicted and asks the user to review it
+before saving. This draft recovery is local to the MCP App host; it does not
+upload plaintext Markdown to Tabula.md room infrastructure.
 
 ## Claude Desktop MCPB
 
@@ -191,6 +199,11 @@ The Tabula Room server must not receive:
 - plaintext Markdown
 - decrypted Yjs updates
 - decrypted presence payloads
+
+Local App draft recovery stores plaintext Markdown in the MCP App host browser's
+local storage. This is intended only as local recovery for Claude Desktop or
+another trusted local MCP Apps host, and is separate from encrypted room
+sharing.
 
 ## Validation
 

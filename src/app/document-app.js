@@ -1,5 +1,11 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps/app-with-deps";
 import { createMarkdownChangeSummary, formatDocumentChangeMessage } from "./change-summary.js";
+import {
+  clearDocumentDraft,
+  formatDraftStorageReason,
+  loadDocumentDraft,
+  saveDocumentDraft,
+} from "./draft-storage.js";
 import "./document-app.css";
 
 const elements = {
@@ -8,6 +14,7 @@ const elements = {
   writeMode: document.getElementById("writeMode"),
   shaValue: document.getElementById("shaValue"),
   peerCount: document.getElementById("peerCount"),
+  draftStatus: document.getElementById("draftStatus"),
   message: document.getElementById("message"),
   outlineList: document.getElementById("outlineList"),
   markdownEditor: document.getElementById("markdownEditor"),
@@ -27,6 +34,7 @@ const state = {
   sessionId: "",
   roomId: "",
   sha256: "",
+  lastSavedMarkdown: "",
   lastContextMarkdown: "",
   displayMode: "inline",
 };
@@ -34,6 +42,19 @@ const state = {
 const setMessage = (text, tone = "neutral") => {
   elements.message.textContent = text;
   elements.message.dataset.tone = tone;
+};
+
+const setDraftStatus = (text, tone = "neutral") => {
+  elements.draftStatus.textContent = text;
+  elements.draftStatus.dataset.tone = tone;
+};
+
+const getDraftStorage = () => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 };
 
 const shortHash = (value) => (value ? `${value.slice(0, 10)}...${value.slice(-6)}` : "-");
@@ -108,6 +129,8 @@ const renderRoomSummary = (summary) => {
   elements.shaValue.textContent = shortHash(summary.sha256);
   elements.peerCount.textContent = String(summary.peerCount ?? 0);
   elements.textLength.textContent = `${summary.textLength ?? 0} chars`;
+  setDraftStatus("Not used");
+  state.lastSavedMarkdown = "";
   elements.markdownEditor.readOnly = true;
   updateDocumentActionState();
 };
@@ -131,21 +154,117 @@ const renderOutline = (outline) => {
   }
 };
 
+const applyStoredDraft = (document, savedMarkdown) => {
+  const storage = getDraftStorage();
+  if (!storage) {
+    setDraftStatus("Unavailable", "warning");
+    return {
+      markdown: savedMarkdown,
+      draftRestored: false,
+      hasConflict: false,
+      message: "",
+    };
+  }
+
+  const draft = loadDocumentDraft(storage, document.documentId);
+  if (!draft) {
+    setDraftStatus("Saved");
+    return {
+      markdown: savedMarkdown,
+      draftRestored: false,
+      hasConflict: false,
+      message: "",
+    };
+  }
+
+  if (draft.markdown === savedMarkdown) {
+    clearDocumentDraft(storage, document.documentId);
+    setDraftStatus("Saved");
+    return {
+      markdown: savedMarkdown,
+      draftRestored: false,
+      hasConflict: false,
+      message: "",
+    };
+  }
+
+  const hasConflict = Boolean(draft.baseSha256 && draft.baseSha256 !== document.sha256);
+  setDraftStatus(hasConflict ? "Conflict" : "Restored", "warning");
+
+  return {
+    markdown: draft.markdown,
+    draftRestored: true,
+    hasConflict,
+    message: hasConflict
+      ? "Restored a local draft that differs from the latest saved document. Review it before saving."
+      : "Restored an unsaved local draft. Save to keep it in this MCP session.",
+  };
+};
+
+const persistCurrentDraft = () => {
+  if (state.mode !== "document" || !state.documentId) {
+    return;
+  }
+
+  const storage = getDraftStorage();
+  const markdown = elements.markdownEditor.value;
+  if (markdown === state.lastSavedMarkdown) {
+    clearDocumentDraft(storage, state.documentId);
+    setDraftStatus("Saved");
+    return;
+  }
+
+  const result = saveDocumentDraft(storage, {
+    documentId: state.documentId,
+    title: state.title,
+    markdown,
+    baseSha256: state.sha256,
+  });
+
+  if (!result.ok) {
+    setDraftStatus(
+      formatDraftStorageReason(result.reason),
+      result.reason === "draft-too-large" ? "warning" : "error",
+    );
+    return;
+  }
+
+  setDraftStatus("Draft saved", "warning");
+};
+
 const renderSnapshot = (snapshot, options = {}) => {
   const { resetContextBaseline = true } = options;
+  let markdown = snapshot.markdown || "";
+  const previousContextMarkdown = state.lastContextMarkdown;
+  let draftState = {
+    draftRestored: false,
+    hasConflict: false,
+    message: "",
+  };
 
   if (snapshot.document) {
     renderDocumentSummary(snapshot.document);
+    state.lastSavedMarkdown = markdown;
+    if (resetContextBaseline) {
+      state.lastContextMarkdown = markdown;
+    }
+    draftState = applyStoredDraft(snapshot.document, markdown);
+    markdown = draftState.markdown;
+    if (draftState.draftRestored && previousContextMarkdown === markdown) {
+      state.lastContextMarkdown = markdown;
+    }
   } else {
     renderRoomSummary(snapshot.room || snapshot.status);
   }
 
-  elements.markdownEditor.value = snapshot.markdown || "";
-  if (snapshot.document && resetContextBaseline) {
-    state.lastContextMarkdown = elements.markdownEditor.value;
+  elements.markdownEditor.value = markdown;
+  if (!snapshot.document) {
+    state.lastContextMarkdown = markdown;
   }
-  renderOutline(snapshot.outline || []);
+  elements.textLength.textContent = `${markdown.length} chars`;
+  renderOutline(snapshot.document ? extractOutline(markdown) : snapshot.outline || []);
   updateDocumentActionState();
+  return draftState;
 };
 
 const loadSnapshot = async () => {
@@ -179,8 +298,11 @@ const loadSnapshot = async () => {
       throw new Error(getErrorText(result));
     }
 
-    renderSnapshot(result.structuredContent);
-    setMessage("Tabula.md content is current.");
+    const renderResult = renderSnapshot(result.structuredContent);
+    setMessage(
+      renderResult.draftRestored ? renderResult.message : "Tabula.md content is current.",
+      renderResult.draftRestored ? "warning" : "neutral",
+    );
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Refresh failed.", "error");
   } finally {
@@ -217,7 +339,7 @@ const saveDocument = async () => {
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Save failed.", "error");
   } finally {
-    elements.saveDocumentButton.disabled = state.mode !== "document";
+    updateDocumentActionState();
   }
 };
 
@@ -375,7 +497,12 @@ const boot = async () => {
     }
 
     if (result.structuredContent?.document || result.structuredContent?.markdown) {
-      renderSnapshot(result.structuredContent);
+      const renderResult = renderSnapshot(result.structuredContent);
+      const readyMessage = result.structuredContent?.document ? "Tabula.md document is ready." : "Tabula.md content is ready.";
+      setMessage(
+        renderResult.draftRestored ? renderResult.message : readyMessage,
+        renderResult.draftRestored ? "warning" : "neutral",
+      );
       return;
     }
 
@@ -401,6 +528,7 @@ const boot = async () => {
     const markdown = elements.markdownEditor.value;
     elements.textLength.textContent = `${markdown.length} chars`;
     renderOutline(extractOutline(markdown));
+    persistCurrentDraft();
     updateDocumentActionState();
     setMessage("Document has unsaved changes.", "warning");
   });
