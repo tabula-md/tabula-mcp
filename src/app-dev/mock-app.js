@@ -61,6 +61,10 @@ const toolError = (text) => ({
   ],
 });
 
+const emitDevEvent = (name, detail) => {
+  window.dispatchEvent(new CustomEvent(`tabula-dev:${name}`, { detail }));
+};
+
 export const shouldUseDevBridge = () => {
   const params = new URLSearchParams(window.location.search);
   return params.has("tabula-dev") || window.location.pathname.endsWith("index-dev.html");
@@ -117,6 +121,7 @@ export const createDevApp = () => {
     },
 
     async callServerTool(request) {
+      emitDevEvent("tool-call", request);
       switch (request?.name) {
         case "tabula_app_document_snapshot":
           return textResult("Tabula document snapshot loaded.", documentSnapshot);
@@ -147,13 +152,14 @@ export const createDevApp = () => {
     },
 
     async updateModelContext(payload) {
-      window.dispatchEvent(new CustomEvent("tabula-dev:model-context", { detail: payload }));
+      emitDevEvent("model-context", payload);
       console.info("[tabula-dev] updateModelContext", payload);
       return {};
     },
 
     async requestDisplayMode(request) {
       displayMode = request?.mode === "fullscreen" ? "fullscreen" : "inline";
+      emitDevEvent("display-mode", { mode: displayMode });
       this.onhostcontextchanged?.(this.getHostContext());
       return {
         mode: displayMode,

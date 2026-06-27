@@ -238,11 +238,17 @@ document fixture, or add `&fixture=room` for the read-only room fixture. The
 mock bridge implements App inputs, snapshots, save, share, display mode, and
 model context updates inside the browser only.
 
-For a static harness smoke check:
+For an App smoke check:
 
 ```sh
 npm run test:app
 ```
+
+This runs static bundle assertions and a Playwright browser flow against the dev
+harness. The browser flow edits and saves a local document, sends compact change
+and comment context, shares an encrypted link, opens the room fixture, refreshes
+it, and exercises fullscreen mode. If Chromium is missing in a fresh environment,
+run `npx playwright install chromium`.
 
 ## Editing Model
 
