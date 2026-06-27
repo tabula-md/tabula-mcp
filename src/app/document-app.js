@@ -1,5 +1,5 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps/app-with-deps";
-import "./room-view.css";
+import "./document-app.css";
 
 const elements = {
   itemId: document.getElementById("itemId"),

@@ -5,8 +5,9 @@ import { getUiCapability, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-a
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { registerDocumentAppResource, registerDocumentAppTools } from "./app-resource.js";
-import { DocumentRegistry } from "./document-registry.js";
+import { registerDocumentAppResource } from "./app/resource.js";
+import { registerDocumentAppTools } from "./app/tools.js";
+import { DocumentRegistry } from "./documents/registry.js";
 import { jsonContent, errorContent } from "./json.js";
 import { parseRoomShareUrl, resolveRoomServerUrl } from "./protocol.js";
 import { SessionRegistry } from "./registry.js";

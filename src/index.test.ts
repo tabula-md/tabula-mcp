@@ -1,8 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
+import { tabulaDocumentAppResourceUri } from "./app/types.js";
 import { createTabulaMcpServer, resolveWriteEnabled } from "./index.js";
-import { tabulaDocumentAppResourceUri } from "./app-resource.js";
 
 const uiCapabilities = {
   extensions: {
