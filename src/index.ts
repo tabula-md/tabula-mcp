@@ -8,6 +8,7 @@ import { z } from "zod";
 import { registerDocumentAppResource } from "./app/resource.js";
 import { registerDocumentAppTools } from "./app/tools.js";
 import { DocumentRegistry } from "./documents/registry.js";
+import { formatTabulaReadMe, getTabulaReadMe, tabulaReadMeTopics } from "./guidance.js";
 import { jsonContent, errorContent } from "./json.js";
 import { parseRoomShareUrl, resolveRoomServerUrl } from "./protocol.js";
 import { SessionRegistry } from "./registry.js";
@@ -34,6 +35,8 @@ export type TabulaMcpServerInstance = {
 const optionalSessionSchema = {
   sessionId: z.string().uuid().optional().describe("Session id returned by tabula_connect_room. Defaults to the latest session."),
 };
+
+const tabulaReadMeTopicSchema = z.enum(tabulaReadMeTopics).default("overview");
 
 const runTool = async (handler: () => Promise<unknown>) => {
   try {
@@ -76,6 +79,37 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
     documentAppToolsRegistered = true;
     server.sendToolListChanged();
   };
+
+  server.registerTool(
+    "tabula_read_me",
+    {
+      description:
+        "Read concise Tabula.md MCP guidance for document drafting, room links, encrypted sharing, and security boundaries. Call this once before choosing a Tabula workflow.",
+      inputSchema: {
+        topic: tabulaReadMeTopicSchema.describe("Guidance topic to read."),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ topic }) => {
+      const readMe = getTabulaReadMe(topic);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: formatTabulaReadMe(readMe),
+          },
+        ],
+        structuredContent: {
+          readMe,
+        },
+      };
+    },
+  );
 
   server.registerTool(
     "tabula_connect_room",

@@ -93,6 +93,7 @@ You can also pass `--enable-write` in `args`. If both are present,
 ## Tools
 
 - `tabula_create_document`: create a local Tabula.md Markdown document and open the interactive MCP App editor in clients that support MCP Apps.
+- `tabula_read_me`: return workflow guidance for documents, rooms, sharing, and security boundaries.
 - `tabula_share_document`: export a local App document to an encrypted Tabula.md room link. The server receives only an encrypted snapshot; the room key stays in the returned URL fragment.
 - `tabula_connect_room`: connect to a room URL using the server's current write mode. Read-only by default.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
@@ -110,6 +111,10 @@ You can also pass `--enable-write` in `args`. If both are present,
 Tabula MCP includes a progressive MCP Apps surface in the same package. Call
 `tabula_create_document` to open an editable local Markdown document when the
 MCP client supports `text/html;profile=mcp-app`.
+
+Call `tabula_read_me` once when the model needs to choose a Tabula.md workflow
+or verify security boundaries. It returns concise topic-specific guidance for
+local documents, encrypted rooms, sharing, and write policy.
 
 The Document App is bundled into `dist/document-app.html` during `npm run build`.
 It also opens connected rooms through `tabula_open_room_view` as a read-only

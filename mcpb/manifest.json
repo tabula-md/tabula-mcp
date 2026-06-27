@@ -32,6 +32,10 @@
       "description": "Create a local Tabula.md Markdown document and open the interactive MCP App editor."
     },
     {
+      "name": "tabula_read_me",
+      "description": "Read Tabula.md MCP workflow guidance and security boundaries."
+    },
+    {
       "name": "tabula_share_document",
       "description": "Export a local Tabula.md document as an encrypted room share link."
     },
