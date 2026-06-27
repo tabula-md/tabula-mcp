@@ -10,7 +10,7 @@
       <header class="toolbar">
         <div class="identity">
           <span class="brand">Tabula.md</span>
-          <span id="itemId" class="item-id">Document</span>
+          <input id="titleInput" class="title-input" type="text" value="Document" maxlength="120" aria-label="Document title" disabled />
         </div>
         <div class="actions">
           <button id="saveDocumentButton" type="button" disabled>Save</button>
@@ -57,10 +57,20 @@
 
         <section class="markdown-pane">
           <div class="pane-heading">
-            <h2>Markdown</h2>
-            <span id="textLength" class="meta">0 chars</span>
+            <h2>Document</h2>
+            <div class="pane-tools">
+              <div class="segmented-control" role="group" aria-label="View mode">
+                <button type="button" data-view-mode="editor" aria-pressed="false">Editor</button>
+                <button type="button" data-view-mode="split" aria-pressed="true">Split</button>
+                <button type="button" data-view-mode="preview" aria-pressed="false">Preview</button>
+              </div>
+              <span id="textLength" class="meta">0 chars</span>
+            </div>
           </div>
-          <textarea id="markdownEditor" class="markdown-editor" spellcheck="false" readonly></textarea>
+          <div class="document-surface">
+            <textarea id="markdownEditor" class="markdown-editor" spellcheck="false" readonly></textarea>
+            <article id="markdownPreview" class="markdown-preview" aria-label="Markdown preview"></article>
+          </div>
         </section>
       </section>
     </main>
