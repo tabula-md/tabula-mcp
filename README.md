@@ -126,6 +126,10 @@ They are marked app-only so model-facing tool lists stay focused, while the
 normal read/write tools remain the compatibility path for Codex, Claude, and
 other MCP clients.
 
+For local App documents, the `Send Changes` control sends a compact Markdown
+change summary back into model context. It uses changed ranges and bounded
+excerpts instead of sending the whole document on every edit.
+
 ## Claude Desktop MCPB
 
 For Claude Desktop experiments, build a one-click MCP Bundle:
