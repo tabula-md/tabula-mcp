@@ -19,8 +19,13 @@ describe("room protocol helpers", () => {
     expect(() => parseRoomShareUrl("https://tabula.md/r/room_123#key=bad")).toThrow(/32 bytes/);
   });
 
-  it("resolves local room servers automatically but requires configuration for hosted app links", () => {
+  it("resolves local and official hosted room servers automatically", () => {
     expect(resolveRoomServerUrl({ appOrigin: "http://localhost:5173", env: {} })).toBe("http://localhost:3002");
+    expect(resolveRoomServerUrl({ appOrigin: "https://tabula.md", env: {} })).toBe("https://rooms.tabula.md");
+    expect(resolveRoomServerUrl({ appOrigin: "https://www.tabula.md", env: {} })).toBe("https://rooms.tabula.md");
+  });
+
+  it("lets explicit configuration override inferred room servers", () => {
     expect(
       resolveRoomServerUrl({
         appOrigin: "https://tabula.md",
@@ -28,6 +33,11 @@ describe("room protocol helpers", () => {
         env: {},
       }),
     ).toBe("https://rooms.example.com");
-    expect(() => resolveRoomServerUrl({ appOrigin: "https://tabula.md", env: {} })).toThrow(/Room server URL/);
+  });
+
+  it("requires configuration for self-hosted app links", () => {
+    expect(() => resolveRoomServerUrl({ appOrigin: "https://tabula.example.com", env: {} })).toThrow(
+      /self-hosted Tabula links/,
+    );
   });
 });

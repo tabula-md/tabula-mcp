@@ -80,7 +80,7 @@ button:disabled {
   letter-spacing: 0;
 }
 
-.room-id {
+.item-id {
   min-width: 0;
   color: var(--tabula-muted);
   overflow: hidden;
@@ -203,16 +203,25 @@ button:disabled {
   color: var(--tabula-muted);
 }
 
-.markdown-preview {
+.markdown-editor {
   flex: 1;
   min-height: 320px;
+  width: 100%;
+  border: 0;
+  resize: none;
   overflow: auto;
   margin: 0;
   padding: 14px;
+  background: transparent;
   color: var(--tabula-text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font: 13px/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+}
+
+.markdown-editor:focus {
+  outline: 2px solid color-mix(in srgb, var(--tabula-accent) 55%, transparent);
+  outline-offset: -2px;
 }
 
 @media (max-width: 760px) {

@@ -27,6 +27,7 @@ const ROOM_ID_PATTERN = /^[A-Za-z0-9_-]{1,160}$/;
 const ROOM_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 const ROOM_KEY_BYTES = 32;
 const LOCAL_ROOM_SERVER_PORT = 3002;
+const TABULA_MD_ROOM_SERVER_URL = "https://rooms.tabula.md";
 
 export const trimTrailingSlash = (value: string) => value.replace(/\/+$/, "");
 
@@ -79,6 +80,13 @@ export const parseRoomShareUrl = (roomUrl: string): ParsedRoomShareUrl => {
 const isLocalHost = (hostname: string) =>
   hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
 
+const resolveOfficialHostedRoomServerUrl = (hostname: string) => {
+  const normalizedHostname = hostname.toLowerCase();
+  return normalizedHostname === "tabula.md" || normalizedHostname === "www.tabula.md"
+    ? TABULA_MD_ROOM_SERVER_URL
+    : undefined;
+};
+
 export const resolveRoomServerUrl = ({
   appOrigin,
   roomServerUrl,
@@ -99,8 +107,13 @@ export const resolveRoomServerUrl = ({
     return `${protocol}//${appUrl.hostname}:${LOCAL_ROOM_SERVER_PORT}`;
   }
 
+  const officialHostedRoomServerUrl = resolveOfficialHostedRoomServerUrl(appUrl.hostname);
+  if (officialHostedRoomServerUrl) {
+    return officialHostedRoomServerUrl;
+  }
+
   throw new TabulaMcpError(
-    "Room server URL is required for hosted Tabula links. Set TABULA_ROOM_URL or pass roomServerUrl.",
+    "Room server URL is required for self-hosted Tabula links. Set TABULA_ROOM_URL or pass roomServerUrl.",
   );
 };
 

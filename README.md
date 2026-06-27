@@ -1,19 +1,21 @@
 # Tabula MCP
 
-Local MCP server for joining encrypted Tabula.md live rooms from Codex, Claude,
-and other MCP clients.
+Local MCP server and MCP App for drafting Tabula.md Markdown documents and
+joining encrypted Tabula.md live rooms from Codex, Claude, and other MCP
+clients.
 
-Tabula MCP lets an agent read a shared Markdown room and, when explicitly
-enabled, apply text patches back into the room. It keeps Tabula.md's room
-security boundary intact: the room key is read from the URL fragment and used
-inside this local MCP process. The Tabula Room server still receives only
-encrypted envelopes.
+Tabula MCP lets an agent create a local Markdown document in an MCP App, read a
+shared Markdown room, and, when explicitly enabled, apply text patches back into
+the room. It keeps Tabula.md's room security boundary intact: the room key is
+read from the URL fragment and used inside this local MCP process. The Tabula
+Room server still receives only encrypted envelopes.
 
 ## Status
 
-Initial implementation. The server supports one-file live rooms, Markdown reads,
-outline extraction, presence, and guarded text patches. Comment sync is not part
-of this first version.
+Initial implementation. The server supports local MCP App documents, one-file
+live rooms, Markdown reads, outline extraction, presence, and guarded text
+patches. Comment sync and encrypted room sharing from a local App document are
+not part of this first version.
 
 ## Quick Start
 
@@ -21,7 +23,7 @@ Requirements:
 
 - Node.js 22 or newer
 - npm
-- A reachable Tabula Room server
+- A Tabula.md room link or room server only if you want to open live rooms
 
 ```sh
 git clone git@github.com:tabula-md/tabula-mcp.git
@@ -33,8 +35,10 @@ npm run build
 For local Tabula.md development links such as `http://localhost:5173/r/...`,
 Tabula MCP defaults the room server to `http://localhost:3002`.
 
-For hosted app links such as `https://tabula.md/r/...`, configure the room
-service explicitly:
+For hosted Tabula.md links such as `https://tabula.md/r/...`, Tabula MCP
+defaults the room server to `https://rooms.tabula.md`.
+
+For self-hosted app links, configure the room service explicitly:
 
 ```sh
 export TABULA_ROOM_URL=https://rooms.example.com
@@ -49,16 +53,14 @@ Use the built server over stdio:
   "mcpServers": {
     "tabula": {
       "command": "node",
-      "args": ["/absolute/path/to/tabula-mcp/dist/index.js"],
-      "env": {
-        "TABULA_ROOM_URL": "http://localhost:3002"
-      }
+      "args": ["/absolute/path/to/tabula-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-Then ask the agent to call `tabula_connect_room` with a full room invite URL:
+Then ask the agent to create a document with `tabula_create_document`, or call
+`tabula_connect_room` with a full room invite URL:
 
 ```txt
 https://tabula.md/r/<roomId>#key=<roomKey>
@@ -90,32 +92,62 @@ You can also pass `--enable-write` in `args`. If both are present,
 
 ## Tools
 
+- `tabula_create_document`: create a local Tabula.md Markdown document and open the interactive MCP App editor in clients that support MCP Apps.
 - `tabula_connect_room`: connect to a room URL using the server's current write mode. Read-only by default.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
 - `tabula_room_status`: inspect connection state, room metadata, hash, and collaborators.
 - `tabula_read_markdown`: read the current decrypted Markdown.
 - `tabula_get_outline`: extract Markdown headings.
-- `tabula_open_room_view`: open an MCP App Room View for status, outline, Markdown preview, refresh, and selection handoff in clients that support MCP Apps.
+- `tabula_open_room_view`: open a connected room in the MCP App for status, outline, Markdown preview, refresh, and selection handoff in clients that support MCP Apps.
 - `tabula_apply_text_patches`: edit with guarded non-overlapping text patches. Only exposed when the MCP process starts with write mode enabled.
 - `tabula_set_presence`: publish cursor/selection presence to collaborators.
 - `tabula_wait_for_changes`: wait until the room text hash changes.
 - `tabula_disconnect_room`: close a session.
 
-## MCP App Room View
+## MCP App Document
 
-Tabula MCP includes a progressive MCP Apps surface in the same package. After
-connecting a room, call `tabula_open_room_view` to render an interactive
-read-only view when the MCP client supports `text/html;profile=mcp-app`.
+Tabula MCP includes a progressive MCP Apps surface in the same package. Call
+`tabula_create_document` to open an editable local Markdown document when the
+MCP client supports `text/html;profile=mcp-app`.
 
-The Room View is bundled into `dist/room-view.html` during `npm run build`.
-It does not replace the text tools: clients without MCP Apps support can keep
-using `tabula_read_markdown`, `tabula_get_outline`, and
+The Document App is bundled into `dist/room-view.html` during `npm run build`.
+It also opens connected rooms through `tabula_open_room_view` as a read-only
+room mode. It does not replace the text tools: clients without MCP Apps support
+can keep using `tabula_read_markdown`, `tabula_get_outline`, and
 `tabula_apply_text_patches` normally.
 
-The app uses an internal `tabula_app_room_snapshot` tool for refreshes. It is
-marked app-only so model-facing tool lists stay focused, while the normal
-read/write tools remain the compatibility path for Codex, Claude, and other
-MCP clients.
+Local App documents are session-local: they live in the local MCP process and
+are lost when that process exits. Exporting a local App document into an
+encrypted Tabula.md share link is a follow-up feature, not part of this patch.
+
+The app uses internal `tabula_app_document_snapshot`,
+`tabula_app_save_document`, and `tabula_app_room_snapshot` tools for App state.
+They are marked app-only so model-facing tool lists stay focused, while the
+normal read/write tools remain the compatibility path for Codex, Claude, and
+other MCP clients.
+
+## Claude Desktop MCPB
+
+For Claude Desktop experiments, build a one-click MCP Bundle:
+
+```sh
+npm run build:mcpb
+```
+
+The bundle is written to `dist/tabula-mcp-<version>.mcpb`. Install it by
+double-clicking the file, dragging it into Claude Desktop, or using
+Settings -> Extensions -> Advanced settings -> Install Extension.
+
+No installation settings are required for normal use. After installation, create
+a local document with `tabula_create_document` or connect a room with
+`tabula_connect_room`. Hosted `https://tabula.md/r/...` links use
+`https://rooms.tabula.md`, and local development links use
+`http://localhost:3002`. Clients that support MCP Apps can then open the
+interactive Tabula.md document surface.
+
+The MCPB is intentionally read-only. Use manual MCP client configuration with
+`TABULA_MCP_ENABLE_WRITE=1` only for explicit write-enabled development or
+review sessions.
 
 ## Editing Model
 

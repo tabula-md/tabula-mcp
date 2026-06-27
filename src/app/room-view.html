@@ -3,25 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tabula.md Room View</title>
+    <title>Tabula.md Document</title>
   </head>
   <body>
     <main class="shell">
       <header class="toolbar">
         <div class="identity">
           <span class="brand">Tabula.md</span>
-          <span id="roomId" class="room-id">Room View</span>
+          <span id="itemId" class="item-id">Document</span>
         </div>
         <div class="actions">
+          <button id="saveDocumentButton" type="button" disabled>Save</button>
           <button id="refreshButton" type="button">Refresh</button>
           <button id="sendSelectionButton" type="button">Send Selection</button>
           <button id="displayModeButton" type="button">Fullscreen</button>
         </div>
       </header>
 
-      <section class="status-grid" aria-label="Room status">
+      <section class="status-grid" aria-label="Document status">
         <div>
-          <span class="label">Connection</span>
+          <span class="label">Source</span>
           <strong id="connectionStatus">Waiting</strong>
         </div>
         <div>
@@ -33,7 +34,7 @@
           <strong id="shaValue">-</strong>
         </div>
         <div>
-          <span class="label">People</span>
+          <span class="label">Scope</span>
           <strong id="peerCount">0</strong>
         </div>
       </section>
@@ -53,7 +54,7 @@
             <h2>Markdown</h2>
             <span id="textLength" class="meta">0 chars</span>
           </div>
-          <pre id="markdownPreview" class="markdown-preview"></pre>
+          <textarea id="markdownEditor" class="markdown-editor" spellcheck="false" readonly></textarea>
         </section>
       </section>
     </main>
