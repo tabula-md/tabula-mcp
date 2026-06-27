@@ -37,9 +37,9 @@ export const registerRoomTools = (
     "tabula_connect_room",
     {
       description:
-        "Connect this local MCP process to an encrypted Tabula.md live room URL. The #key fragment is used locally and is never sent to the room server.",
+        "Connect this local MCP process to an encrypted Tabula.md live room URL. The #room fragment contains the room key, is used locally, and is never sent to the room server.",
       inputSchema: {
-        roomUrl: z.string().url().describe("Full Tabula room invite URL, including /r/:roomId#key=..."),
+        roomUrl: z.string().url().describe("Full Tabula room invite URL, including /#room=<roomId>,<roomKey>."),
         roomServerUrl: z
           .string()
           .url()

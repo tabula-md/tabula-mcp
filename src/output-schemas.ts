@@ -56,6 +56,7 @@ export const documentListOutputShape = {
 export const roomSummaryOutputSchema = z.object({
   sessionId: sessionIdOutputSchema,
   roomId: roomIdOutputSchema,
+  shareUrl: z.string().url().optional(),
   status: z.string(),
   writeAccess: z.boolean(),
   textLength: z.number().int().nonnegative(),
@@ -67,6 +68,7 @@ export const roomSummaryOutputSchema = z.object({
 export const roomStatusOutputShape = {
   sessionId: sessionIdOutputSchema,
   roomId: roomIdOutputSchema,
+  shareUrl: z.string().url().optional(),
   roomServerUrl: z.string().url(),
   status: z.enum(["connecting", "connected", "offline", "closed"]),
   writeAccess: z.boolean(),

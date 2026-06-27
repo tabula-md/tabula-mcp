@@ -14,6 +14,7 @@ export type ParsedRoomShareUrl = {
   roomId: string;
   roomKey: string;
   appOrigin: string;
+  shareUrl: string;
 };
 
 export class TabulaMcpError extends Error {
@@ -49,14 +50,22 @@ export const parseRoomShareUrl = (roomUrl: string): ParsedRoomShareUrl => {
     throw new TabulaMcpError("Room URL must be an absolute Tabula room URL.");
   }
 
-  const roomId = url.pathname.match(/^\/r\/([^/]+)\/?$/)?.[1];
-  if (!roomId || !ROOM_ID_PATTERN.test(roomId)) {
-    throw new TabulaMcpError("Room URL must use /r/:roomId with a valid room id.");
+  if (url.pathname !== "/") {
+    throw new TabulaMcpError("Room URL must use the root /#room=<roomId>,<roomKey> format.");
   }
 
-  const roomKey = new URLSearchParams(url.hash.replace(/^#/, "")).get("key")?.trim();
-  if (!roomKey || !ROOM_KEY_PATTERN.test(roomKey)) {
-    throw new TabulaMcpError("Room URL must include a client-only #key fragment.");
+  const fragment = url.hash.replace(/^#/, "").trim();
+  if (!fragment.startsWith("room=")) {
+    throw new TabulaMcpError("Room URL must include a client-only #room=<roomId>,<roomKey> fragment.");
+  }
+
+  const roomValue = fragment.slice("room=".length);
+  const [roomId, roomKey, extra] = roomValue.split(",");
+  if (!roomId || !ROOM_ID_PATTERN.test(roomId)) {
+    throw new TabulaMcpError("Room URL must include a valid room id in the #room fragment.");
+  }
+  if (extra !== undefined || roomValue.includes("&") || !roomKey || !ROOM_KEY_PATTERN.test(roomKey)) {
+    throw new TabulaMcpError("Room URL must include exactly one room id and one room key in the #room fragment.");
   }
 
   try {
@@ -74,6 +83,7 @@ export const parseRoomShareUrl = (roomUrl: string): ParsedRoomShareUrl => {
     roomId,
     roomKey,
     appOrigin: url.origin,
+    shareUrl: `${url.origin}/#room=${roomId},${roomKey}`,
   };
 };
 

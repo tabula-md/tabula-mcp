@@ -44,11 +44,12 @@ directly from an MCP tool inspector.
 Expected behavior:
 
 1. Claude opens the Tabula.md Document App.
-2. The document title and Markdown body are editable.
-3. Editor, Split, and Preview modes work.
+2. Inline mode shows the Markdown preview with `Open in Tabula` and `Edit`.
+3. Clicking `Edit` opens fullscreen editing, where title editing and
+   Editor/Split/Preview modes work.
 4. Save stores the document in the local MCP server process.
 5. Send Changes posts a compact edit summary back into model context.
-6. Share creates an encrypted `https://tabula.md/r/...#key=...` link. If the
+6. Share creates an encrypted `https://tabula.md/#room=...,...` link. If the
    App has unsent edits, the share handoff also includes a compact edit summary.
 
 Local App documents are checkpointed as plaintext files on this machine so they
@@ -64,11 +65,11 @@ open one with `tabula_open_document`.
 Ask Claude to connect a Tabula.md room URL:
 
 ```txt
-https://tabula.md/r/<roomId>#key=<roomKey>
+https://tabula.md/#room=<roomId>,<roomKey>
 ```
 
-Hosted `https://tabula.md/r/...` links use `https://rooms.tabula.md`.
-Local development links such as `http://localhost:5173/r/...` default to
+Hosted `https://tabula.md/#room=...` links use `https://rooms.tabula.md`.
+Local development links such as `http://localhost:5173/#room=...` default to
 `http://localhost:3002`.
 
 Expected behavior:
@@ -79,8 +80,8 @@ Expected behavior:
    Markdown to the model.
 4. The room server only receives encrypted envelopes.
 
-The `#key` fragment is a bearer secret. Do not paste production room links into
-logs, issue trackers, or public screenshots.
+The `#room` fragment contains the room key and is a bearer secret. Do not paste
+production room links into logs, issue trackers, or public screenshots.
 
 ## Write-Enabled Development
 
@@ -109,18 +110,16 @@ After installing the MCPB in Claude Desktop:
 
 1. Ask Claude: `Call tabula_read_me for document guidance.`
 2. Ask Claude: `Create a Tabula.md document titled Release Notes.`
-3. Edit the Markdown in the App.
-4. Click Save.
-5. Switch to the Comments context tab if the Markdown contains
-   `tabula-comment` markers, select a comment, and send it to Claude.
-6. Ask Claude to call `tabula_list_documents` and confirm the saved document is
+3. Confirm the inline view shows preview plus `Open in Tabula` and `Edit`.
+4. Click `Edit`, update the title and Markdown, then click Save.
+5. Ask Claude to call `tabula_list_documents` and confirm the saved document is
    listed.
-7. Ask Claude to call `tabula_open_document` and confirm the App reopens it.
-8. Click Send Changes and confirm Claude sees the edit summary.
-9. Make one more small edit, click Share, and confirm Claude receives both a
-   room URL with `#key=` and a compact edit summary for the unsent change.
-10. Open the share URL in Tabula.md or reconnect it with `tabula_connect_room`.
-11. Open the room view and confirm Markdown preview and outline render.
+6. Ask Claude to call `tabula_open_document` and confirm the App reopens it.
+7. Click Send Changes and confirm Claude sees the edit summary.
+8. Make one more small edit, click Share, and confirm Claude receives both a
+   room URL with `#room=` and a compact edit summary for the unsent change.
+9. Open the share URL in Tabula.md or reconnect it with `tabula_connect_room`.
+10. Open the room view and confirm Markdown preview and outline render.
 
 If the App fails to open, verify that the MCPB contains `server/document-app.html`
 and that `npm run check:mcpb` passes.

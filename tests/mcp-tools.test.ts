@@ -190,7 +190,7 @@ describe("MCP tool registration", () => {
       expect(text).toContain("bearer secret");
       expect(structured.readMe.topic).toBe("sharing");
       expect(structured.readMe.nextActions.length).toBeGreaterThan(0);
-      expect(structured.readMe.securityRules.join("\n")).toContain("#key");
+      expect(structured.readMe.securityRules.join("\n")).toContain("#room");
     });
   });
 
@@ -425,7 +425,7 @@ describe("MCP tool registration", () => {
           secret: true,
           keyLocation: "url-fragment",
         });
-        expect(shared.share.shareUrl).toMatch(new RegExp(`^https://tabula\\.md/r/${shared.share.roomId}#key=`));
+        expect(shared.share.shareUrl).toMatch(new RegExp(`^https://tabula\\.md/#room=${shared.share.roomId},`));
         expect(shared.share.roomUrl).toBe(shared.share.shareUrl);
         expect(shared.share.connect).toEqual({
           tool: "tabula_connect_room",
@@ -440,9 +440,10 @@ describe("MCP tool registration", () => {
         expect(String(url)).toBe(`https://rooms.tabula.md/v1/rooms/${shared.share.roomId}/snapshot`);
 
         const body = String((init as RequestInit | undefined)?.body);
+        const roomKey = new URL(shared.share.shareUrl).hash.replace(new RegExp(`^#room=${shared.share.roomId},`), "");
         expect(body).toContain('"kind":"snapshot"');
         expect(body).not.toContain("Keep plaintext local");
-        expect(body).not.toContain(new URL(shared.share.shareUrl).hash.replace(/^#key=/, ""));
+        expect(body).not.toContain(roomKey);
       },
       { mcpApps: true },
     );

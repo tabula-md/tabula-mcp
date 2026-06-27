@@ -4,13 +4,13 @@ export const documentFixture = {
     title: "Local Draft",
     source: "local-document",
     status: "draft",
-    textLength: 251,
+    textLength: 167,
     sha256: "fixture-document-hash",
     createdAt: "2026-06-28T00:00:00.000Z",
     updatedAt: "2026-06-28T00:00:00.000Z",
     outlineCount: 2,
   },
-  markdown: "# Local Draft\n\nUse this harness to test editor, preview, save, share, and model context sync.\n\n<!-- tabula-comment: tighten the opening paragraph -->\n\n## Plan\n\n- Edit Markdown\n- Save a snapshot\n- Send changes\n\n> [!comment] Confirm the share link copy.",
+  markdown: "# Local Draft\n\nUse this harness to test editor, preview, save, share, and model context sync.\n\n## Plan\n\n- Edit Markdown\n- Save a snapshot\n- Send changes\n- Open in Tabula",
   outline: [
     {
       depth: 1,
@@ -21,8 +21,8 @@ export const documentFixture = {
     {
       depth: 2,
       text: "Plan",
-      line: 7,
-      offset: 151,
+      line: 5,
+      offset: 96,
     },
   ],
 };
@@ -32,6 +32,7 @@ export const roomFixture = {
   room: {
     sessionId: "123e4567-e89b-42d3-a456-426614174999",
     roomId: "dev-room",
+    shareUrl: "http://localhost:5173/#room=dev-room,dev-only-not-a-real-key",
     status: "connected",
     writeAccess: false,
     sha256: "fixture-room-hash",

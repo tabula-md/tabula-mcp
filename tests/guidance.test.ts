@@ -10,7 +10,7 @@ describe("Tabula read_me guidance", () => {
       expect(readMe.topic).toBe(topic);
       expect(readMe.summary.length).toBeGreaterThan(40);
       expect(readMe.nextActions.length).toBeGreaterThan(0);
-      expect(readMe.securityRules.join("\n")).toContain("#key");
+      expect(readMe.securityRules.join("\n")).toContain("#room");
     }
   });
 

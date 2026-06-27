@@ -64,9 +64,8 @@ export const createRoomShareUrl = ({
   roomId: string;
   roomKey: string;
 }) => {
-  const url = new URL(`/r/${encodeURIComponent(roomId)}`, appOrigin);
-  url.hash = new URLSearchParams({ key: roomKey }).toString();
-  return url.toString();
+  const url = new URL(appOrigin);
+  return `${url.origin}/#room=${roomId},${roomKey}`;
 };
 
 export const createEncryptedMarkdownSnapshot = async ({

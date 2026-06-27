@@ -12,7 +12,7 @@ export type TabulaReadMe = {
 };
 
 const securityRules = [
-  "Treat any Tabula.md room URL with a #key fragment as a bearer secret.",
+  "Treat any Tabula.md room URL with a #room fragment as a bearer secret because the fragment contains the room key.",
   "Never send room keys or plaintext Markdown to the Tabula Room server.",
   "Default room sessions are read-only; room writes require server-level opt-in with TABULA_MCP_ENABLE_WRITE=1 or --enable-write.",
   "Use current sha256/baseSha256 values before applying guarded room patches.",
@@ -32,9 +32,9 @@ const summaries: Record<TabulaReadMeTopic, string> = {
   documents:
     "For a new draft, call tabula_create_document. To resume a saved local checkpoint, call tabula_list_documents, then tabula_open_document. The App editor can save into the local MCP session, recover unsaved browser drafts, send compact changes back into model context, and share the saved document as an encrypted room link.",
   rooms:
-    "For an existing Tabula.md room link, call tabula_connect_room with the full URL including #key. Open tabula_open_room_view for a read-only App view, or use read_markdown/get_outline/wait_for_changes for text workflows.",
+    "For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. Open tabula_open_room_view for a read-only App view, or use read_markdown/get_outline/wait_for_changes for text workflows.",
   sharing:
-    "To share a local App document, call tabula_share_document or use the App Share control. The MCP process creates a room id and key locally, encrypts the Markdown as a Yjs snapshot, uploads only the encrypted envelope, and returns a #key share URL plus structured tabula_connect_room arguments.",
+    "To share a local App document, call tabula_share_document or use the App Share control. The MCP process creates a room id and key locally, encrypts the Markdown as a Yjs snapshot, uploads only the encrypted envelope, and returns a #room share URL plus structured tabula_connect_room arguments.",
   security:
     "Tabula.md room keys live in URL fragments and must remain client-side. The MCP process may decrypt locally because the user supplied the secret, but the room server should only see encrypted envelopes.",
 };
@@ -59,11 +59,11 @@ const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
   sharing: [
     "Call tabula_share_document only for local App documents that should become encrypted room links.",
     "Use share.connect.arguments when reconnecting a freshly shared room instead of reparsing the link text.",
-    "Tell the user the returned URL is secret because #key decrypts the room.",
+    "Tell the user the returned URL is secret because #room contains the room key.",
     "If upload fails, explain that no plaintext fallback was used.",
   ],
   security: [
-    "Keep #key values out of logs, issue text, and hosted plaintext processing.",
+    "Keep #room links and room keys out of logs, issue text, and hosted plaintext processing.",
     "Prefer encrypted snapshot export over plaintext upload.",
     "Ask before enabling room writes or changing persistence boundaries.",
   ],

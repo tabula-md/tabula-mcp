@@ -111,6 +111,7 @@ export class TabulaRoomClient {
   readonly sessionId = randomUUID();
   readonly roomId: string;
   readonly roomServerUrl: string;
+  readonly shareUrl: string;
   readonly writeAccess: boolean;
   readonly identity: Collaborator;
 
@@ -129,6 +130,7 @@ export class TabulaRoomClient {
 
   constructor({ parsedRoom, roomServerUrl, writeAccess, identityName, identityColor }: RoomClientOptions) {
     this.roomId = parsedRoom.roomId;
+    this.shareUrl = parsedRoom.shareUrl;
     this.roomKeyValue = parsedRoom.roomKey;
     this.roomServerUrl = roomServerUrl;
     this.writeAccess = writeAccess;
@@ -195,6 +197,7 @@ export class TabulaRoomClient {
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
+      shareUrl: this.shareUrl,
       roomServerUrl: this.roomServerUrl,
       status: this.statusValue,
       writeAccess: this.writeAccess,

@@ -140,8 +140,8 @@ export const createDevApp = () => {
               roomId: "dev-share-room",
               appOrigin: "http://localhost:5173",
               roomServerUrl: "http://localhost:3002",
-              roomUrl: "http://localhost:5173/r/dev-share-room#key=dev-only-not-a-real-key",
-              shareUrl: "http://localhost:5173/r/dev-share-room#key=dev-only-not-a-real-key",
+              roomUrl: "http://localhost:5173/#room=dev-share-room,dev-only-not-a-real-key",
+              shareUrl: "http://localhost:5173/#room=dev-share-room,dev-only-not-a-real-key",
               textLength: documentSnapshot.markdown.length,
               sha256: documentSnapshot.document.sha256,
               encrypted: true,
@@ -151,7 +151,7 @@ export const createDevApp = () => {
               connect: {
                 tool: "tabula_connect_room",
                 arguments: {
-                  roomUrl: "http://localhost:5173/r/dev-share-room#key=dev-only-not-a-real-key",
+                  roomUrl: "http://localhost:5173/#room=dev-share-room,dev-only-not-a-real-key",
                   roomServerUrl: "http://localhost:3002",
                 },
               },
@@ -165,6 +165,12 @@ export const createDevApp = () => {
     async updateModelContext(payload) {
       emitDevEvent("model-context", payload);
       console.info("[tabula-dev] updateModelContext", payload);
+      return {};
+    },
+
+    async openLink(request) {
+      emitDevEvent("open-link", request);
+      console.info("[tabula-dev] openLink", request);
       return {};
     },
 
