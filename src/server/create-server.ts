@@ -6,6 +6,7 @@ import { registerDocumentAppTools } from "../app/tools.js";
 import { DocumentRegistry } from "../documents/registry.js";
 import { createDefaultDocumentStore, type DocumentStore } from "../documents/store.js";
 import { formatTabulaReadMe, getTabulaReadMe, tabulaReadMeTopics } from "../guidance.js";
+import { readMeOutputShape } from "../output-schemas.js";
 import { SessionRegistry } from "../registry.js";
 import { registerRoomTools } from "./register-room-tools.js";
 import { resolveWriteEnabled } from "./write-access.js";
@@ -33,6 +34,7 @@ const registerReadMeTool = (server: McpServer) => {
       inputSchema: {
         topic: tabulaReadMeTopicSchema.describe("Guidance topic to read."),
       },
+      outputSchema: readMeOutputShape,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

@@ -94,6 +94,15 @@ describe("MCP tool registration", () => {
 
   it("returns model guidance through tabula_read_me without requiring MCP Apps", async () => {
     await withClient(false, async (client) => {
+      const tools = await client.listTools();
+      const readMeTool = tools.tools.find((tool) => tool.name === "tabula_read_me");
+      expect(readMeTool?.outputSchema).toMatchObject({
+        type: "object",
+        properties: {
+          readMe: expect.objectContaining({ type: "object" }),
+        },
+      });
+
       const result = await client.callTool({
         name: "tabula_read_me",
         arguments: {
@@ -181,6 +190,26 @@ describe("MCP tool registration", () => {
     expect(appSaveDocumentTool?._meta).toMatchObject({
       ui: {
         visibility: ["app"],
+      },
+    });
+    expect(createDocumentTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        document: expect.objectContaining({ type: "object" }),
+        markdown: expect.objectContaining({ type: "string" }),
+        outline: expect.objectContaining({ type: "array" }),
+      },
+    });
+    expect(listDocumentsTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        documents: expect.objectContaining({ type: "array" }),
+      },
+    });
+    expect(shareDocumentTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        share: expect.objectContaining({ type: "object" }),
       },
     });
   });
