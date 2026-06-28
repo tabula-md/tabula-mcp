@@ -180,6 +180,11 @@ The Comments context tab is local to the bundled App. It extracts
 Markdown and sends only the selected comment, location, and hash to model
 context.
 
+Selection handoff is also bounded. If the user selects a large range, the App
+sends a head/tail excerpt plus original and excerpt lengths instead of the full
+selected text. The model can ask the user for a narrower selection when exact
+middle text is needed.
+
 ## Dev Harness
 
 The dev harness is intentionally separate from the production App bundle:

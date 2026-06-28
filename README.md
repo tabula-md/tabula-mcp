@@ -170,6 +170,8 @@ excerpts instead of sending the whole document on every edit.
 The Comments context tab detects local Markdown comment markers such as
 `<!-- tabula-comment: ... -->` and `> [!comment] ...`, then can send a selected
 comment back into model context without uploading the full document.
+The `Send Selection` control similarly bounds large selections to a head/tail
+excerpt with truncation metadata instead of sending the full selected text.
 
 If a recovered browser draft differs from the latest saved MCP session snapshot,
 the App marks the draft as restored or conflicted and asks the user to review it
