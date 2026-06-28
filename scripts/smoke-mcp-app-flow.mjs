@@ -5,7 +5,7 @@ import { createServer } from "vite";
 const host = "127.0.0.1";
 
 const waitForMessage = async (page, text) => {
-  await page.locator("#message", { hasText: text }).waitFor({ state: "visible" });
+  await page.locator("#message", { hasText: text }).waitFor({ state: "attached" });
 };
 
 const getDevEvents = (page) =>
@@ -106,6 +106,9 @@ const runDocumentFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
   await waitForMessage(page, "Tabula.md document is ready.");
+  await page.getByRole("button", { name: "Open in Tabula" }).waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
 
   const markdown = [
     "# Flow Smoke",
@@ -115,8 +118,6 @@ const runDocumentFlow = async (baseUrl, browser) => {
     "## Long Selection",
     "",
     `Start ${"large selection body ".repeat(240)}End`,
-    "",
-    "<!-- tabula-comment: check browser flow -->",
     "",
     "## Next",
     "",
@@ -143,11 +144,6 @@ const runDocumentFlow = async (baseUrl, browser) => {
   await page.getByRole("button", { name: "Send Selection" }).click();
   await waitForMessage(page, "Selection sent to the model context.");
 
-  await page.getByRole("button", { name: "Comments" }).click();
-  await page.locator("#commentsList").getByText("check browser flow", { exact: true }).click();
-  await page.getByRole("button", { name: "Send Comment" }).click();
-  await waitForMessage(page, "Comment sent to the model context.");
-
   const shareMarkdown = `${markdown}\n\n## Shared Update\n\nReady for encrypted handoff.`;
   await page.locator("#markdownEditor").fill(shareMarkdown);
   await waitForMessage(page, "Document has unsaved changes.");
@@ -172,12 +168,9 @@ const runDocumentFlow = async (baseUrl, browser) => {
     "document change context should not include the full Markdown body",
   );
 
-  const comment = events.modelContexts.find((payload) => payload?.structuredContent?.tabulaComment);
-  assert(comment, "document flow should send selected comment context");
-  assert.equal(comment.structuredContent.tabulaComment.comment.text, "check browser flow");
   assert(
-    !JSON.stringify(comment).includes("Edited from browser smoke"),
-    "comment context should not include unrelated Markdown body text",
+    !events.modelContexts.some((payload) => payload?.structuredContent?.tabulaComment),
+    "document flow should not expose default comment marker context handoff",
   );
 
   const selection = events.modelContexts.find((payload) => payload?.structuredContent?.tabulaSelection);
@@ -200,7 +193,7 @@ const runDocumentFlow = async (baseUrl, browser) => {
   const share = events.modelContexts.find((payload) => payload?.structuredContent?.tabulaShare);
   assert(share, "document flow should send encrypted share context");
   assert.equal(share.structuredContent.tabulaShare.encrypted, true);
-  assert.match(share.structuredContent.tabulaShare.shareUrl, /#key=/);
+  assert.match(share.structuredContent.tabulaShare.shareUrl, /#room=[^,]+,/);
   assert(
     share.structuredContent.tabulaDocumentChange,
     "share context should include any unsent compact document change summary",
@@ -225,6 +218,8 @@ const runMobileLayoutFlow = async (baseUrl, browser) => {
   await waitForMessage(page, "Tabula.md document is ready.");
 
   await assertNoHorizontalOverflow(page, "mobile initial document layout");
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
 
   await page.locator("#titleInput").fill("Mobile smoke title");
   await page.locator("#markdownEditor").fill(
@@ -248,11 +243,6 @@ const runMobileLayoutFlow = async (baseUrl, browser) => {
     await assertNoHorizontalOverflow(page, `mobile ${viewMode.toLowerCase()} view layout`);
   }
 
-  await page.getByRole("button", { name: "Comments" }).click();
-  await assertNoHorizontalOverflow(page, "mobile comments context layout");
-
-  await page.getByRole("button", { name: "Fullscreen" }).click();
-  await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
   await assertNoHorizontalOverflow(page, "mobile fullscreen layout");
 
   const events = await getDevEvents(page);
@@ -269,14 +259,14 @@ const runRoomFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=room`);
   await waitForMessage(page, "Tabula.md content is current.");
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
 
   await page.getByRole("button", { name: "Refresh" }).click();
   await waitForMessage(page, "Tabula.md content is current.");
 
   const isReadOnly = await page.locator("#markdownEditor").evaluate((element) => element.readOnly);
   assert.equal(isReadOnly, true, "room fixture must open in read-only mode");
-  await page.getByRole("button", { name: "Fullscreen" }).click();
-  await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
 
   const events = await getDevEvents(page);
   assert(

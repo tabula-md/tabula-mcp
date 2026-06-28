@@ -13,7 +13,7 @@ Tabula.md live rooms from agent clients.
 - Keep local App documents local unless the user explicitly shares them as an
   encrypted Tabula.md room link.
 - Preserve the Tabula.md room security model.
-- Treat room URLs with `#key=...` as bearer secrets.
+- Treat room URLs with `#room=...` as bearer secrets because the fragment contains the room key.
 - Keep the MCP process local by default.
 - Default room sessions to read-only.
 - Require explicit write access and hash-guarded patches for edits.

@@ -245,7 +245,7 @@ export const registerDocumentAppTools = (
             `Encrypted Tabula.md share link for "${document.title}":`,
             sharedDocument.shareUrl,
             "",
-            "Treat this URL as a bearer secret because the #key fragment can decrypt the room.",
+            "Treat this URL as a bearer secret because the #room fragment contains the room key.",
           ].join("\n"),
         };
       }),

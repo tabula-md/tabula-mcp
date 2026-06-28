@@ -36,7 +36,7 @@ describe("Tabula document sharing", () => {
 
   it("creates share URLs with the room key in the fragment", () => {
     expect(createRoomShareUrl({ appOrigin: "https://tabula.md", roomId, roomKey })).toBe(
-      `https://tabula.md/r/${roomId}#key=${roomKey}`,
+      `https://tabula.md/#room=${roomId},${roomKey}`,
     );
   });
 
@@ -78,8 +78,8 @@ describe("Tabula document sharing", () => {
       roomId,
       appOrigin: "https://tabula.md",
       roomServerUrl: "https://rooms.tabula.md",
-      roomUrl: `https://tabula.md/r/${roomId}#key=${roomKey}`,
-      shareUrl: `https://tabula.md/r/${roomId}#key=${roomKey}`,
+      roomUrl: `https://tabula.md/#room=${roomId},${roomKey}`,
+      shareUrl: `https://tabula.md/#room=${roomId},${roomKey}`,
       encrypted: true,
       secret: true,
       keyLocation: "url-fragment",
@@ -88,7 +88,7 @@ describe("Tabula document sharing", () => {
       connect: {
         tool: "tabula_connect_room",
         arguments: {
-          roomUrl: `https://tabula.md/r/${roomId}#key=${roomKey}`,
+          roomUrl: `https://tabula.md/#room=${roomId},${roomKey}`,
           roomServerUrl: "https://rooms.tabula.md",
         },
       },
@@ -117,10 +117,10 @@ describe("Tabula document sharing", () => {
     });
 
     expect(result.roomServerUrl).toBe("http://localhost:3002");
-    expect(result.roomUrl).toBe(`http://localhost:5173/r/${roomId}#key=${roomKey}`);
-    expect(result.shareUrl).toBe(`http://localhost:5173/r/${roomId}#key=${roomKey}`);
+    expect(result.roomUrl).toBe(`http://localhost:5173/#room=${roomId},${roomKey}`);
+    expect(result.shareUrl).toBe(`http://localhost:5173/#room=${roomId},${roomKey}`);
     expect(result.connect.arguments).toEqual({
-      roomUrl: `http://localhost:5173/r/${roomId}#key=${roomKey}`,
+      roomUrl: `http://localhost:5173/#room=${roomId},${roomKey}`,
       roomServerUrl: "http://localhost:3002",
     });
   });
@@ -140,7 +140,7 @@ describe("Tabula document sharing", () => {
     expect(result.connect).toEqual({
       tool: "tabula_connect_room",
       arguments: {
-        roomUrl: `https://tabula.md/r/${roomId}#key=${roomKey}`,
+        roomUrl: `https://tabula.md/#room=${roomId},${roomKey}`,
         roomServerUrl: "https://rooms.example.com",
       },
     });

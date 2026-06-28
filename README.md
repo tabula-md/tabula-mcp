@@ -14,8 +14,8 @@ Room server still receives only encrypted envelopes.
 
 Early implementation. The server supports local MCP App documents, encrypted
 share links for local documents, one-file live rooms, Markdown reads, outline
-extraction, presence, guarded text patches, and comment marker context handoff
-from the bundled App.
+extraction, presence, guarded text patches, and bounded selection/change
+handoff from the bundled App.
 
 ## Documentation
 
@@ -39,10 +39,10 @@ npm install
 npm run build
 ```
 
-For local Tabula.md development links such as `http://localhost:5173/r/...`,
+For local Tabula.md development links such as `http://localhost:5173/#room=...`,
 Tabula MCP defaults the room server to `http://localhost:3002`.
 
-For hosted Tabula.md links such as `https://tabula.md/r/...`, Tabula MCP
+For hosted Tabula.md links such as `https://tabula.md/#room=...`, Tabula MCP
 defaults the room server to `https://rooms.tabula.md`.
 
 For self-hosted app links, configure the room service explicitly:
@@ -70,11 +70,12 @@ Then ask the agent to create a document with `tabula_create_document`, or call
 `tabula_connect_room` with a full room invite URL:
 
 ```txt
-https://tabula.md/r/<roomId>#key=<roomKey>
+https://tabula.md/#room=<roomId>,<roomKey>
 ```
 
-The `#key` fragment is a secret. Anyone or any agent with that URL can decrypt
-the room, and write access can edit it. Treat room links like bearer tokens.
+The `#room` fragment contains the room key and is a secret. Anyone or any agent
+with that URL can decrypt the room, and write access can edit it. Treat room
+links like bearer tokens.
 
 Write access is disabled by default at the MCP process level. To start a
 write-enabled server, opt in when launching the process:
@@ -139,8 +140,9 @@ or verify security boundaries. It returns concise topic-specific guidance for
 local documents, encrypted rooms, sharing, and write policy.
 
 The Document App is bundled into `dist/document-app.html` during `npm run build`.
-It provides title editing, Outline/Comments context tabs, and Editor/Split/Preview modes
-for local Markdown drafts. It also opens connected rooms through
+Inline mode shows a Markdown preview with `Open in Tabula` and `Edit` actions.
+Editing happens in fullscreen, where the App provides title editing, outline
+context, and Editor/Split/Preview modes for local Markdown drafts. It also opens connected rooms through
 `tabula_open_room_view` as a read-only room mode. It does not replace the text
 tools: clients without MCP Apps support can keep using `tabula_read_markdown`,
 `tabula_get_outline`, and `tabula_apply_text_patches` normally.
@@ -167,9 +169,6 @@ For local App documents, the `Send Changes` control sends a compact Markdown
 change summary back into model context. It uses changed ranges and bounded
 excerpts instead of sending the whole document on every edit.
 
-The Comments context tab detects local Markdown comment markers such as
-`<!-- tabula-comment: ... -->` and `> [!comment] ...`, then can send a selected
-comment back into model context without uploading the full document.
 The `Send Selection` control similarly bounds large selections to a head/tail
 excerpt with truncation metadata instead of sending the full selected text.
 
@@ -180,7 +179,7 @@ upload plaintext Markdown to Tabula.md room infrastructure.
 
 The `Share` control saves the current App document into the local MCP session,
 then uploads only an encrypted Yjs snapshot to the Tabula Room server. It sends
-the resulting `https://tabula.md/r/...#key=...` link back into model context. If
+the resulting `https://tabula.md/#room=...,...` link back into model context. If
 the user has unsent App edits, the share handoff also includes the same compact
 change summary used by `Send Changes`, so the model can understand what changed
 without receiving the full Markdown body.
@@ -209,7 +208,7 @@ Extensions -> Advanced settings -> Install Extension.
 
 No installation settings are required for normal use. After installation, create
 a local document with `tabula_create_document` or connect a room with
-`tabula_connect_room`. Hosted `https://tabula.md/r/...` links use
+`tabula_connect_room`. Hosted `https://tabula.md/#room=...` links use
 `https://rooms.tabula.md`, and local development links use
 `http://localhost:3002`. Clients that support MCP Apps can then open the
 interactive Tabula.md document surface. To share a local App document, use the
@@ -253,10 +252,10 @@ npm run test:app
 ```
 
 This runs static bundle assertions and a Playwright browser flow against the dev
-harness. The browser flow edits and saves a local document, sends compact change
-and comment context, shares an encrypted link, opens the room fixture, refreshes
-it, and exercises fullscreen mode. If Chromium is missing in a fresh environment,
-run `npx playwright install chromium`.
+harness. The browser flow edits and saves a local document in fullscreen, sends
+compact change and selection context, shares an encrypted link, opens the room
+fixture, refreshes it, and exercises fullscreen mode. If Chromium is missing in
+a fresh environment, run `npx playwright install chromium`.
 
 ## Editing Model
 
@@ -286,7 +285,7 @@ Patch offsets are JavaScript string offsets in the old document:
 ## Security Boundary
 
 Tabula MCP is intentionally local. It decrypts Markdown because the user gives
-the MCP client a room URL containing `#key=...`. Do not run it as a shared
+the MCP client a room URL containing a `#room` key fragment. Do not run it as a shared
 hosted service unless you are deliberately moving the plaintext trust boundary
 to that service.
 

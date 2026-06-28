@@ -1,6 +1,5 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps/app-with-deps";
 import { createMarkdownChangeSummary, formatDocumentChangeMessage } from "./change-summary.js";
-import { extractCommentMarkers, formatCommentContextMessage } from "./comment-markers.js";
 import { createSelectionContext, formatSelectionContextMessage } from "./selection-context.js";
 import {
   clearDocumentDraft,
@@ -21,19 +20,18 @@ const elements = {
   message: document.getElementById("message"),
   contextPane: document.getElementById("contextPane"),
   outlineList: document.getElementById("outlineList"),
-  commentsList: document.getElementById("commentsList"),
   markdownEditor: document.getElementById("markdownEditor"),
   markdownPane: document.querySelector(".markdown-pane"),
   markdownPreview: document.getElementById("markdownPreview"),
   viewModeButtons: document.querySelectorAll("[data-view-mode]"),
   contextTabButtons: document.querySelectorAll("[data-context-tab]"),
   textLength: document.getElementById("textLength"),
+  openTabulaButton: document.getElementById("openTabulaButton"),
   saveDocumentButton: document.getElementById("saveDocumentButton"),
   sendChangesButton: document.getElementById("sendChangesButton"),
   shareDocumentButton: document.getElementById("shareDocumentButton"),
   refreshButton: document.getElementById("refreshButton"),
   sendSelectionButton: document.getElementById("sendSelectionButton"),
-  sendCommentButton: document.getElementById("sendCommentButton"),
   displayModeButton: document.getElementById("displayModeButton"),
 };
 
@@ -44,15 +42,15 @@ const state = {
   title: "",
   sessionId: "",
   roomId: "",
+  shareUrl: "",
   sha256: "",
   lastSavedMarkdown: "",
   lastSavedTitle: "",
   lastContextMarkdown: "",
   displayMode: "inline",
+  editViewMode: "split",
   viewMode: "split",
   contextView: "outline",
-  comments: [],
-  selectedCommentId: "",
 };
 
 const setMessage = (text, tone = "neutral") => {
@@ -82,6 +80,11 @@ const getErrorText = (result) => {
 
 const currentTitle = () => elements.titleInput.value.trim() || "Untitled Document";
 
+const updateTitleInputState = () => {
+  elements.titleInput.disabled = state.mode === "idle";
+  elements.titleInput.readOnly = state.mode !== "document" || state.displayMode !== "fullscreen";
+};
+
 const updateDocumentActionState = () => {
   const isDocument = state.mode === "document" && Boolean(state.documentId);
   const hasContextChanges = isDocument && elements.markdownEditor.value !== state.lastContextMarkdown;
@@ -92,22 +95,33 @@ const updateDocumentActionState = () => {
   elements.saveDocumentButton.disabled = !isDocument || !hasSavedContentChanges;
   elements.sendChangesButton.disabled = !hasContextChanges;
   elements.shareDocumentButton.disabled = !isDocument;
-  elements.sendCommentButton.disabled = !state.selectedCommentId;
+  elements.openTabulaButton.disabled = !isDocument && !state.shareUrl;
+  updateTitleInputState();
 };
 
 const renderDocumentContent = (markdown) => {
   elements.markdownEditor.value = markdown;
   elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
   elements.textLength.textContent = `${markdown.length} chars`;
-  renderComments(extractCommentMarkers(markdown));
 };
 
 const setViewMode = (viewMode) => {
   state.viewMode = viewMode;
+  if (state.displayMode === "fullscreen") {
+    state.editViewMode = viewMode;
+  }
   elements.markdownPane.dataset.viewMode = viewMode;
   for (const button of elements.viewModeButtons) {
     button.setAttribute("aria-pressed", button.dataset.viewMode === viewMode ? "true" : "false");
   }
+};
+
+const setDisplayMode = (displayMode) => {
+  state.displayMode = displayMode;
+  document.body.dataset.displayMode = displayMode;
+  elements.displayModeButton.textContent = displayMode === "fullscreen" ? "Inline" : "Edit";
+  setViewMode(displayMode === "fullscreen" ? state.editViewMode : "preview");
+  updateTitleInputState();
 };
 
 const setContextView = (contextView) => {
@@ -139,49 +153,6 @@ const extractOutline = (markdown) => {
   return headings;
 };
 
-const selectComment = (commentId) => {
-  state.selectedCommentId = commentId;
-  for (const item of elements.commentsList.querySelectorAll("[data-comment-id]")) {
-    item.setAttribute("aria-selected", item.dataset.commentId === commentId ? "true" : "false");
-  }
-  updateDocumentActionState();
-};
-
-const renderComments = (comments) => {
-  state.comments = comments;
-  if (!comments.some((comment) => comment.id === state.selectedCommentId)) {
-    state.selectedCommentId = "";
-  }
-
-  elements.commentsList.replaceChildren();
-
-  if (!comments.length) {
-    const item = document.createElement("li");
-    item.className = "empty";
-    item.textContent = "No comments";
-    elements.commentsList.append(item);
-    updateDocumentActionState();
-    return;
-  }
-
-  for (const comment of comments) {
-    const item = document.createElement("li");
-    item.dataset.commentId = comment.id;
-    item.setAttribute("aria-selected", comment.id === state.selectedCommentId ? "true" : "false");
-    const line = document.createElement("span");
-    line.className = "comment-line";
-    line.textContent = `Line ${comment.line}`;
-    const text = document.createElement("span");
-    text.className = "comment-text";
-    text.textContent = comment.text;
-    item.append(line, text);
-    item.addEventListener("click", () => selectComment(comment.id));
-    elements.commentsList.append(item);
-  }
-
-  updateDocumentActionState();
-};
-
 const renderDocumentSummary = (summary) => {
   if (!summary) {
     return;
@@ -193,8 +164,6 @@ const renderDocumentSummary = (summary) => {
   state.sha256 = summary.sha256 || state.sha256;
 
   elements.titleInput.value = state.title || "Untitled Document";
-  elements.titleInput.disabled = false;
-  elements.titleInput.readOnly = false;
   elements.connectionStatus.textContent = "Local";
   elements.writeMode.textContent = "Editable";
   elements.shaValue.textContent = shortHash(summary.sha256);
@@ -212,11 +181,10 @@ const renderRoomSummary = (summary) => {
   state.mode = "room";
   state.sessionId = summary.sessionId || state.sessionId;
   state.roomId = summary.roomId || state.roomId;
+  state.shareUrl = summary.shareUrl || state.shareUrl;
   state.sha256 = summary.sha256 || state.sha256;
 
   elements.titleInput.value = state.roomId || "Room";
-  elements.titleInput.disabled = false;
-  elements.titleInput.readOnly = true;
   elements.connectionStatus.textContent = summary.status || "unknown";
   elements.writeMode.textContent = summary.writeAccess ? "Write-enabled" : "Read-only";
   elements.shaValue.textContent = shortHash(summary.sha256);
@@ -448,15 +416,16 @@ const saveDocument = async () => {
   }
 };
 
-const shareDocument = async () => {
+const shareDocument = async ({ sendModelContext = true, openAfterShare = false } = {}) => {
   if (!state.app || state.mode !== "document" || !state.documentId) {
     setMessage("Create a local Tabula.md document first.", "warning");
-    return;
+    return null;
   }
 
   elements.shareDocumentButton.disabled = true;
   elements.saveDocumentButton.disabled = true;
-  setMessage("Preparing encrypted Tabula.md share link...");
+  elements.openTabulaButton.disabled = true;
+  setMessage(openAfterShare ? "Preparing encrypted Tabula.md room..." : "Preparing encrypted Tabula.md share link...");
   try {
     const currentMarkdown = elements.markdownEditor.value;
     const currentDocumentTitle = currentTitle();
@@ -491,56 +460,86 @@ const shareDocument = async () => {
       throw new Error("Share tool did not return an encrypted Tabula.md link.");
     }
 
-    await state.app.updateModelContext({
-      content: [
-        {
-          type: "text",
-          text: [
-            `Encrypted Tabula.md share link for "${state.title || "Untitled Document"}":`,
-            share.shareUrl,
-            "",
-            "Treat this URL as a bearer secret because the #key fragment can decrypt the room.",
-            ...(changeSummary.changed
-              ? [
-                  "",
-                  "Unsent edit summary included with this share:",
-                  "",
-                  formatDocumentChangeMessage({
-                    title: currentDocumentTitle,
-                    documentId: state.documentId,
-                    baseSha256,
-                    summary: changeSummary,
-                  }),
-                ]
-              : []),
-          ].join("\n"),
+    state.shareUrl = share.shareUrl;
+
+    if (sendModelContext) {
+      await state.app.updateModelContext({
+        content: [
+          {
+            type: "text",
+            text: [
+              `Encrypted Tabula.md room link for "${state.title || "Untitled Document"}":`,
+              share.shareUrl,
+              "",
+              "Treat this URL as a bearer secret because the #room fragment contains the room key.",
+              ...(changeSummary.changed
+                ? [
+                    "",
+                    "Unsent edit summary included with this share:",
+                    "",
+                    formatDocumentChangeMessage({
+                      title: currentDocumentTitle,
+                      documentId: state.documentId,
+                      baseSha256,
+                      summary: changeSummary,
+                    }),
+                  ]
+                : []),
+            ].join("\n"),
+          },
+        ],
+        structuredContent: {
+          tabulaShare: share,
+          ...(changeSummary.changed
+            ? {
+                tabulaDocumentChange: {
+                  mode: "document",
+                  documentId: state.documentId,
+                  title: currentDocumentTitle,
+                  baseSha256,
+                  summary: changeSummary,
+                },
+              }
+            : {}),
         },
-      ],
-      structuredContent: {
-        tabulaShare: share,
-        ...(changeSummary.changed
-          ? {
-              tabulaDocumentChange: {
-                mode: "document",
-                documentId: state.documentId,
-                title: currentDocumentTitle,
-                baseSha256,
-                summary: changeSummary,
-              },
-            }
-          : {}),
-      },
-    });
-    if (changeSummary.changed) {
+      });
+    }
+
+    if (openAfterShare) {
+      await state.app.openLink?.({ url: share.shareUrl });
+    }
+
+    if (changeSummary.changed && sendModelContext) {
       state.lastContextMarkdown = currentMarkdown;
     }
     updateDocumentActionState();
-    setMessage("Encrypted share link sent to the model context.");
+    setMessage(openAfterShare ? "Opened encrypted Tabula.md room." : "Encrypted share link sent to the model context.");
+    return share;
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Could not create encrypted share link.", "error");
+    return null;
   } finally {
     updateDocumentActionState();
   }
+};
+
+const openInTabula = async () => {
+  if (!state.app) {
+    return;
+  }
+
+  if (state.mode === "room" && state.shareUrl) {
+    await state.app.openLink?.({ url: state.shareUrl });
+    setMessage("Opened Tabula.md room.");
+    return;
+  }
+
+  if (state.mode === "document" && state.documentId) {
+    await shareDocument({ sendModelContext: false, openAfterShare: true });
+    return;
+  }
+
+  setMessage("Create a local Tabula.md document first.", "warning");
 };
 
 const sendChanges = async () => {
@@ -649,48 +648,6 @@ const sendSelection = async () => {
   }
 };
 
-const sendSelectedComment = async () => {
-  if (!state.app) {
-    return;
-  }
-
-  const comment = state.comments.find((item) => item.id === state.selectedCommentId);
-  if (!comment) {
-    setMessage("Select a comment first.", "warning");
-    return;
-  }
-
-  const source = state.mode === "room" ? "room" : "document";
-  try {
-    await state.app.updateModelContext({
-      content: [
-        {
-          type: "text",
-          text: formatCommentContextMessage({
-            title: state.mode === "room" ? state.roomId : currentTitle(),
-            source,
-            sha256: state.sha256,
-            comment,
-          }),
-        },
-      ],
-      structuredContent: {
-        tabulaComment: {
-          mode: state.mode,
-          documentId: state.documentId || undefined,
-          sessionId: state.sessionId || undefined,
-          roomId: state.roomId || undefined,
-          sha256: state.sha256,
-          comment,
-        },
-      },
-    });
-    setMessage("Comment sent to the model context.");
-  } catch (error) {
-    setMessage(error instanceof Error ? error.message : "Could not send comment.", "error");
-  }
-};
-
 const toggleDisplayMode = async () => {
   if (!state.app) {
     return;
@@ -699,8 +656,7 @@ const toggleDisplayMode = async () => {
   const requestedMode = state.displayMode === "fullscreen" ? "inline" : "fullscreen";
   try {
     const result = await state.app.requestDisplayMode({ mode: requestedMode });
-    state.displayMode = result.mode || requestedMode;
-    elements.displayModeButton.textContent = state.displayMode === "fullscreen" ? "Inline" : "Fullscreen";
+    setDisplayMode(result.mode || requestedMode);
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Display mode change failed.", "error");
   }
@@ -714,8 +670,7 @@ const applyHostContext = (context = {}) => {
     applyHostStyleVariables(context.styles.variables);
   }
   if (context.displayMode) {
-    state.displayMode = context.displayMode;
-    elements.displayModeButton.textContent = state.displayMode === "fullscreen" ? "Inline" : "Fullscreen";
+    setDisplayMode(context.displayMode);
   }
 };
 
@@ -775,10 +730,10 @@ const boot = async () => {
 
   elements.saveDocumentButton.addEventListener("click", () => void saveDocument());
   elements.sendChangesButton.addEventListener("click", () => void sendChanges());
+  elements.openTabulaButton.addEventListener("click", () => void openInTabula());
   elements.shareDocumentButton.addEventListener("click", () => void shareDocument());
   elements.refreshButton.addEventListener("click", () => void loadSnapshot());
   elements.sendSelectionButton.addEventListener("click", () => void sendSelection());
-  elements.sendCommentButton.addEventListener("click", () => void sendSelectedComment());
   elements.displayModeButton.addEventListener("click", () => void toggleDisplayMode());
   for (const button of elements.viewModeButtons) {
     button.addEventListener("click", () => setViewMode(button.dataset.viewMode || "split"));
@@ -805,13 +760,12 @@ const boot = async () => {
     elements.textLength.textContent = `${markdown.length} chars`;
     elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
     renderOutline(extractOutline(markdown));
-    renderComments(extractCommentMarkers(markdown));
     persistCurrentDraft();
     updateDocumentActionState();
     setMessage("Document has unsaved changes.", "warning");
   });
 
-  setViewMode(state.viewMode);
+  setDisplayMode(state.displayMode);
   setContextView(state.contextView);
   await app.connect();
   applyHostContext(app.getHostContext?.());

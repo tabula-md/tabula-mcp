@@ -19,7 +19,7 @@ Untrusted or remote boundary:
 - issue trackers, logs, public transcripts, screenshots, and telemetry
 
 The local MCP process can decrypt room Markdown because the user gave it a room
-URL containing `#key=...`. Do not run this server as a shared hosted service
+URL containing a `#room` fragment with the room key. Do not run this server as a shared hosted service
 unless you deliberately want that hosted service to become the plaintext trust
 boundary.
 
@@ -28,11 +28,11 @@ boundary.
 A Tabula.md room URL has this shape:
 
 ```txt
-https://tabula.md/r/<roomId>#key=<roomKey>
+https://tabula.md/#room=<roomId>,<roomKey>
 ```
 
-The `#key` fragment is a bearer secret. Anyone or any agent with the full URL
-can decrypt the room. Treat it like an access token.
+The `#room` fragment contains the room key and is a bearer secret. Anyone or
+any agent with the full URL can decrypt the room. Treat it like an access token.
 
 The Tabula Room server must not receive:
 
@@ -87,7 +87,7 @@ The share flow is:
 3. Encode the Markdown as a Yjs snapshot locally.
 4. Encrypt the snapshot locally with the room key.
 5. Upload only the encrypted envelope to the room server.
-6. Return a Tabula.md URL containing the room key in the `#key` fragment.
+6. Return a Tabula.md URL containing the room key in the `#room` fragment.
 
 The returned URL is useful for collaboration, but it is also a bearer secret.
 Only send it to intended collaborators or agents.
@@ -120,4 +120,4 @@ Treat these as release blockers:
 - room key appears in request bodies sent to the room server
 - plaintext Markdown is uploaded during share/export
 - `tabula_apply_text_patches` is exposed in default read-only mode
-- docs or tool descriptions imply that `#key` links are safe to publish
+- docs or tool descriptions imply that `#room` links are safe to publish

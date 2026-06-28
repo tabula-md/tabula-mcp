@@ -110,6 +110,35 @@ button:disabled {
   gap: 6px;
 }
 
+body[data-display-mode="inline"] .fullscreen-only,
+body[data-display-mode="inline"] .status-grid,
+body[data-display-mode="inline"] .message,
+body[data-display-mode="inline"] .context-pane,
+body[data-display-mode="inline"] .markdown-pane .pane-heading {
+  display: none;
+}
+
+body[data-display-mode="inline"] .shell {
+  min-height: 100vh;
+  gap: 12px;
+}
+
+body[data-display-mode="inline"] .toolbar {
+  flex: 0 0 auto;
+}
+
+body[data-display-mode="inline"] .workspace {
+  display: block;
+}
+
+body[data-display-mode="inline"] .markdown-pane {
+  min-height: 0;
+}
+
+body[data-display-mode="inline"] .markdown-preview {
+  min-height: calc(100vh - 88px);
+}
+
 .status-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -231,12 +260,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-#sendCommentButton {
-  flex: 0 0 auto;
-  padding: 0 8px;
-  white-space: nowrap;
-}
-
 .segmented-control {
   display: inline-flex;
   min-height: 30px;
@@ -276,24 +299,7 @@ button:disabled {
   list-style: none;
 }
 
-.comments-list {
-  display: none;
-  overflow: auto;
-  margin: 0;
-  padding: 8px 10px 10px;
-  list-style: none;
-}
-
-.context-pane[data-context-view="comments"] .outline-list {
-  display: none;
-}
-
-.context-pane[data-context-view="comments"] .comments-list {
-  display: block;
-}
-
-.outline-list li,
-.comments-list li {
+.outline-list li {
   padding: 5px 4px 5px calc((var(--depth, 1) - 1) * 12px + 4px);
   border-radius: 5px;
   color: var(--tabula-text);
@@ -301,29 +307,7 @@ button:disabled {
   line-height: 1.35;
 }
 
-.comments-list li {
-  cursor: pointer;
-  padding: 7px 8px;
-}
-
-.comments-list li[aria-selected="true"] {
-  background: color-mix(in srgb, var(--tabula-accent) 14%, var(--tabula-surface));
-}
-
-.comment-line {
-  display: block;
-  color: var(--tabula-muted);
-  font-size: 11px;
-  line-height: 1.25;
-  margin-bottom: 3px;
-}
-
-.comment-text {
-  display: block;
-}
-
-.outline-list .empty,
-.comments-list .empty {
+.outline-list .empty {
   color: var(--tabula-muted);
   cursor: default;
 }

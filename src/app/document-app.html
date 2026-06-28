@@ -13,12 +13,13 @@
           <input id="titleInput" class="title-input" type="text" value="Document" maxlength="120" aria-label="Document title" disabled />
         </div>
         <div class="actions">
-          <button id="saveDocumentButton" type="button" disabled>Save</button>
-          <button id="sendChangesButton" type="button" disabled>Send Changes</button>
-          <button id="shareDocumentButton" type="button" disabled>Share</button>
-          <button id="refreshButton" type="button">Refresh</button>
-          <button id="sendSelectionButton" type="button">Send Selection</button>
-          <button id="displayModeButton" type="button">Fullscreen</button>
+          <button id="openTabulaButton" type="button" disabled>Open in Tabula</button>
+          <button id="saveDocumentButton" class="fullscreen-only" type="button" disabled>Save</button>
+          <button id="sendChangesButton" class="fullscreen-only" type="button" disabled>Send Changes</button>
+          <button id="shareDocumentButton" class="fullscreen-only" type="button" disabled>Share</button>
+          <button id="refreshButton" class="fullscreen-only" type="button">Refresh</button>
+          <button id="sendSelectionButton" class="fullscreen-only" type="button">Send Selection</button>
+          <button id="displayModeButton" type="button">Edit</button>
         </div>
       </header>
 
@@ -72,13 +73,10 @@
             <div class="pane-tools">
               <div class="segmented-control" role="tablist" aria-label="Context view">
                 <button type="button" data-context-tab="outline" aria-pressed="true">Outline</button>
-                <button type="button" data-context-tab="comments" aria-pressed="false">Comments</button>
               </div>
-              <button id="sendCommentButton" type="button" disabled>Send Comment</button>
             </div>
           </div>
           <ol id="outlineList" class="outline-list"></ol>
-          <ol id="commentsList" class="comments-list"></ol>
         </aside>
       </section>
     </main>

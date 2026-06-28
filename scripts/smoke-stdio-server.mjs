@@ -155,6 +155,13 @@ const withStdioClient = async ({ mcpApps = false, serverCwd, serverEntrypoint, s
 
 const toolNamesFrom = (tools) => tools.tools.map((tool) => tool.name);
 
+const roomKeyFromShareUrl = (shareUrl) => {
+  const url = new URL(shareUrl);
+  const roomValue = url.hash.replace(/^#room=/, "");
+  const [, roomKey] = roomValue.split(",");
+  return roomKey || "";
+};
+
 const runNonAppClientSmoke = async ({ storeDir, roomServerUrl, serverCwd, serverEntrypoint }) => {
   const serverEnv = configuredServerEnv({ storeDir, roomServerUrl });
   await withStdioClient({ serverCwd, serverEntrypoint, serverEnv }, async (client) => {
@@ -170,7 +177,7 @@ const runNonAppClientSmoke = async ({ storeDir, roomServerUrl, serverCwd, server
       arguments: { topic: "security" },
     });
     const text = readMe.content?.[0]?.type === "text" ? readMe.content[0].text : "";
-    assert(text.includes("#key"), "security read_me should mention room key fragments");
+    assert(text.includes("#room"), "security read_me should mention room key fragments");
   });
 };
 
@@ -238,13 +245,13 @@ const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads, serverCwd, 
     const share = shareResult.structuredContent?.share;
     assert.equal(share?.encrypted, true);
     assert.equal(share?.roomServerUrl, roomServerUrl);
-    assert.match(share?.shareUrl || "", /^http:\/\/127\.0\.0\.1:5173\/r\/[^#]+#key=/);
+    assert.match(share?.shareUrl || "", /^http:\/\/127\.0\.0\.1:5173\/#room=[^,]+,/);
 
     assert.equal(uploads.length, 1, "share flow should upload exactly one encrypted snapshot");
     assert.match(uploads[0].url, /^\/v1\/rooms\/[^/]+\/snapshot$/);
     assert(uploads[0].body.includes('"kind":"snapshot"'), "share upload should contain an encrypted snapshot envelope");
     assert(!uploads[0].body.includes("Updated local checkpoint"), "share upload must not include plaintext Markdown");
-    assert(!uploads[0].body.includes(new URL(share.shareUrl).hash.replace(/^#key=/, "")), "share upload must not include the room key");
+    assert(!uploads[0].body.includes(roomKeyFromShareUrl(share.shareUrl)), "share upload must not include the room key");
 
     return {
       documentId,
@@ -330,10 +337,10 @@ const runZeroConfigSmoke = async ({ roomServerUrl, uploads, serverCwd, serverEnt
       });
       const share = shareResult.structuredContent?.share;
       assert.equal(share?.roomServerUrl, roomServerUrl);
-      assert.match(share?.shareUrl || "", /^http:\/\/127\.0\.0\.1:5173\/r\/[^#]+#key=/);
+      assert.match(share?.shareUrl || "", /^http:\/\/127\.0\.0\.1:5173\/#room=[^,]+,/);
       assert.equal(uploads.length, uploadCountBeforeShare + 1, "zero-config share should upload one encrypted snapshot");
       assert(!uploads.at(-1)?.body.includes("Saved without Tabula installer env"), "zero-config share upload must not include plaintext");
-      assert(!uploads.at(-1)?.body.includes(new URL(share.shareUrl).hash.replace(/^#key=/, "")), "zero-config share upload must not include the room key");
+      assert(!uploads.at(-1)?.body.includes(roomKeyFromShareUrl(share.shareUrl)), "zero-config share upload must not include the room key");
     });
 
     await withStdioClient({ mcpApps: true, serverCwd, serverEntrypoint, serverEnv }, async (client) => {

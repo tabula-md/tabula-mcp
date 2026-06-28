@@ -112,25 +112,24 @@ After installing the generated `.mcpb`:
 
 1. Call `tabula_read_me`.
 2. Create a local document with `tabula_create_document`.
-3. Edit title and Markdown in the App.
-4. Switch between Editor, Split, and Preview.
-5. Save the document.
-6. Call `tabula_list_documents` and confirm the document checkpoint appears.
-7. Call `tabula_open_document` and confirm the App reopens the checkpoint.
-8. Select a Markdown comment marker in the Comments context tab and confirm
-   Claude receives only that comment context.
+3. Confirm inline mode shows preview plus `Open in Tabula` and `Edit`.
+4. Click `Edit`, then edit title and Markdown in fullscreen.
+5. Switch between Editor, Split, and Preview.
+6. Save the document.
+7. Call `tabula_list_documents` and confirm the document checkpoint appears.
+8. Call `tabula_open_document` and confirm the App reopens the checkpoint.
 9. Click Send Changes and confirm Claude receives a compact summary.
-10. Click Share and confirm Claude receives a `https://tabula.md/r/...#key=...`
+10. Click Share and confirm Claude receives a `https://tabula.md/#room=...,...`
    link.
 11. Connect that link with `tabula_connect_room`.
 12. Open the room view with `tabula_open_room_view`.
-13. Confirm Markdown preview, outline, comments, refresh, and selection handoff work.
+13. Confirm Markdown preview, outline, refresh, and selection handoff work.
 
 For local Tabula.md development, run the room server separately and use local
 links such as:
 
 ```txt
-http://localhost:5173/r/<roomId>#key=<roomKey>
+http://localhost:5173/#room=<roomId>,<roomKey>
 ```
 
 Those links route to `http://localhost:3002` by default.
