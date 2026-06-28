@@ -305,6 +305,14 @@ release-blocking security checks.
 
 ## Validation
 
+For the full release gate:
+
+```sh
+npm run release:verify
+```
+
+Equivalent individual checks:
+
 ```sh
 npm run typecheck
 npm test

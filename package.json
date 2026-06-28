@@ -57,6 +57,7 @@
     "test:app:flow": "node scripts/smoke-mcp-app-flow.mjs",
     "test:stdio": "npm run build && node scripts/smoke-stdio-server.mjs",
     "release:pack": "node scripts/pack-release.mjs",
+    "release:verify": "npm run typecheck && npm test && npm run test:app && npm run test:stdio && npm run release:pack && npm audit --json && git diff --check",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

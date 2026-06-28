@@ -1,10 +1,15 @@
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const bundleDir = path.join(rootDir, "dist", "mcpb", "tabula-mcp");
+const distDir = path.join(rootDir, "dist");
+const stageBundleDir = path.join(distDir, "mcpb", "tabula-mcp");
+const execFileAsync = promisify(execFile);
 
 const requiredFiles = [
   "manifest.json",
@@ -44,8 +49,9 @@ const requiredTools = [
   "tabula_open_room_view",
 ];
 
-const readJson = async (relativePath) =>
-  JSON.parse(await readFile(path.join(bundleDir, relativePath), "utf8"));
+const forbiddenArtifactFiles = ["package-lock.json", "node_modules/.package-lock.json"];
+
+const readJson = async (baseDir, relativePath) => JSON.parse(await readFile(path.join(baseDir, relativePath), "utf8"));
 
 const readRootJson = async (relativePath) =>
   JSON.parse(await readFile(path.join(rootDir, relativePath), "utf8"));
@@ -56,53 +62,97 @@ const assert = (condition, message) => {
   }
 };
 
-const main = async () => {
+const relativeFromRoot = (filePath) => path.relative(rootDir, filePath);
+
+const run = async (command, args) => {
+  const { stdout, stderr } = await execFileAsync(command, args, {
+    cwd: rootDir,
+    maxBuffer: 1024 * 1024 * 20,
+  });
+  if (stdout) {
+    process.stdout.write(stdout);
+  }
+  if (stderr) {
+    process.stderr.write(stderr);
+  }
+};
+
+const checkBundleDir = async (bundleDir, label, rootPackage) => {
   for (const relativePath of requiredFiles) {
-    assert(existsSync(path.join(bundleDir, relativePath)), `MCPB staged bundle is missing ${relativePath}`);
+    assert(existsSync(path.join(bundleDir, relativePath)), `MCPB ${label} is missing ${relativePath}`);
   }
 
-  const manifest = await readJson("manifest.json");
-  const bundlePackage = await readJson("package.json");
-  const rootPackage = await readRootJson("package.json");
-  assert(!("user_config" in manifest), "MCPB manifest must not include installer user_config");
-  assert(manifest.icon === "assets/icon.png", "MCPB manifest must point icon to assets/icon.png");
+  for (const dependencyName of Object.keys(rootPackage.dependencies ?? {})) {
+    assert(
+      existsSync(path.join(bundleDir, "node_modules", ...dependencyName.split("/"), "package.json")),
+      `MCPB ${label} is missing production dependency ${dependencyName}`,
+    );
+  }
+
+  const manifest = await readJson(bundleDir, "manifest.json");
+  const bundlePackage = await readJson(bundleDir, "package.json");
+  assert(!("user_config" in manifest), `MCPB ${label} manifest must not include installer user_config`);
+  assert(manifest.icon === "assets/icon.png", `MCPB ${label} manifest must point icon to assets/icon.png`);
   assert(
     manifest.icons?.some((icon) => icon.src === "assets/icon.png" && icon.size === "512x512"),
-    "MCPB manifest must include a 512x512 icon entry",
+    `MCPB ${label} manifest must include a 512x512 icon entry`,
   );
-  assert(manifest.server?.mcp_config?.command === "node", "MCPB server command must be node");
+  assert(manifest.server?.mcp_config?.command === "node", `MCPB ${label} server command must be node`);
   assert(
     manifest.server?.mcp_config?.args?.includes("${__dirname}/server/index.js"),
-    "MCPB server args must point to bundled server/index.js",
+    `MCPB ${label} server args must point to bundled server/index.js`,
   );
   assert(
     manifest.compatibility?.runtimes?.node === rootPackage.engines?.node,
-    "MCPB manifest Node runtime must match package engines.node",
+    `MCPB ${label} manifest Node runtime must match package engines.node`,
   );
   assert(
     bundlePackage.engines?.node === rootPackage.engines?.node,
-    "MCPB bundled package Node engine must match root package engines.node",
+    `MCPB ${label} bundled package Node engine must match root package engines.node`,
   );
   assert(
     JSON.stringify(manifest.compatibility?.platforms) === JSON.stringify(["darwin", "win32"]),
-    "MCPB one-click compatibility must stay limited to verified macOS and Windows targets",
+    `MCPB ${label} one-click compatibility must stay limited to verified macOS and Windows targets`,
   );
 
   const toolNames = new Set(manifest.tools?.map((tool) => tool.name));
   for (const toolName of requiredTools) {
-    assert(toolNames.has(toolName), `MCPB manifest is missing tool ${toolName}`);
+    assert(toolNames.has(toolName), `MCPB ${label} manifest is missing tool ${toolName}`);
   }
 
   const appHtml = await readFile(path.join(bundleDir, "server", "document-app.html"), "utf8");
   const icon = await readFile(path.join(bundleDir, "assets", "icon.png"));
-  assert(icon.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")), "MCPB icon must be a PNG file");
+  assert(icon.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")), `MCPB ${label} icon must be a PNG file`);
   for (const expected of ["titleInput", "markdownPreview", "data-view-mode", "shareDocumentButton"]) {
-    assert(appHtml.includes(expected), `bundled Document App is missing ${expected}`);
+    assert(appHtml.includes(expected), `MCPB ${label} Document App is missing ${expected}`);
   }
-  assert(!appHtml.includes("dev-only-not-a-real-key"), "bundled Document App includes dev-only fixture data");
-  assert(!appHtml.includes("/src/app-dev/"), "bundled Document App includes dev harness source paths");
+  assert(!appHtml.includes("dev-only-not-a-real-key"), `MCPB ${label} Document App includes dev-only fixture data`);
+  assert(!appHtml.includes("/src/app-dev/"), `MCPB ${label} Document App includes dev harness source paths`);
+};
 
-  console.log("MCPB bundle check passed");
+const checkPackedArtifact = async (artifactPath, rootPackage) => {
+  assert(existsSync(artifactPath), `MCPB artifact is missing ${relativeFromRoot(artifactPath)}; run npm run build:mcpb first`);
+
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "tabula-mcp-mcpb-"));
+  try {
+    await run("npx", ["mcpb", "unpack", artifactPath, tempDir]);
+    for (const relativePath of forbiddenArtifactFiles) {
+      assert(!existsSync(path.join(tempDir, relativePath)), `MCPB packed artifact must not include ${relativePath}`);
+    }
+    await checkBundleDir(tempDir, "packed artifact", rootPackage);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+};
+
+const main = async () => {
+  const rootPackage = await readRootJson("package.json");
+  const artifactPath = path.join(distDir, `tabula-mcp-${rootPackage.version}.mcpb`);
+
+  await checkBundleDir(stageBundleDir, "staged bundle", rootPackage);
+  await checkPackedArtifact(artifactPath, rootPackage);
+
+  console.log("MCPB staged bundle and packed artifact checks passed");
 };
 
 main().catch((error) => {
