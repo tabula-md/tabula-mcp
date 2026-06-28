@@ -45,10 +45,21 @@ const requiredTools = [
   "tabula_open_document",
   "tabula_share_document",
   "tabula_connect_room",
+  "tabula_list_sessions",
   "tabula_read_markdown",
   "tabula_get_outline",
   "tabula_room_status",
   "tabula_open_room_view",
+  "tabula_set_presence",
+  "tabula_wait_for_changes",
+  "tabula_disconnect_room",
+];
+
+const forbiddenManifestTools = [
+  "tabula_app_room_snapshot",
+  "tabula_app_document_snapshot",
+  "tabula_app_save_document",
+  "tabula_apply_text_patches",
 ];
 
 const forbiddenArtifactFiles = ["package-lock.json", "node_modules/.package-lock.json"];
@@ -120,6 +131,9 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   const toolNames = new Set(manifest.tools?.map((tool) => tool.name));
   for (const toolName of requiredTools) {
     assert(toolNames.has(toolName), `MCPB ${label} manifest is missing tool ${toolName}`);
+  }
+  for (const toolName of forbiddenManifestTools) {
+    assert(!toolNames.has(toolName), `MCPB ${label} manifest must not list ${toolName}`);
   }
 
   const appHtml = await readFile(path.join(bundleDir, "server", "document-app.html"), "utf8");

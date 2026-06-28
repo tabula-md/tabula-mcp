@@ -79,6 +79,10 @@ The staged bundle and unpacked `.mcpb` artifact must include:
 The manifest must not contain installer `user_config`.
 The manifest must point `icon` and a `512x512` `icons` entry at
 `assets/icon.png`.
+The manifest must list all default model-facing tools exposed by the read-only
+MCPB server, including document, sharing, room status, presence, wait, and
+disconnect tools. It must not list App-only helper tools or the write-only
+`tabula_apply_text_patches` tool.
 The packed artifact must not include packaging-only lockfiles.
 
 The packed artifact must also start successfully over stdio from its unpacked

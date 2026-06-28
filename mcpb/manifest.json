@@ -59,6 +59,10 @@
       "description": "Connect Claude Desktop to an encrypted Tabula.md room invite URL."
     },
     {
+      "name": "tabula_list_sessions",
+      "description": "List encrypted Tabula.md room sessions connected in this local MCP process."
+    },
+    {
       "name": "tabula_read_markdown",
       "description": "Read the current decrypted Markdown from a connected room."
     },
@@ -73,6 +77,18 @@
     {
       "name": "tabula_open_room_view",
       "description": "Open a connected room inside the Tabula.md MCP App for status, outline, Markdown preview, refresh, fullscreen, and selection handoff."
+    },
+    {
+      "name": "tabula_set_presence",
+      "description": "Publish this local MCP client's cursor or selection presence to collaborators."
+    },
+    {
+      "name": "tabula_wait_for_changes",
+      "description": "Wait for a connected room's Markdown hash to change and return the latest Markdown."
+    },
+    {
+      "name": "tabula_disconnect_room",
+      "description": "Disconnect one encrypted Tabula.md room session from this local MCP process."
     }
   ],
   "tools_generated": true,
