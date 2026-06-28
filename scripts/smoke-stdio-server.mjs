@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { createServer as createHttpServer } from "node:http";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -102,7 +103,30 @@ const parseArgs = (argv) => {
   return parsed;
 };
 
-const withStdioClient = async ({ storeDir, roomServerUrl, mcpApps = false, serverCwd, serverEntrypoint }, callback) => {
+const configuredServerEnv = ({ storeDir, roomServerUrl }) => ({
+  TABULA_MCP_DOCUMENT_STORE_DIR: storeDir,
+  TABULA_ROOM_URL: roomServerUrl,
+});
+
+const zeroConfigServerEnv = (homeDir) => ({
+  HOME: homeDir,
+  LOCALAPPDATA: path.join(homeDir, "AppData", "Local"),
+  XDG_STATE_HOME: path.join(homeDir, ".local", "state"),
+});
+
+const expectedZeroConfigStoreFile = (homeDir) => {
+  if (process.platform === "darwin") {
+    return path.join(homeDir, "Library", "Application Support", "Tabula.md MCP", "documents", "documents-v1.json");
+  }
+
+  if (process.platform === "win32") {
+    return path.join(homeDir, "AppData", "Local", "Tabula.md MCP", "documents", "documents-v1.json");
+  }
+
+  return path.join(homeDir, ".local", "state", "tabula-mcp", "documents", "documents-v1.json");
+};
+
+const withStdioClient = async ({ mcpApps = false, serverCwd, serverEntrypoint, serverEnv }, callback) => {
   const client = new Client(
     { name: "tabula-mcp-stdio-smoke", version: "0.0.0" },
     mcpApps ? { capabilities: uiCapabilities } : undefined,
@@ -111,10 +135,7 @@ const withStdioClient = async ({ storeDir, roomServerUrl, mcpApps = false, serve
     command: process.execPath,
     args: [serverEntrypoint],
     cwd: serverCwd,
-    env: {
-      TABULA_MCP_DOCUMENT_STORE_DIR: storeDir,
-      TABULA_ROOM_URL: roomServerUrl,
-    },
+    env: serverEnv,
     stderr: "pipe",
   });
   const stderr = [];
@@ -135,7 +156,8 @@ const withStdioClient = async ({ storeDir, roomServerUrl, mcpApps = false, serve
 const toolNamesFrom = (tools) => tools.tools.map((tool) => tool.name);
 
 const runNonAppClientSmoke = async ({ storeDir, roomServerUrl, serverCwd, serverEntrypoint }) => {
-  await withStdioClient({ storeDir, roomServerUrl, serverCwd, serverEntrypoint }, async (client) => {
+  const serverEnv = configuredServerEnv({ storeDir, roomServerUrl });
+  await withStdioClient({ serverCwd, serverEntrypoint, serverEnv }, async (client) => {
     const tools = await client.listTools();
     const toolNames = toolNamesFrom(tools);
     assert(toolNames.includes("tabula_read_me"), "read_me should be available without MCP Apps");
@@ -153,7 +175,8 @@ const runNonAppClientSmoke = async ({ storeDir, roomServerUrl, serverCwd, server
 };
 
 const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads, serverCwd, serverEntrypoint }) => {
-  return withStdioClient({ storeDir, roomServerUrl, mcpApps: true, serverCwd, serverEntrypoint }, async (client) => {
+  const serverEnv = configuredServerEnv({ storeDir, roomServerUrl });
+  return withStdioClient({ mcpApps: true, serverCwd, serverEntrypoint, serverEnv }, async (client) => {
     const tools = await client.listTools();
     const toolNames = toolNamesFrom(tools);
     for (const toolName of [
@@ -240,7 +263,8 @@ const runRestartPersistenceSmoke = async ({
   serverCwd,
   serverEntrypoint,
 }) => {
-  await withStdioClient({ storeDir, roomServerUrl, mcpApps: true, serverCwd, serverEntrypoint }, async (client) => {
+  const serverEnv = configuredServerEnv({ storeDir, roomServerUrl });
+  await withStdioClient({ mcpApps: true, serverCwd, serverEntrypoint, serverEnv }, async (client) => {
     const listResult = await client.callTool({ name: "tabula_list_documents", arguments: {} });
     const restored = listResult.structuredContent?.documents?.find((document) => document.documentId === documentId);
     assert(restored, "restarted stdio server should list the saved local checkpoint");
@@ -255,6 +279,78 @@ const runRestartPersistenceSmoke = async ({
     assert.equal(openResult.structuredContent?.document?.title, title);
     assert.equal(openResult.structuredContent?.markdown, updatedMarkdown);
   });
+};
+
+const runZeroConfigSmoke = async ({ roomServerUrl, uploads, serverCwd, serverEntrypoint }) => {
+  const homeDir = await mkdtemp(path.join(tmpdir(), "tabula-mcp-zero-home-"));
+  const serverEnv = zeroConfigServerEnv(homeDir);
+  const updatedMarkdown = "# Zero Config Smoke\n\nSaved without Tabula installer env.";
+  let documentId = "";
+
+  try {
+    await withStdioClient({ mcpApps: true, serverCwd, serverEntrypoint, serverEnv }, async (client) => {
+      const tools = await client.listTools();
+      const toolNames = toolNamesFrom(tools);
+      assert(toolNames.includes("tabula_create_document"), "zero-config MCP Apps client should expose document tools");
+      assert(toolNames.includes("tabula_share_document"), "zero-config MCP Apps client should expose share tool");
+      assert(!toolNames.includes("tabula_apply_text_patches"), "zero-config MCPB smoke should stay read-only");
+
+      const createResult = await client.callTool({
+        name: "tabula_create_document",
+        arguments: {
+          title: "Zero Config Smoke",
+          markdown: "# Zero Config Smoke\n\nDraft created with no Tabula installer env.",
+        },
+      });
+      documentId = createResult.structuredContent?.document?.documentId;
+      assert.match(documentId || "", /^[0-9a-f-]{36}$/i);
+
+      const saveResult = await client.callTool({
+        name: "tabula_app_save_document",
+        arguments: {
+          documentId,
+          title: "Zero Config Smoke Saved",
+          markdown: updatedMarkdown,
+        },
+      });
+      assert.equal(saveResult.structuredContent?.markdown, updatedMarkdown);
+      assert(
+        existsSync(expectedZeroConfigStoreFile(homeDir)),
+        "zero-config server should create the default local checkpoint file",
+      );
+
+      const uploadCountBeforeShare = uploads.length;
+      const shareResult = await client.callTool({
+        name: "tabula_share_document",
+        arguments: {
+          documentId,
+          appOrigin: "http://127.0.0.1:5173",
+          roomServerUrl,
+        },
+      });
+      const share = shareResult.structuredContent?.share;
+      assert.equal(share?.roomServerUrl, roomServerUrl);
+      assert.match(share?.shareUrl || "", /^http:\/\/127\.0\.0\.1:5173\/r\/[^#]+#key=/);
+      assert.equal(uploads.length, uploadCountBeforeShare + 1, "zero-config share should upload one encrypted snapshot");
+      assert(!uploads.at(-1)?.body.includes("Saved without Tabula installer env"), "zero-config share upload must not include plaintext");
+      assert(!uploads.at(-1)?.body.includes(new URL(share.shareUrl).hash.replace(/^#key=/, "")), "zero-config share upload must not include the room key");
+    });
+
+    await withStdioClient({ mcpApps: true, serverCwd, serverEntrypoint, serverEnv }, async (client) => {
+      const listResult = await client.callTool({ name: "tabula_list_documents", arguments: {} });
+      const restored = listResult.structuredContent?.documents?.find((document) => document.documentId === documentId);
+      assert(restored, "zero-config restarted server should list the default checkpoint");
+      assert.equal(restored.title, "Zero Config Smoke Saved");
+
+      const openResult = await client.callTool({
+        name: "tabula_open_document",
+        arguments: { documentId },
+      });
+      assert.equal(openResult.structuredContent?.markdown, updatedMarkdown);
+    });
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
 };
 
 const main = async () => {
@@ -279,6 +375,11 @@ const main = async () => {
       roomServerUrl: shareServer.url,
       ...runtime,
       ...checkpoint,
+    });
+    await runZeroConfigSmoke({
+      roomServerUrl: shareServer.url,
+      uploads: shareServer.uploads,
+      ...runtime,
     });
   } finally {
     await shareServer.close();
