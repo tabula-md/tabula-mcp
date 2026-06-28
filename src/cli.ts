@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createTabulaMcpServer, type TabulaMcpServerInstance } from "./server/create-server.js";
 
@@ -11,9 +12,19 @@ export const runStdioServer = async () => {
   return instance;
 };
 
+const realpathFileUrl = (filePath: string) => pathToFileURL(realpathSync(filePath)).href;
+
 export const isDirectRun = (importMetaUrl: string, argv: readonly string[] = process.argv) => {
   const entrypoint = argv[1];
-  return Boolean(entrypoint && importMetaUrl === pathToFileURL(entrypoint).href);
+  if (!entrypoint) {
+    return false;
+  }
+
+  try {
+    return realpathFileUrl(fileURLToPath(importMetaUrl)) === realpathFileUrl(entrypoint);
+  } catch {
+    return importMetaUrl === pathToFileURL(entrypoint).href;
+  }
 };
 
 export const runCli = () => {

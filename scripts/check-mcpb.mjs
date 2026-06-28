@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = path.join(rootDir, "dist");
 const stageBundleDir = path.join(distDir, "mcpb", "tabula-mcp");
+const stdioSmokeScript = path.join(rootDir, "scripts", "smoke-stdio-server.mjs");
 const execFileAsync = promisify(execFile);
 
 const requiredFiles = [
@@ -141,6 +142,15 @@ const checkPackedArtifact = async (artifactPath, rootPackage) => {
       assert(!existsSync(path.join(tempDir, relativePath)), `MCPB packed artifact must not include ${relativePath}`);
     }
     await checkBundleDir(tempDir, "packed artifact", rootPackage);
+    await run("node", [
+      stdioSmokeScript,
+      "--server-entrypoint",
+      path.join(tempDir, "server", "index.js"),
+      "--server-cwd",
+      tempDir,
+      "--label",
+      "Packed MCPB stdio server",
+    ]);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

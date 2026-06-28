@@ -40,7 +40,10 @@ Expected results:
 - Package ESM subpath exports import from built `dist/`.
 - npm package dry-run includes built package files and excludes generated MCPB artifacts.
 - MCPB validates, packs, and passes `check:mcpb` against both the staging
-  directory and unpacked `.mcpb` artifact.
+  directory and unpacked `.mcpb` artifact. The unpacked artifact's bundled
+  `server/index.js` also passes the stdio smoke, covering tool gating, App
+  resource reads, checkpoint recovery, and encrypted share upload checks from
+  the same layout Claude Desktop installs.
 - `npm audit --json` reports zero vulnerabilities.
 - `git diff --check` reports no whitespace errors.
 
@@ -77,6 +80,11 @@ The manifest must not contain installer `user_config`.
 The manifest must point `icon` and a `512x512` `icons` entry at
 `assets/icon.png`.
 The packed artifact must not include packaging-only lockfiles.
+
+The packed artifact must also start successfully over stdio from its unpacked
+bundle layout. This catches missing bundled dependencies, broken server
+entrypoints, missing App resources, and accidental installer-only assumptions
+before manual Claude Desktop testing.
 
 The default MCPB must be read-only for room writes. Write-enabled testing uses
 manual stdio configuration, not installer prompts.
