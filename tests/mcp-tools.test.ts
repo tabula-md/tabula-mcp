@@ -70,10 +70,70 @@ describe("MCP tool registration", () => {
     const tools = await listTools(false);
     const toolNames = tools.tools.map((tool) => tool.name);
     const connectTool = tools.tools.find((tool) => tool.name === "tabula_connect_room");
+    const listSessionsTool = tools.tools.find((tool) => tool.name === "tabula_list_sessions");
+    const statusTool = tools.tools.find((tool) => tool.name === "tabula_room_status");
+    const readMarkdownTool = tools.tools.find((tool) => tool.name === "tabula_read_markdown");
+    const outlineTool = tools.tools.find((tool) => tool.name === "tabula_get_outline");
+    const setPresenceTool = tools.tools.find((tool) => tool.name === "tabula_set_presence");
+    const waitTool = tools.tools.find((tool) => tool.name === "tabula_wait_for_changes");
+    const disconnectTool = tools.tools.find((tool) => tool.name === "tabula_disconnect_room");
 
     expect(toolNames).toContain("tabula_read_me");
     expect(toolNames).not.toContain("tabula_apply_text_patches");
     expect(connectTool?.inputSchema.properties).not.toHaveProperty("writeAccess");
+    expect(connectTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        sessionId: expect.objectContaining({ type: "string" }),
+        snapshotStatus: expect.objectContaining({ enum: ["missing", "restored"] }),
+        note: expect.objectContaining({ type: "string" }),
+      },
+    });
+    expect(listSessionsTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        sessions: expect.objectContaining({ type: "array" }),
+      },
+    });
+    expect(statusTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        roomServerUrl: expect.objectContaining({ type: "string" }),
+        collaborators: expect.objectContaining({ type: "array" }),
+      },
+    });
+    expect(readMarkdownTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        markdown: expect.objectContaining({ type: "string" }),
+        sha256: expect.objectContaining({ type: "string" }),
+      },
+    });
+    expect(outlineTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        outline: expect.objectContaining({ type: "array" }),
+      },
+    });
+    expect(setPresenceTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        identity: expect.objectContaining({ type: "object" }),
+      },
+    });
+    expect(waitTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        changed: expect.objectContaining({ type: "boolean" }),
+        markdown: expect.objectContaining({ type: "string" }),
+      },
+    });
+    expect(disconnectTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        disconnectedSessionId: expect.objectContaining({ type: "string" }),
+      },
+    });
     expect(connectTool?.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: false,
@@ -89,6 +149,14 @@ describe("MCP tool registration", () => {
       readOnlyHint: false,
       destructiveHint: true,
       openWorldHint: true,
+    });
+    expect(patchTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        changed: expect.objectContaining({ type: "boolean" }),
+        previousSha256: expect.objectContaining({ type: "string" }),
+        sha256: expect.objectContaining({ type: "string" }),
+      },
     });
   });
 
