@@ -305,9 +305,19 @@ describe("MCP tool registration", () => {
           share: {
             title: string;
             roomId: string;
+            roomUrl: string;
             shareUrl: string;
             roomServerUrl: string;
             encrypted: boolean;
+            secret: boolean;
+            keyLocation: string;
+            connect: {
+              tool: string;
+              arguments: {
+                roomUrl: string;
+                roomServerUrl: string;
+              };
+            };
           };
         };
 
@@ -315,8 +325,18 @@ describe("MCP tool registration", () => {
           title: "Share Draft",
           roomServerUrl: "https://rooms.tabula.md",
           encrypted: true,
+          secret: true,
+          keyLocation: "url-fragment",
         });
         expect(shared.share.shareUrl).toMatch(new RegExp(`^https://tabula\\.md/r/${shared.share.roomId}#key=`));
+        expect(shared.share.roomUrl).toBe(shared.share.shareUrl);
+        expect(shared.share.connect).toEqual({
+          tool: "tabula_connect_room",
+          arguments: {
+            roomUrl: shared.share.shareUrl,
+            roomServerUrl: "https://rooms.tabula.md",
+          },
+        });
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
         const [url, init] = fetchMock.mock.calls[0] ?? [];

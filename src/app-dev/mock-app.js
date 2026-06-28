@@ -138,12 +138,23 @@ export const createDevApp = () => {
             share: {
               title: documentSnapshot.document.title,
               roomId: "dev-share-room",
+              appOrigin: "http://localhost:5173",
               roomServerUrl: "http://localhost:3002",
+              roomUrl: "http://localhost:5173/r/dev-share-room#key=dev-only-not-a-real-key",
               shareUrl: "http://localhost:5173/r/dev-share-room#key=dev-only-not-a-real-key",
               textLength: documentSnapshot.markdown.length,
               sha256: documentSnapshot.document.sha256,
               encrypted: true,
+              secret: true,
+              keyLocation: "url-fragment",
               snapshotVersion: 1,
+              connect: {
+                tool: "tabula_connect_room",
+                arguments: {
+                  roomUrl: "http://localhost:5173/r/dev-share-room#key=dev-only-not-a-real-key",
+                  roomServerUrl: "http://localhost:3002",
+                },
+              },
             },
           });
         default:

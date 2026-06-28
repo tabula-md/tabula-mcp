@@ -32,12 +32,23 @@ export type ShareMarkdownDocumentOptions = {
 export type SharedMarkdownDocument = {
   title: string;
   roomId: string;
+  appOrigin: string;
   roomServerUrl: string;
+  roomUrl: string;
   shareUrl: string;
   textLength: number;
   sha256: string;
   encrypted: true;
+  secret: true;
+  keyLocation: "url-fragment";
   snapshotVersion: number;
+  connect: {
+    tool: "tabula_connect_room";
+    arguments: {
+      roomUrl: string;
+      roomServerUrl: string;
+    };
+  };
 };
 
 export const generateRoomId = () => encodeBase64Url(randomBytes(roomIdBytes));
@@ -91,7 +102,9 @@ export const shareMarkdownDocument = async ({
     roomServerUrl,
   });
   const envelope = await createEncryptedMarkdownSnapshot({ roomId, roomKey, markdown });
-  const snapshotUrl = `${trimTrailingSlash(resolvedRoomServerUrl)}/v1/rooms/${encodeURIComponent(roomId)}/snapshot`;
+  const normalizedRoomServerUrl = trimTrailingSlash(resolvedRoomServerUrl);
+  const shareUrl = createRoomShareUrl({ appOrigin, roomId, roomKey });
+  const snapshotUrl = `${normalizedRoomServerUrl}/v1/rooms/${encodeURIComponent(roomId)}/snapshot`;
   const response = await fetchImpl(snapshotUrl, {
     method: "PUT",
     headers: {
@@ -107,11 +120,22 @@ export const shareMarkdownDocument = async ({
   return {
     title: title?.trim() || "Untitled Document",
     roomId,
-    roomServerUrl: trimTrailingSlash(resolvedRoomServerUrl),
-    shareUrl: createRoomShareUrl({ appOrigin, roomId, roomKey }),
+    appOrigin,
+    roomServerUrl: normalizedRoomServerUrl,
+    roomUrl: shareUrl,
+    shareUrl,
     textLength: markdown.length,
     sha256: await sha256Text(markdown),
     encrypted: true,
+    secret: true,
+    keyLocation: "url-fragment",
     snapshotVersion: envelope.version,
+    connect: {
+      tool: "tabula_connect_room",
+      arguments: {
+        roomUrl: shareUrl,
+        roomServerUrl: normalizedRoomServerUrl,
+      },
+    },
   };
 };

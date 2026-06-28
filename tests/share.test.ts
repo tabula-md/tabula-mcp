@@ -76,11 +76,22 @@ describe("Tabula document sharing", () => {
     expect(result).toMatchObject({
       title: "Secret Plan",
       roomId,
+      appOrigin: "https://tabula.md",
       roomServerUrl: "https://rooms.tabula.md",
+      roomUrl: `https://tabula.md/r/${roomId}#key=${roomKey}`,
       shareUrl: `https://tabula.md/r/${roomId}#key=${roomKey}`,
       encrypted: true,
+      secret: true,
+      keyLocation: "url-fragment",
       textLength: "# Secret\n\nDo not upload plaintext".length,
       snapshotVersion: 1,
+      connect: {
+        tool: "tabula_connect_room",
+        arguments: {
+          roomUrl: `https://tabula.md/r/${roomId}#key=${roomKey}`,
+          roomServerUrl: "https://rooms.tabula.md",
+        },
+      },
     });
     expect(fetchCalls).toHaveLength(1);
     expect(fetchCalls[0]?.url).toBe(`https://rooms.tabula.md/v1/rooms/${roomId}/snapshot`);
@@ -106,7 +117,33 @@ describe("Tabula document sharing", () => {
     });
 
     expect(result.roomServerUrl).toBe("http://localhost:3002");
+    expect(result.roomUrl).toBe(`http://localhost:5173/r/${roomId}#key=${roomKey}`);
     expect(result.shareUrl).toBe(`http://localhost:5173/r/${roomId}#key=${roomKey}`);
+    expect(result.connect.arguments).toEqual({
+      roomUrl: `http://localhost:5173/r/${roomId}#key=${roomKey}`,
+      roomServerUrl: "http://localhost:3002",
+    });
+  });
+
+  it("preserves custom room server URLs in reconnect arguments", async () => {
+    const fetchImpl = async () => new Response(JSON.stringify({ ok: true }), { status: 201 });
+    const result = await shareMarkdownDocument({
+      markdown: "# Custom Transport",
+      appOrigin: "https://tabula.md",
+      roomServerUrl: "https://rooms.example.com/",
+      fetchImpl,
+      roomId,
+      roomKey,
+    });
+
+    expect(result.roomServerUrl).toBe("https://rooms.example.com");
+    expect(result.connect).toEqual({
+      tool: "tabula_connect_room",
+      arguments: {
+        roomUrl: `https://tabula.md/r/${roomId}#key=${roomKey}`,
+        roomServerUrl: "https://rooms.example.com",
+      },
+    });
   });
 
   it("returns clear errors when encrypted upload fails", async () => {
