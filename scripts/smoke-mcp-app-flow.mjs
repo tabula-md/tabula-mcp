@@ -32,8 +32,11 @@ const installDevEventCapture = async (page) => {
   });
 };
 
-const createPage = async (browser) => {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const desktopViewport = { width: 1280, height: 720 };
+const mobileViewport = { width: 390, height: 844 };
+
+const createPage = async (browser, viewport = desktopViewport) => {
+  const page = await browser.newPage({ viewport });
   const consoleErrors = [];
   const pageErrors = [];
   page.on("console", (message) => {
@@ -44,6 +47,54 @@ const createPage = async (browser) => {
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await installDevEventCapture(page);
   return { page, consoleErrors, pageErrors };
+};
+
+const assertNoHorizontalOverflow = async (page, label) => {
+  const overflow = await page.evaluate(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const shell = document.querySelector(".shell");
+
+    return {
+      viewportWidth: window.innerWidth,
+      rootScrollWidth: root.scrollWidth,
+      bodyScrollWidth: body.scrollWidth,
+      shellScrollWidth: shell?.scrollWidth ?? 0,
+      visibleButtons: [...document.querySelectorAll("button")]
+        .filter((button) => button.offsetParent !== null)
+        .map((button) => {
+          const rect = button.getBoundingClientRect();
+          return {
+            text: button.textContent?.trim() ?? "",
+            left: rect.left,
+            right: rect.right,
+            width: rect.width,
+          };
+        }),
+    };
+  });
+
+  const tolerance = 2;
+  assert(
+    overflow.rootScrollWidth <= overflow.viewportWidth + tolerance,
+    `${label} root should not overflow horizontally: ${JSON.stringify(overflow)}`,
+  );
+  assert(
+    overflow.bodyScrollWidth <= overflow.viewportWidth + tolerance,
+    `${label} body should not overflow horizontally: ${JSON.stringify(overflow)}`,
+  );
+  assert(
+    overflow.shellScrollWidth <= overflow.viewportWidth + tolerance,
+    `${label} shell should not overflow horizontally: ${JSON.stringify(overflow)}`,
+  );
+
+  for (const button of overflow.visibleButtons) {
+    assert(button.width > 0, `${label} visible button should have a stable width: ${button.text}`);
+    assert(
+      button.left >= -tolerance && button.right <= overflow.viewportWidth + tolerance,
+      `${label} visible button should stay inside the viewport: ${JSON.stringify(button)}`,
+    );
+  }
 };
 
 const assertNoPageErrors = (consoleErrors, pageErrors) => {
@@ -116,6 +167,52 @@ const runDocumentFlow = async (baseUrl, browser) => {
   await page.close();
 };
 
+const runMobileLayoutFlow = async (baseUrl, browser) => {
+  const { page, consoleErrors, pageErrors } = await createPage(browser, mobileViewport);
+  await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
+  await waitForMessage(page, "Tabula.md document is ready.");
+
+  await assertNoHorizontalOverflow(page, "mobile initial document layout");
+
+  await page.locator("#titleInput").fill("Mobile smoke title");
+  await page.locator("#markdownEditor").fill(
+    [
+      "# Mobile Smoke",
+      "",
+      "This verifies the Tabula.md MCP App controls stay usable on narrow hosts.",
+      "",
+      "## Preview",
+      "",
+      "- Editor",
+      "- Split",
+      "- Context",
+    ].join("\n"),
+  );
+  await waitForMessage(page, "Document has unsaved changes.");
+  await assertNoHorizontalOverflow(page, "mobile edited document layout");
+
+  for (const viewMode of ["Preview", "Editor", "Split"]) {
+    await page.getByRole("button", { name: viewMode }).click();
+    await assertNoHorizontalOverflow(page, `mobile ${viewMode.toLowerCase()} view layout`);
+  }
+
+  await page.getByRole("button", { name: "Comments" }).click();
+  await assertNoHorizontalOverflow(page, "mobile comments context layout");
+
+  await page.getByRole("button", { name: "Fullscreen" }).click();
+  await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
+  await assertNoHorizontalOverflow(page, "mobile fullscreen layout");
+
+  const events = await getDevEvents(page);
+  assert(
+    events.displayModes.some((event) => event?.mode === "fullscreen"),
+    "mobile flow should exercise fullscreen display mode",
+  );
+
+  assertNoPageErrors(consoleErrors, pageErrors);
+  await page.close();
+};
+
 const runRoomFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=room`);
@@ -161,6 +258,7 @@ const main = async () => {
     assert(baseUrl, "Vite dev server did not expose a local URL");
     browser = await chromium.launch({ headless: true });
     await runDocumentFlow(baseUrl, browser);
+    await runMobileLayoutFlow(baseUrl, browser);
     await runRoomFlow(baseUrl, browser);
   } catch (error) {
     if (String(error?.message || error).includes("Executable doesn't exist")) {
