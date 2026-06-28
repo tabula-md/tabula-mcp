@@ -11,6 +11,10 @@ Run:
 npm run release:verify
 ```
 
+The GitHub Actions CI workflow runs the same `npm run release:verify` gate on
+pull requests and pushes to `main` using Node.js 22.12.0. It installs Playwright
+Chromium before running the App browser smoke.
+
 Equivalent individual commands:
 
 ```sh
