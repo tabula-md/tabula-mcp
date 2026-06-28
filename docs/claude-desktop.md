@@ -48,7 +48,8 @@ Expected behavior:
 3. Editor, Split, and Preview modes work.
 4. Save stores the document in the local MCP server process.
 5. Send Changes posts a compact edit summary back into model context.
-6. Share creates an encrypted `https://tabula.md/r/...#key=...` link.
+6. Share creates an encrypted `https://tabula.md/r/...#key=...` link. If the
+   App has unsent edits, the share handoff also includes a compact edit summary.
 
 Local App documents are checkpointed as plaintext files on this machine so they
 can recover across MCP process restarts. They are not uploaded to Tabula.md room
@@ -116,7 +117,8 @@ After installing the MCPB in Claude Desktop:
    listed.
 7. Ask Claude to call `tabula_open_document` and confirm the App reopens it.
 8. Click Send Changes and confirm Claude sees the edit summary.
-9. Click Share and confirm Claude receives a room URL with `#key=`.
+9. Make one more small edit, click Share, and confirm Claude receives both a
+   room URL with `#key=` and a compact edit summary for the unsent change.
 10. Open the share URL in Tabula.md or reconnect it with `tabula_connect_room`.
 11. Open the room view and confirm Markdown preview and outline render.
 

@@ -134,8 +134,16 @@ const runDocumentFlow = async (baseUrl, browser) => {
   await page.getByRole("button", { name: "Send Comment" }).click();
   await waitForMessage(page, "Comment sent to the model context.");
 
+  const shareMarkdown = `${markdown}\n\n## Shared Update\n\nReady for encrypted handoff.`;
+  await page.locator("#markdownEditor").fill(shareMarkdown);
+  await waitForMessage(page, "Document has unsaved changes.");
   await page.getByRole("button", { name: "Share" }).click();
   await waitForMessage(page, "Encrypted share link sent to the model context.");
+  assert.equal(
+    await page.getByRole("button", { name: "Send Changes" }).isDisabled(),
+    true,
+    "share should include unsent edits and clear the model context baseline",
+  );
 
   const events = await getDevEvents(page);
   const toolNames = events.toolCalls.map((call) => call?.name);
@@ -162,6 +170,19 @@ const runDocumentFlow = async (baseUrl, browser) => {
   assert(share, "document flow should send encrypted share context");
   assert.equal(share.structuredContent.tabulaShare.encrypted, true);
   assert.match(share.structuredContent.tabulaShare.shareUrl, /#key=/);
+  assert(
+    share.structuredContent.tabulaDocumentChange,
+    "share context should include any unsent compact document change summary",
+  );
+  assert.equal(share.structuredContent.tabulaDocumentChange.summary.changed, true);
+  assert(
+    share.structuredContent.tabulaDocumentChange.summary.currentExcerpt.includes("Shared Update"),
+    "share change summary should describe the unsent edit",
+  );
+  assert(
+    !JSON.stringify(share).includes(`${shareMarkdown}\n`),
+    "share change context should not include the full Markdown body",
+  );
 
   assertNoPageErrors(consoleErrors, pageErrors);
   await page.close();

@@ -457,12 +457,17 @@ const shareDocument = async () => {
   elements.saveDocumentButton.disabled = true;
   setMessage("Preparing encrypted Tabula.md share link...");
   try {
+    const currentMarkdown = elements.markdownEditor.value;
+    const currentDocumentTitle = currentTitle();
+    const baseSha256 = state.sha256;
+    const changeSummary = createMarkdownChangeSummary(state.lastContextMarkdown, currentMarkdown);
+
     const saveResult = await state.app.callServerTool({
       name: "tabula_app_save_document",
       arguments: {
         documentId: state.documentId,
-        title: currentTitle(),
-        markdown: elements.markdownEditor.value,
+        title: currentDocumentTitle,
+        markdown: currentMarkdown,
       },
     });
     if (saveResult.isError) {
@@ -494,13 +499,41 @@ const shareDocument = async () => {
             share.shareUrl,
             "",
             "Treat this URL as a bearer secret because the #key fragment can decrypt the room.",
+            ...(changeSummary.changed
+              ? [
+                  "",
+                  "Unsent edit summary included with this share:",
+                  "",
+                  formatDocumentChangeMessage({
+                    title: currentDocumentTitle,
+                    documentId: state.documentId,
+                    baseSha256,
+                    summary: changeSummary,
+                  }),
+                ]
+              : []),
           ].join("\n"),
         },
       ],
       structuredContent: {
         tabulaShare: share,
+        ...(changeSummary.changed
+          ? {
+              tabulaDocumentChange: {
+                mode: "document",
+                documentId: state.documentId,
+                title: currentDocumentTitle,
+                baseSha256,
+                summary: changeSummary,
+              },
+            }
+          : {}),
       },
     });
+    if (changeSummary.changed) {
+      state.lastContextMarkdown = currentMarkdown;
+    }
+    updateDocumentActionState();
     setMessage("Encrypted share link sent to the model context.");
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Could not create encrypted share link.", "error");
