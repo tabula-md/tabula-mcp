@@ -1,0 +1,37 @@
+# Security Policy
+
+## Supported Versions
+
+Security fixes target the latest published `@tabula-md/mcp` release and the
+current `main` branch.
+
+## Reporting a Vulnerability
+
+Do not report suspected vulnerabilities in public issues if they include secrets,
+room links, snapshot links, plaintext document contents, or exploit details.
+Use GitHub private vulnerability reporting for this repository when available.
+
+Include:
+
+- affected version or commit
+- deployment mode: stdio, MCPB, Vercel, Cloudflare, or another host
+- whether `TABULA_MCP_DEPLOYMENT_MODE=remote` or `TABULA_MCP_PRODUCTION=1` was set
+- a minimal reproduction without real room keys, snapshot keys, or user data
+
+## Security Boundaries
+
+Tabula MCP has two different data paths:
+
+- MCP document checkpoints are agent working state and may contain plaintext
+  Markdown.
+- `tabula_share_document` exports through Tabula JSON encrypted snapshot links;
+  the decryption key stays in the `#json` URL fragment.
+
+Remote room access is disabled for hosted production by default. Enabling
+`TABULA_MCP_ALLOW_REMOTE_ROOM=1` makes the hosted MCP server a trusted plaintext
+processor for room keys and decrypted Markdown.
+
+Production HTTP deployments must use authentication, Redis/Upstash-backed
+checkpoints, and an explicit browser Origin allowlist. Do not deploy public
+remote MCP endpoints with wildcard browser origins unless the endpoint is
+intentionally unauthenticated test infrastructure.

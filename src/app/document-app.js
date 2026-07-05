@@ -425,7 +425,7 @@ const shareDocument = async ({ sendModelContext = true, openAfterShare = false }
   elements.shareDocumentButton.disabled = true;
   elements.saveDocumentButton.disabled = true;
   elements.openTabulaButton.disabled = true;
-  setMessage(openAfterShare ? "Preparing encrypted Tabula.md room..." : "Preparing encrypted Tabula.md share link...");
+  setMessage(openAfterShare ? "Preparing encrypted Tabula.md snapshot..." : "Preparing encrypted Tabula.md share link...");
   try {
     const currentMarkdown = elements.markdownEditor.value;
     const currentDocumentTitle = currentTitle();
@@ -468,10 +468,10 @@ const shareDocument = async ({ sendModelContext = true, openAfterShare = false }
           {
             type: "text",
             text: [
-              `Encrypted Tabula.md room link for "${state.title || "Untitled Document"}":`,
+              `Encrypted Tabula.md snapshot link for "${state.title || "Untitled Document"}":`,
               share.shareUrl,
               "",
-              "Treat this URL as a bearer secret because the #room fragment contains the room key.",
+              "Treat this URL as a bearer secret because the #json fragment contains the snapshot key.",
               ...(changeSummary.changed
                 ? [
                     "",
@@ -513,7 +513,7 @@ const shareDocument = async ({ sendModelContext = true, openAfterShare = false }
       state.lastContextMarkdown = currentMarkdown;
     }
     updateDocumentActionState();
-    setMessage(openAfterShare ? "Opened encrypted Tabula.md room." : "Encrypted share link sent to the model context.");
+    setMessage(openAfterShare ? "Opened encrypted Tabula.md snapshot." : "Encrypted share link sent to the model context.");
     return share;
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Could not create encrypted share link.", "error");

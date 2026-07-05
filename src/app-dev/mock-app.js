@@ -134,27 +134,20 @@ export const createDevApp = () => {
           return textResult("Tabula document saved in the local MCP session.", documentSnapshot);
         }
         case "tabula_share_document":
-          return textResult("Encrypted Tabula.md share link created.", {
+          return textResult("Encrypted Tabula.md snapshot link created.", {
             share: {
               title: documentSnapshot.document.title,
-              roomId: "dev-share-room",
+              linkKind: "json-snapshot",
+              snapshotId: "dev-share-snapshot",
               appOrigin: "http://localhost:5173",
-              roomServerUrl: "http://localhost:3002",
-              roomUrl: "http://localhost:5173/#room=dev-share-room,dev-only-not-a-real-key",
-              shareUrl: "http://localhost:5173/#room=dev-share-room,dev-only-not-a-real-key",
+              jsonServerUrl: "http://localhost:3004",
+              snapshotUrl: "http://localhost:3004/api/v2/dev-share-snapshot",
+              shareUrl: "http://localhost:5173/#json=dev-share-snapshot,dev-only-not-a-real-key",
               textLength: documentSnapshot.markdown.length,
               sha256: documentSnapshot.document.sha256,
               encrypted: true,
               secret: true,
               keyLocation: "url-fragment",
-              snapshotVersion: 1,
-              connect: {
-                tool: "tabula_connect_room",
-                arguments: {
-                  roomUrl: "http://localhost:5173/#room=dev-share-room,dev-only-not-a-real-key",
-                  roomServerUrl: "http://localhost:3002",
-                },
-              },
             },
           });
         default:

@@ -60,10 +60,10 @@ export const registerDocumentAppTools = (
     {
       title: "Create Tabula Document",
       description:
-        "Create a local Tabula.md Markdown document and open the interactive MCP App editor for drafting, reviewing, and selection handoff.",
+        "Create a Tabula.md Markdown document checkpoint and open the interactive MCP App editor for drafting, reviewing, and selection handoff.",
       inputSchema: {
         title: z.string().min(1).max(120).optional().describe("Optional document title. Defaults to the first H1 or Untitled Document."),
-        markdown: z.string().default("").describe("Initial Markdown content for the local document."),
+        markdown: z.string().default("").describe("Initial Markdown content for the document checkpoint."),
       },
       outputSchema: documentSnapshotOutputShape,
       annotations: {
@@ -98,7 +98,7 @@ export const registerDocumentAppTools = (
     {
       title: "List Tabula Documents",
       description:
-        "List local Tabula.md MCP App documents saved in this local server checkpoint store, newest first.",
+        "List Tabula.md MCP App document checkpoints saved in this MCP server's document checkpoint store, newest first.",
       inputSchema: {},
       outputSchema: documentListOutputShape,
       annotations: {
@@ -120,8 +120,8 @@ export const registerDocumentAppTools = (
             documents: localDocuments,
           },
           text: localDocuments.length
-            ? `Found ${localDocuments.length} local Tabula.md document checkpoint(s).`
-            : "No local Tabula.md document checkpoints found.",
+            ? `Found ${localDocuments.length} Tabula.md document checkpoint(s).`
+            : "No Tabula.md document checkpoints found.",
         };
       }),
   );
@@ -132,7 +132,7 @@ export const registerDocumentAppTools = (
     {
       title: "Open Tabula Document",
       description:
-        "Open the latest or selected local Tabula.md document checkpoint in the interactive MCP App editor.",
+        "Open the latest or selected Tabula.md document checkpoint in the interactive MCP App editor.",
       inputSchema: optionalDocumentSchema,
       outputSchema: documentSnapshotOutputShape,
       annotations: {
@@ -156,7 +156,7 @@ export const registerDocumentAppTools = (
             ...documentSnapshotContent(document),
             resourceUri: tabulaDocumentAppResourceUri,
           },
-          text: `Opening local Tabula.md document checkpoint "${document.title}".`,
+          text: `Opening Tabula.md document checkpoint "${document.title}".`,
         };
       }),
   );
@@ -202,7 +202,7 @@ export const registerDocumentAppTools = (
     {
       title: "Share Tabula Document",
       description:
-        "Export a local Tabula.md App document as an encrypted Tabula.md room link. The room key stays in the URL fragment, and the room server receives only an encrypted snapshot.",
+        "Export a Tabula.md MCP App document checkpoint as an encrypted Tabula.md snapshot link. The snapshot key stays in the URL fragment, and the JSON snapshot service receives only encrypted bytes.",
       inputSchema: {
         ...optionalDocumentSchema,
         appOrigin: z
@@ -210,11 +210,11 @@ export const registerDocumentAppTools = (
           .url()
           .optional()
           .describe("Tabula.md app origin for the returned share URL. Defaults to https://tabula.md."),
-        roomServerUrl: z
+        jsonServerUrl: z
           .string()
           .url()
           .optional()
-          .describe("Tabula Room service URL. Defaults from appOrigin or TABULA_ROOM_URL."),
+          .describe("Tabula JSON snapshot service URL. Defaults from appOrigin or TABULA_JSON_URL."),
       },
       outputSchema: shareOutputShape,
       annotations: {
@@ -227,14 +227,14 @@ export const registerDocumentAppTools = (
         ui: {},
       },
     },
-    async ({ documentId, appOrigin, roomServerUrl }) =>
+    async ({ documentId, appOrigin, jsonServerUrl }) =>
       runStructuredTool(async () => {
         const document = await documents.get(documentId);
         const sharedDocument = await shareMarkdownDocument({
           title: document.title,
           markdown: document.markdown,
           appOrigin,
-          roomServerUrl,
+          jsonServerUrl,
         });
 
         return {
@@ -242,10 +242,10 @@ export const registerDocumentAppTools = (
             share: sharedDocument,
           },
           text: [
-            `Encrypted Tabula.md share link for "${document.title}":`,
+            `Encrypted Tabula.md snapshot link for "${document.title}":`,
             sharedDocument.shareUrl,
             "",
-            "Treat this URL as a bearer secret because the #room fragment contains the room key.",
+            "Treat this URL as a bearer secret because the #json fragment contains the snapshot key.",
           ].join("\n"),
         };
       }),
@@ -279,7 +279,7 @@ export const registerDocumentAppTools = (
     server,
     "tabula_app_document_snapshot",
     {
-      description: "Read a local document snapshot for the Tabula Document MCP App.",
+      description: "Read a document checkpoint snapshot for the Tabula Document MCP App.",
       inputSchema: optionalDocumentSchema,
       outputSchema: documentSnapshotOutputShape,
       annotations: {
@@ -307,7 +307,7 @@ export const registerDocumentAppTools = (
       inputSchema: {
         documentId: z.string().uuid().describe("Document id returned by tabula_create_document."),
         title: z.string().min(1).max(120).optional().describe("Optional updated document title."),
-        markdown: z.string().describe("Full Markdown content to keep in the local MCP App document."),
+        markdown: z.string().describe("Full Markdown content to keep in the MCP App document checkpoint."),
       },
       outputSchema: documentSnapshotOutputShape,
       annotations: {
@@ -325,7 +325,7 @@ export const registerDocumentAppTools = (
     async ({ documentId, title, markdown }) =>
       runStructuredTool(async () => ({
         value: documentSnapshotContent(await documents.update({ documentId, title, markdown })),
-        text: "Tabula document saved in the local MCP session.",
+        text: "Tabula document saved in the MCP document checkpoint store.",
       })),
   );
 };

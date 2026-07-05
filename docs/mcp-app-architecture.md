@@ -15,10 +15,10 @@ The primary product surface is the Tabula.md Document App:
 - Editor, Split, and Preview modes
 - outline navigation
 - local draft recovery
-- local plaintext document checkpointing
-- save into the local MCP session
+- MCP document checkpointing
+- save into the MCP checkpoint store
 - Send Changes back into model context
-- encrypted share/export to a Tabula.md room link
+- encrypted share/export to a Tabula.md snapshot link
 - read-only connected room view
 
 The App is not a dashboard and not a database. It should remain document-first.
@@ -73,6 +73,8 @@ src/
     store.ts
   server/
     create-server.ts
+    http.ts
+    web.ts
     register-room-tools.ts
     write-access.ts
   cli.ts
@@ -82,27 +84,42 @@ src/
   crypto.ts
   share.ts
   guidance.ts
+api/
+  mcp.ts
+  health.ts
+workers/
+  tabula-mcp-worker.ts
 ```
 
 Responsibilities:
 
-- `src/cli.ts`: stdio startup and command-line write-mode handling
+- `src/cli.ts`: stdio/HTTP startup and command-line mode handling
 - `src/server/create-server.ts`: server construction and tool registration
+- `src/server/http.ts`: Streamable HTTP `/mcp`, `/health`, `/ready`, session lifecycle,
+  and remote checkpoint store sharing
+- `src/server/operational-policy.ts`: production auth, rate limit, request
+  limit, stateless/stateful HTTP mode, session limit, timeout, and structured request log policy
+- `src/server/origin-policy.ts`: browser Origin allowlist and CORS policy
+- `src/server/web.ts`: Web-standard handler shared by Vercel Functions and
+  Cloudflare Workers
 - `src/server/register-room-tools.ts`: encrypted room tools
 - `src/server/write-access.ts`: read-only/write-enabled policy
+- `src/env.ts`: shared environment parsing helpers
 - `src/app/resource.ts`: bundled Document App resource registration
 - `src/app/tools.ts`: model-facing App tools and App-only state tools
-- `src/documents/*`: local document domain
-- `src/share.ts`: encrypted room snapshot export
+- `src/documents/*`: document domain and local/remote checkpoint stores
+- `src/share.ts`: encrypted JSON snapshot export
 - `src/room-client.ts`, `src/protocol.ts`, `src/crypto.ts`: room transport,
   protocol parsing, and encryption primitives
+- `api/mcp.ts`, `api/health.ts`, `api/ready.ts`: Vercel deployment entrypoints
+- `workers/tabula-mcp-worker.ts`: Cloudflare Workers deployment entrypoint
 
 Room protocol and crypto modules should stay independent from the App UI.
 
 ## Package Exports
 
 The npm package keeps `tabula-mcp` as the main CLI/bin entrypoint and exposes a
-small ESM surface for tests and local embedding:
+small ESM surface for tests, local embedding, and HTTP deployment:
 
 - `@tabula-md/mcp`
 - `@tabula-md/mcp/server`
@@ -172,15 +189,31 @@ handoff should remain a deliberate tool or user action.
 Inline mode is preview-first and exposes only `Open in Tabula` plus `Edit`.
 Editing and context handoff controls live in fullscreen mode.
 
-When the user shares a local App document with unsent edits, the App saves the
-current document, creates the encrypted room link, and includes the compact
-change summary in the same `updateModelContext` payload. This keeps the common
-"edit, then share" flow closed without requiring a separate Send Changes click.
+When the user shares an App document with unsent edits, the App saves the
+current document checkpoint, creates the encrypted snapshot link, and includes
+the compact change summary in the same `updateModelContext` payload. This keeps
+the common "edit, then share" flow closed without requiring a separate Send
+Changes click.
 
 Selection handoff is also bounded. If the user selects a large range, the App
 sends a head/tail excerpt plus original and excerpt lengths instead of the full
 selected text. The model can ask the user for a narrower selection when exact
 middle text is needed.
+
+## Checkpoint Stores
+
+MCP document checkpoints are working state, not Tabula JSON share artifacts.
+
+Local stdio/MCPB mode uses `FileDocumentStore` by default so Claude Desktop-style
+installations can recover saved drafts after the MCP process restarts. It can be
+made memory-only with `TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS=1`.
+
+Remote HTTP mode uses `MemoryDocumentStore` with TTL by default, or
+`UpstashRedisDocumentStore` when Upstash Redis or Vercel KV-compatible REST
+credentials are configured. This mirrors the Excalidraw MCP pattern: the MCP
+server keeps plaintext checkpoints for iterative agent editing, while
+`tabula_share_document` exports the final handoff through the encrypted
+`tabula-json` snapshot flow.
 
 ## Dev Harness
 

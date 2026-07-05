@@ -1,4 +1,4 @@
-export type EnvelopeKind = "yjs-update" | "presence" | "snapshot";
+export type EnvelopeKind = "yjs-update" | "presence" | "state-init" | "snapshot";
 
 export type EncryptedEnvelope = {
   v: 1;
@@ -29,6 +29,12 @@ const ROOM_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 const ROOM_KEY_BYTES = 32;
 const LOCAL_ROOM_SERVER_PORT = 3002;
 const TABULA_MD_ROOM_SERVER_URL = "https://rooms.tabula.md";
+const ENVELOPE_KINDS = ["yjs-update", "presence", "state-init", "snapshot"] as const;
+const ENVELOPE_FIELDS = new Set(["v", "roomId", "kind", "version", "iv", "ciphertext", "createdAt"]);
+const FORBIDDEN_PLAINTEXT_FIELDS = new Set(["roomKey", "key", "plaintext", "markdown", "text", "content"]);
+const AES_GCM_IV_BYTES = 12;
+const MAX_ENCRYPTED_ENVELOPE_BYTES = 1024 * 1024;
+const ISO_UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 
 export const trimTrailingSlash = (value: string) => value.replace(/\/+$/, "");
 
@@ -37,7 +43,11 @@ export const decodeBase64Url = (value: string) => {
     throw new TabulaMcpError("Invalid base64url value.");
   }
 
-  return Buffer.from(value, "base64url");
+  const decoded = Buffer.from(value, "base64url");
+  if (decoded.byteLength === 0 || decoded.toString("base64url") !== value) {
+    throw new TabulaMcpError("Invalid base64url value.");
+  }
+  return decoded;
 };
 
 export const encodeBase64Url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
@@ -127,24 +137,51 @@ export const resolveRoomServerUrl = ({
   );
 };
 
+const validateBase64UrlField = (value: unknown, fieldName: "iv" | "ciphertext", options: { expectedBytes?: number; maxBytes?: number } = {}) => {
+  if (typeof value !== "string") {
+    throw new TabulaMcpError("Encrypted room envelope is not valid for this room.");
+  }
+
+  const decoded = decodeBase64Url(value);
+  if (options.expectedBytes !== undefined && decoded.byteLength !== options.expectedBytes) {
+    throw new TabulaMcpError(`Encrypted room envelope has an invalid ${fieldName}.`);
+  }
+  if (options.maxBytes !== undefined && decoded.byteLength > options.maxBytes) {
+    throw new TabulaMcpError("Encrypted room envelope is too large.");
+  }
+
+  return value;
+};
+
 export const assertEncryptedEnvelope = (value: unknown, expectedRoomId: string, expectedKind?: EnvelopeKind) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TabulaMcpError("Encrypted room envelope must be an object.");
   }
 
+  for (const key of Object.keys(value)) {
+    if (FORBIDDEN_PLAINTEXT_FIELDS.has(key) || !ENVELOPE_FIELDS.has(key)) {
+      throw new TabulaMcpError("Encrypted room envelope is not valid for this room.");
+    }
+  }
+
   const envelope = value as Partial<EncryptedEnvelope>;
+  const version = envelope.version;
   if (
     envelope.v !== 1 ||
     envelope.roomId !== expectedRoomId ||
     (expectedKind && envelope.kind !== expectedKind) ||
-    !["yjs-update", "presence", "snapshot"].includes(String(envelope.kind)) ||
-    typeof envelope.version !== "number" ||
-    typeof envelope.iv !== "string" ||
-    typeof envelope.ciphertext !== "string" ||
-    typeof envelope.createdAt !== "string"
+    !ENVELOPE_KINDS.includes(envelope.kind as EnvelopeKind) ||
+    !Number.isSafeInteger(version) ||
+    version === undefined ||
+    version < 0 ||
+    typeof envelope.createdAt !== "string" ||
+    !ISO_UTC_TIMESTAMP_PATTERN.test(envelope.createdAt)
   ) {
     throw new TabulaMcpError("Encrypted room envelope is not valid for this room.");
   }
+
+  validateBase64UrlField(envelope.iv, "iv", { expectedBytes: AES_GCM_IV_BYTES });
+  validateBase64UrlField(envelope.ciphertext, "ciphertext", { maxBytes: MAX_ENCRYPTED_ENVELOPE_BYTES });
 
   return envelope as EncryptedEnvelope;
 };

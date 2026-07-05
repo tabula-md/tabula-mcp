@@ -25,7 +25,14 @@ const readDocumentAppHtml = async () => {
   throw new TabulaMcpError("Tabula Document App asset is missing. Run npm run build:app before opening the MCP App.");
 };
 
-export const registerDocumentAppResource = (server: McpServer) => {
+export type RegisterDocumentAppResourceOptions = {
+  documentAppHtml?: string;
+};
+
+export const registerDocumentAppResource = (
+  server: McpServer,
+  { documentAppHtml }: RegisterDocumentAppResourceOptions = {},
+) => {
   registerAppResource(
     server,
     "Tabula Document App",
@@ -43,7 +50,7 @@ export const registerDocumentAppResource = (server: McpServer) => {
         {
           uri: tabulaDocumentAppResourceUri,
           mimeType: RESOURCE_MIME_TYPE,
-          text: await readDocumentAppHtml(),
+          text: documentAppHtml ?? (await readDocumentAppHtml()),
           _meta: {
             ui: {
               prefersBorder: true,

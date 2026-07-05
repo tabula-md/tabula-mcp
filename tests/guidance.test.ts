@@ -11,6 +11,7 @@ describe("Tabula read_me guidance", () => {
       expect(readMe.summary.length).toBeGreaterThan(40);
       expect(readMe.nextActions.length).toBeGreaterThan(0);
       expect(readMe.securityRules.join("\n")).toContain("#room");
+      expect(readMe.securityRules.join("\n")).toContain("#json");
     }
   });
 
@@ -20,7 +21,7 @@ describe("Tabula read_me guidance", () => {
     expect(text).toContain("Tabula.md MCP read_me (sharing)");
     expect(text).toContain("Next actions:");
     expect(text).toContain("Security rules:");
-    expect(text).toContain("encrypted room links");
+    expect(text).toContain("encrypted snapshot links");
     expect(text).toContain("bearer secret");
   });
 });

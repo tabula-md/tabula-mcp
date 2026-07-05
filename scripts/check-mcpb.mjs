@@ -20,6 +20,7 @@ const requiredFiles = [
   "server/index.js",
   "server/cli.js",
   "server/document-app.html",
+  "server/env.js",
   "server/app/tools.js",
   "server/app/resource.js",
   "server/documents/index.js",
@@ -27,6 +28,10 @@ const requiredFiles = [
   "server/documents/store.js",
   "server/server/index.js",
   "server/server/create-server.js",
+  "server/server/http.js",
+  "server/server/operational-policy.js",
+  "server/server/origin-policy.js",
+  "server/server/web.js",
   "server/server/register-room-tools.js",
   "server/server/write-access.js",
   "server/share.js",
@@ -192,6 +197,11 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   for (const toolName of forbiddenManifestTools) {
     assert(!toolNames.has(toolName), `MCPB ${label} manifest must not list ${toolName}`);
   }
+  const shareToolDescription = manifest.tools?.find((tool) => tool.name === "tabula_share_document")?.description ?? "";
+  assert(
+    shareToolDescription.includes("JSON snapshot") && !/room share/i.test(shareToolDescription),
+    `MCPB ${label} manifest tabula_share_document description must describe JSON snapshot sharing`,
+  );
   const modelFacingTools = await listBundledModelFacingTools(bundleDir);
   assertMatchingToolNames(
     manifest.tools.map((tool) => tool.name).sort(),

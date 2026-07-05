@@ -4,7 +4,13 @@ import { z } from "zod";
 import { registerDocumentAppResource } from "../app/resource.js";
 import { registerDocumentAppTools } from "../app/tools.js";
 import { DocumentRegistry } from "../documents/registry.js";
-import { createDefaultDocumentStore, type DocumentStore } from "../documents/store.js";
+import {
+  createDefaultDocumentStore,
+  resolveDocumentStoreDeploymentMode,
+  type DocumentStore,
+  type DocumentStoreDeploymentMode,
+  type DocumentStoreKind,
+} from "../documents/store.js";
 import { formatTabulaReadMe, getTabulaReadMe, tabulaReadMeTopics } from "../guidance.js";
 import { readMeOutputShape } from "../output-schemas.js";
 import { SessionRegistry } from "../registry.js";
@@ -12,8 +18,11 @@ import { registerRoomTools } from "./register-room-tools.js";
 import { resolveWriteEnabled } from "./write-access.js";
 
 export type TabulaMcpServerOptions = {
+  allowRoomTools?: boolean;
+  documentAppHtml?: string;
   writeEnabled?: boolean;
   documentStore?: DocumentStore;
+  deploymentMode?: DocumentStoreDeploymentMode;
 };
 
 export type TabulaMcpServerInstance = {
@@ -21,6 +30,8 @@ export type TabulaMcpServerInstance = {
   registry: SessionRegistry;
   documents: DocumentRegistry;
   writeEnabled: boolean;
+  deploymentMode: DocumentStoreDeploymentMode;
+  documentStoreKind: DocumentStoreKind;
 };
 
 const tabulaReadMeTopicSchema = z.enum(tabulaReadMeTopics).default("overview");
@@ -61,14 +72,17 @@ const registerReadMeTool = (server: McpServer) => {
 
 export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): TabulaMcpServerInstance => {
   const writeEnabled = options.writeEnabled ?? resolveWriteEnabled();
+  const allowRoomTools = options.allowRoomTools ?? true;
+  const deploymentMode = resolveDocumentStoreDeploymentMode({ deploymentMode: options.deploymentMode });
+  const documentStore = options.documentStore ?? createDefaultDocumentStore({ deploymentMode });
   const registry = new SessionRegistry();
-  const documents = new DocumentRegistry(options.documentStore ?? createDefaultDocumentStore());
+  const documents = new DocumentRegistry(documentStore);
   const server = new McpServer({
     name: "tabula-mcp",
     version: "0.1.0",
   });
 
-  registerDocumentAppResource(server);
+  registerDocumentAppResource(server, { documentAppHtml: options.documentAppHtml });
 
   let documentAppToolsRegistered = false;
   server.server.oninitialized = () => {
@@ -83,7 +97,9 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   };
 
   registerReadMeTool(server);
-  registerRoomTools(server, registry, { writeEnabled });
+  if (allowRoomTools) {
+    registerRoomTools(server, registry, { writeEnabled });
+  }
 
-  return { server, registry, documents, writeEnabled };
+  return { server, registry, documents, writeEnabled, deploymentMode, documentStoreKind: documentStore.kind };
 };

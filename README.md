@@ -1,25 +1,29 @@
 # Tabula MCP
 
-Local MCP server and MCP App for drafting Tabula.md Markdown documents and
-joining encrypted Tabula.md live rooms from Codex, Claude, and other MCP
-clients.
+MCP server and MCP App for drafting Tabula.md Markdown documents and joining
+encrypted Tabula.md live rooms from Codex, Claude, and other MCP clients.
 
-Tabula MCP lets an agent create a local Markdown document in an MCP App, read a
-shared Markdown room, and, when explicitly enabled, apply text patches back into
-the room. It keeps Tabula.md's room security boundary intact: the room key is
-read from the URL fragment and used inside this local MCP process. The Tabula
-Room server still receives only encrypted envelopes.
+Tabula MCP lets an agent create a Markdown document checkpoint in an MCP App,
+read a shared Markdown room, and, when explicitly enabled, apply text patches
+back into the room. The checkpoint store is MCP working state. Final handoff
+links still use Tabula.md's encrypted JSON snapshot flow, where the JSON service
+receives only encrypted bytes and the snapshot key stays in the `#json`
+fragment.
 
 ## Status
 
-Early implementation. The server supports local MCP App documents, encrypted
-share links for local documents, one-file live rooms, Markdown reads, outline
-extraction, presence, guarded text patches, and bounded selection/change
-handoff from the bundled App.
+Early implementation. The server supports MCP App document checkpoints,
+encrypted share links for App documents, one-file live rooms, Markdown reads,
+outline extraction, presence, guarded text patches, bounded selection/change
+handoff from the bundled App, stdio/MCPB local launch, and a Streamable HTTP
+`/mcp` endpoint for remote deployments. The repository is MIT-licensed and
+contains the same deployment entrypoints intended for self-hosting and the
+official hosted Tabula MCP endpoint.
 
 ## Documentation
 
 - [Claude Desktop](docs/claude-desktop.md): MCPB build, install, and manual smoke test.
+- [Deployment](docs/deployment.md): Vercel and Cloudflare hosted MCP targets.
 - [Security Model](docs/security-model.md): local trust boundary, room keys, share/export, and write policy.
 - [MCP App Architecture](docs/mcp-app-architecture.md): bundled App shape, tool visibility, and source layout.
 - [Release](docs/release.md): validation commands, MCPB checks, runtime support, and handoff notes.
@@ -31,6 +35,8 @@ Requirements:
 - Node.js `^20.19.0 || >=22.12.0`
 - npm
 - A Tabula.md room link or room server only if you want to open live rooms
+- A Tabula JSON snapshot service only if you want to create encrypted snapshot
+  share links
 
 ```sh
 git clone git@github.com:tabula-md/tabula-mcp.git
@@ -51,9 +57,18 @@ For self-hosted app links, configure the room service explicitly:
 export TABULA_ROOM_URL=https://rooms.example.com
 ```
 
+For hosted encrypted snapshot share links, Tabula MCP defaults the JSON
+snapshot service to `https://json.tabula.md`. For local Tabula.md development
+links such as `http://localhost:5173`, it defaults to `http://localhost:3004`.
+For self-hosted app links, configure the snapshot service explicitly:
+
+```sh
+export TABULA_JSON_URL=https://json.example.com
+```
+
 ## MCP Client Configuration
 
-Use the built server over stdio:
+Use the built server over stdio for local MCP clients:
 
 ```json
 {
@@ -66,7 +81,7 @@ Use the built server over stdio:
 }
 ```
 
-Then ask the agent to create a document with `tabula_create_document`, or call
+Then ask the agent to create a document checkpoint with `tabula_create_document`, or call
 `tabula_connect_room` with a full room invite URL:
 
 ```txt
@@ -101,27 +116,121 @@ You can also pass `--enable-write` in `args`. If both are present,
 For the one-click Claude Desktop path, use the MCPB flow instead. It is
 zero-config and intentionally read-only for room writes.
 
+## Remote HTTP MCP
+
+Official hosted target:
+
+```txt
+https://mcp.tabula.md/mcp
+```
+
+This repository contains the deployable code for that shape. Domain binding,
+secrets, Redis/Upstash credentials, logs, and abuse controls live in the hosting
+environment, not in the repository.
+
+To run a local Excalidraw-style remote MCP endpoint, start the built package
+with `--http`:
+
+```sh
+npm run build
+TABULA_MCP_DEPLOYMENT_MODE=remote \
+node dist/index.js --http --port 3005
+```
+
+The endpoint is available at:
+
+```txt
+http://localhost:3005/mcp
+```
+
+Remote mode deliberately treats MCP document checkpoints as agent working state.
+Those checkpoints may contain plaintext Markdown because the MCP server and App
+need the current draft to continue editing. This is separate from Tabula's
+encrypted share/export path:
+
+```txt
+working draft/edit state -> MCP document checkpoint store
+final handoff link      -> tabula-json encrypted #json snapshot
+live collaboration      -> tabula-room encrypted relay
+```
+
+By default, remote mode uses an in-process TTL memory checkpoint store. For a
+durable production deployment, configure Upstash Redis or Vercel KV-compatible
+REST credentials:
+
+```sh
+TABULA_MCP_DEPLOYMENT_MODE=remote \
+TABULA_MCP_PRODUCTION=1 \
+TABULA_MCP_AUTH_TOKEN='change-me' \
+TABULA_MCP_ALLOWED_ORIGINS='https://tabula.md' \
+UPSTASH_REDIS_REST_URL=https://... \
+UPSTASH_REDIS_REST_TOKEN=... \
+node dist/index.js --http --port 3005
+```
+
+Supported remote checkpoint environment variables:
+
+- `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory|redis`
+- `TABULA_MCP_DOCUMENT_TTL_SECONDS` defaults to 30 days
+- `TABULA_MCP_MAX_DOCUMENT_CHECKPOINTS` defaults to 20
+- `TABULA_MCP_REDIS_REST_URL` or `UPSTASH_REDIS_REST_URL` or `KV_REST_API_URL`
+- `TABULA_MCP_REDIS_REST_TOKEN` or `UPSTASH_REDIS_REST_TOKEN` or `KV_REST_API_TOKEN`
+- `TABULA_MCP_REDIS_KEY_PREFIX` defaults to `tabula-mcp:documents`
+
+`GET /health` returns process-level service metadata. `GET /ready` checks that
+the active checkpoint store can be reached.
+
+`TABULA_MCP_ALLOWED_ORIGINS` can be set to a comma-separated browser origin
+allowlist. In development, unset origins allow custom browser MCP connector
+testing. In production, browser requests with an `Origin` header are rejected
+unless that origin is explicitly listed. Server-to-server clients that do not
+send `Origin` are still allowed through the Origin gate.
+
+Production/public endpoint controls:
+
+- `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables production guardrails.
+- `TABULA_MCP_AUTH_TOKEN` is required in production and protects `/mcp` with Bearer auth.
+- Production remote mode requires Redis/Upstash REST credentials; memory checkpoints are rejected.
+- Production remote document workflows default to stateless HTTP when remote room tools are disabled.
+- `TABULA_MCP_RATE_LIMIT_MAX` and `TABULA_MCP_RATE_LIMIT_WINDOW_MS` control per-client request throttling.
+- `TABULA_MCP_MAX_ACTIVE_SESSIONS` and `TABULA_MCP_SESSION_IDLE_TTL_MS` bound in-memory MCP sessions.
+- `TABULA_MCP_HTTP_MAX_REQUEST_BYTES` limits MCP request body size.
+- `TABULA_MCP_REQUEST_TIMEOUT_MS` bounds individual MCP request handling.
+- `TABULA_MCP_LOG_LEVEL=silent|error|warn|info|debug` controls structured JSON request logs.
+- `TABULA_MCP_ALLOW_REMOTE_ROOM=1` is required before hosted production exposes room connection tools.
+- `TABULA_MCP_STATELESS_HTTP=1` forces stateless HTTP sessions for serverless document workflows.
+- `TABULA_MCP_STATEFUL_HTTP=1` forces stateful HTTP sessions; use only with sticky routing or a single instance.
+
+Vercel and Cloudflare deployment targets are included:
+
+- Vercel: `vercel.json`, `api/mcp.ts`, `api/health.ts`, `api/ready.ts`
+- Cloudflare Workers: `wrangler.jsonc`, `workers/tabula-mcp-worker.ts`
+
+Use `npm run check:deploy-targets` before deploying. See
+[Deployment](docs/deployment.md) for environment variables, secrets, and session
+boundary notes.
+
 ## Package Exports
 
 The package is primarily a `tabula-mcp` stdio server, but it also exposes a
 small ESM surface for tests and local embedding:
 
-- `@tabula-md/mcp`: server factory plus document-store helpers
-- `@tabula-md/mcp/server`: server factory and write-mode helpers
+- `@tabula-md/mcp`: stdio/HTTP server factories plus document-store helpers
+- `@tabula-md/mcp/server`: stdio/HTTP server factories and write-mode helpers
 - `@tabula-md/mcp/protocol`: room URL and room server resolution helpers
-- `@tabula-md/mcp/documents`: local document registry, snapshots, and stores
+- `@tabula-md/mcp/documents`: document registry, snapshots, and checkpoint stores
 
 ## Tools
 
-- `tabula_create_document`: create a local Tabula.md Markdown document and open the interactive MCP App editor in clients that support MCP Apps.
-- `tabula_list_documents`: list local Tabula.md document checkpoints in this MCP server.
-- `tabula_open_document`: open the latest or selected local document checkpoint in the MCP App editor.
+- `tabula_create_document`: create a Tabula.md Markdown document checkpoint and open the interactive MCP App editor in clients that support MCP Apps.
+- `tabula_list_documents`: list Tabula.md document checkpoints in this MCP server.
+- `tabula_open_document`: open the latest or selected document checkpoint in the MCP App editor.
 - `tabula_read_me`: return workflow guidance for documents, rooms, sharing, and security boundaries.
-- `tabula_share_document`: export a local App document to an encrypted Tabula.md room link. The server receives only an encrypted snapshot; the room key stays in the returned URL fragment.
+- `tabula_share_document`: export an App document checkpoint to an encrypted Tabula.md snapshot link. The JSON snapshot service receives only encrypted bytes; the snapshot key stays in the returned `#json` URL fragment.
 - `tabula_connect_room`: connect to a room URL using the server's current write mode. Read-only by default.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
 - `tabula_room_status`: inspect connection state, room metadata, hash, and collaborators.
-- `tabula_read_markdown`: read the current decrypted Markdown.
+- `tabula_read_markdown`: read decrypted Markdown received by this MCP session; check `stateReceived`/`hydrationStatus` before treating empty text as authoritative.
 - `tabula_get_outline`: extract Markdown headings.
 - `tabula_open_room_view`: open a connected room in the MCP App for status, outline, Markdown preview, refresh, and selection handoff in clients that support MCP Apps.
 - `tabula_apply_text_patches`: edit with guarded non-overlapping text patches. Only exposed when the MCP process starts with write mode enabled.
@@ -132,7 +241,7 @@ small ESM surface for tests and local embedding:
 ## MCP App Document
 
 Tabula MCP includes a progressive MCP Apps surface in the same package. Call
-`tabula_create_document` to open an editable local Markdown document when the
+`tabula_create_document` to open an editable Markdown document checkpoint when the
 MCP client supports `text/html;profile=mcp-app`.
 
 Call `tabula_read_me` once when the model needs to choose a Tabula.md workflow
@@ -147,17 +256,22 @@ context, and Editor/Split/Preview modes for local Markdown drafts. It also opens
 tools: clients without MCP Apps support can keep using `tabula_read_markdown`,
 `tabula_get_outline`, and `tabula_apply_text_patches` normally.
 
-Local App documents are checkpointed as plaintext files in this machine's local
-application state so the MCP server can recover them across process restarts.
+Local stdio/MCPB App documents are checkpointed as plaintext files in this
+machine's local application state so the MCP server can recover them across
+process restarts.
 Set `TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS=1` to make local documents
 memory-only for a server session, or `TABULA_MCP_DOCUMENT_STORE_DIR` to choose a
 different local checkpoint directory. The MCP App also keeps an unsaved
 plaintext draft in the host browser's local storage, scoped by document id, so
 refreshing or reopening the App can recover recent edits. Saving clears the
-matching local draft. Exporting a local App document into an encrypted Tabula.md
-share link is available through `tabula_share_document` and the App's `Share`
-control. Use `tabula_list_documents` and `tabula_open_document` to resume a
-saved local checkpoint after restarting the MCP server.
+matching local draft.
+
+Remote HTTP deployments use a checkpoint store selected by
+`TABULA_MCP_DEPLOYMENT_MODE=remote`: in-process TTL memory by default, or
+Upstash Redis/Vercel KV REST when configured. These remote checkpoints are
+plaintext MCP working state, not encrypted Tabula JSON snapshots. Exporting an
+App document into an encrypted Tabula.md share link is available through
+`tabula_share_document` and the App's `Share` control.
 
 The app uses internal `tabula_app_document_snapshot`,
 `tabula_app_save_document`, and `tabula_app_room_snapshot` tools for App state.
@@ -165,9 +279,9 @@ They are marked app-only so model-facing tool lists stay focused, while the
 normal read/write tools remain the compatibility path for Codex, Claude, and
 other MCP clients.
 
-For local App documents, the `Send Changes` control sends a compact Markdown
-change summary back into model context. It uses changed ranges and bounded
-excerpts instead of sending the whole document on every edit.
+For MCP App document checkpoints, the `Send Changes` control sends a compact
+Markdown change summary back into model context. It uses changed ranges and
+bounded excerpts instead of sending the whole document on every edit.
 
 The `Send Selection` control similarly bounds large selections to a head/tail
 excerpt with truncation metadata instead of sending the full selected text.
@@ -177,15 +291,13 @@ the App marks the draft as restored or conflicted and asks the user to review it
 before saving. This draft recovery is local to the MCP App host; it does not
 upload plaintext Markdown to Tabula.md room infrastructure.
 
-The `Share` control saves the current App document into the local MCP session,
-then uploads only an encrypted Yjs snapshot to the Tabula Room server. It sends
-the resulting `https://tabula.md/#room=...,...` link back into model context. If
-the user has unsent App edits, the share handoff also includes the same compact
-change summary used by `Send Changes`, so the model can understand what changed
-without receiving the full Markdown body.
-The share result also includes `share.connect.arguments`, which can be passed
-directly to `tabula_connect_room` when the model needs to reopen the encrypted
-room without reparsing the link text.
+The `Share` control saves the current App document into the MCP checkpoint
+store, then uploads only encrypted snapshot bytes to the Tabula JSON snapshot
+service.
+It sends the resulting `https://tabula.md/#json=...,...` link back into model
+context. If the user has unsent App edits, the share handoff also includes the
+same compact change summary used by `Send Changes`, so the model can understand
+what changed without receiving the full Markdown body.
 Treat that link as a bearer secret.
 
 See [MCP App Architecture](docs/mcp-app-architecture.md) for the bundled App
@@ -207,13 +319,13 @@ double-clicking the file, dragging it into Claude Desktop, or using Settings ->
 Extensions -> Advanced settings -> Install Extension.
 
 No installation settings are required for normal use. After installation, create
-a local document with `tabula_create_document` or connect a room with
+a document with `tabula_create_document` or connect a room with
 `tabula_connect_room`. Hosted `https://tabula.md/#room=...` links use
-`https://rooms.tabula.md`, and local development links use
-`http://localhost:3002`. Clients that support MCP Apps can then open the
-interactive Tabula.md document surface. To share a local App document, use the
-App's `Share` control or ask the model to call `tabula_share_document`; this
-creates an encrypted room snapshot without installer configuration.
+`https://rooms.tabula.md`, and local development links use `http://localhost:3002`.
+Clients that support MCP Apps can then open the interactive Tabula.md document
+surface. To share an App document checkpoint, use the App's `Share` control or
+ask the model to call `tabula_share_document`; this creates an encrypted JSON
+snapshot link without installer configuration.
 
 The MCPB is intentionally read-only. Use manual MCP client configuration with
 `TABULA_MCP_ENABLE_WRITE=1` only for explicit write-enabled development or
@@ -296,16 +408,18 @@ The Tabula Room server must not receive:
 - decrypted Yjs updates
 - decrypted presence payloads
 
-Local App document checkpoints store plaintext Markdown in this machine's local
-application state. Local App draft recovery stores plaintext Markdown in the MCP
-App host browser's local storage. Both are intended only as local recovery for
-Claude Desktop or another trusted local MCP Apps host, and are separate from
-encrypted room sharing.
+MCP document checkpoints store plaintext Markdown because agents and the MCP App
+need the working draft for iterative editing. In local stdio/MCPB mode this lives
+on the user's machine by default. In remote HTTP mode this lives in the configured
+remote checkpoint store, so only deploy remote Tabula MCP where that service is
+allowed to hold temporary plaintext working state. This is separate from
+`tabula-json`, which stores only encrypted snapshot bytes.
 
-`tabula_share_document` creates a room id and 32-byte room key locally, encrypts
-the local Markdown as a Yjs snapshot, and uploads only that encrypted envelope to
-the configured room server. The returned share URL includes the room key in the
-fragment, so it should be shared only with intended collaborators or agents.
+`tabula_share_document` creates a 32-byte snapshot key locally, serializes the
+local Markdown as a Tabula JSON snapshot, and uploads only encrypted bytes to
+the configured JSON snapshot service. The returned share URL includes the
+snapshot key in the `#json` fragment, so it should be shared only with intended
+collaborators or agents.
 
 See [Security Model](docs/security-model.md) for the complete trust boundary and
 release-blocking security checks.

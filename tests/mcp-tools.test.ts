@@ -85,7 +85,9 @@ describe("MCP tool registration", () => {
       type: "object",
       properties: {
         sessionId: expect.objectContaining({ type: "string" }),
-        snapshotStatus: expect.objectContaining({ enum: ["missing", "restored"] }),
+        recoveryStatus: expect.objectContaining({ const: "relay-only" }),
+        hydrationStatus: expect.objectContaining({ enum: ["waiting-for-peer-state", "ready"] }),
+        stateReceived: expect.objectContaining({ type: "boolean" }),
         note: expect.objectContaining({ type: "string" }),
       },
     });
@@ -99,6 +101,8 @@ describe("MCP tool registration", () => {
       type: "object",
       properties: {
         roomServerUrl: expect.objectContaining({ type: "string" }),
+        hydrationStatus: expect.objectContaining({ enum: ["waiting-for-peer-state", "ready"] }),
+        stateReceived: expect.objectContaining({ type: "boolean" }),
         collaborators: expect.objectContaining({ type: "array" }),
       },
     });
@@ -107,6 +111,8 @@ describe("MCP tool registration", () => {
       properties: {
         markdown: expect.objectContaining({ type: "string" }),
         sha256: expect.objectContaining({ type: "string" }),
+        hydrationStatus: expect.objectContaining({ enum: ["waiting-for-peer-state", "ready"] }),
+        stateReceived: expect.objectContaining({ type: "boolean" }),
       },
     });
     expect(outlineTool?.outputSchema).toMatchObject({
@@ -376,8 +382,13 @@ describe("MCP tool registration", () => {
     );
   });
 
-  it("exports local Tabula documents as encrypted room share links", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 201 }));
+  it("exports local Tabula documents as encrypted JSON snapshot links", async () => {
+    const snapshotId = "snapshot_123";
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ id: snapshotId, data: `https://json.tabula.md/api/v2/${snapshotId}` }), {
+        status: 200,
+      }),
+    );
     globalThis.fetch = fetchMock as typeof fetch;
 
     await withClient(
@@ -401,49 +412,37 @@ describe("MCP tool registration", () => {
         const shared = shareResult.structuredContent as {
           share: {
             title: string;
-            roomId: string;
-            roomUrl: string;
+            linkKind: string;
+            snapshotId: string;
             shareUrl: string;
-            roomServerUrl: string;
+            jsonServerUrl: string;
+            snapshotUrl: string;
             encrypted: boolean;
             secret: boolean;
             keyLocation: string;
-            connect: {
-              tool: string;
-              arguments: {
-                roomUrl: string;
-                roomServerUrl: string;
-              };
-            };
           };
         };
 
         expect(shared.share).toMatchObject({
           title: "Share Draft",
-          roomServerUrl: "https://rooms.tabula.md",
+          linkKind: "json-snapshot",
+          snapshotId,
+          jsonServerUrl: "https://json.tabula.md",
+          snapshotUrl: `https://json.tabula.md/api/v2/${snapshotId}`,
           encrypted: true,
           secret: true,
           keyLocation: "url-fragment",
         });
-        expect(shared.share.shareUrl).toMatch(new RegExp(`^https://tabula\\.md/#room=${shared.share.roomId},`));
-        expect(shared.share.roomUrl).toBe(shared.share.shareUrl);
-        expect(shared.share.connect).toEqual({
-          tool: "tabula_connect_room",
-          arguments: {
-            roomUrl: shared.share.shareUrl,
-            roomServerUrl: "https://rooms.tabula.md",
-          },
-        });
+        expect(shared.share.shareUrl).toMatch(new RegExp(`^https://tabula\\.md/#json=${snapshotId},`));
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
         const [url, init] = fetchMock.mock.calls[0] ?? [];
-        expect(String(url)).toBe(`https://rooms.tabula.md/v1/rooms/${shared.share.roomId}/snapshot`);
+        expect(String(url)).toBe("https://json.tabula.md/api/v2/post/");
 
-        const body = String((init as RequestInit | undefined)?.body);
-        const roomKey = new URL(shared.share.shareUrl).hash.replace(new RegExp(`^#room=${shared.share.roomId},`), "");
-        expect(body).toContain('"kind":"snapshot"');
+        const body = Buffer.from((init as RequestInit | undefined)?.body as ArrayBuffer).toString("utf8");
+        const snapshotKey = new URL(shared.share.shareUrl).hash.replace(new RegExp(`^#json=${snapshotId},`), "");
         expect(body).not.toContain("Keep plaintext local");
-        expect(body).not.toContain(roomKey);
+        expect(body).not.toContain(snapshotKey);
       },
       { mcpApps: true },
     );
@@ -474,7 +473,7 @@ describe("MCP tool registration", () => {
         const errorText = shareResult.content?.[0]?.type === "text" ? shareResult.content[0].text : "";
 
         expect(shareResult.isError).toBe(true);
-        expect(errorText).toContain("Encrypted Tabula.md share upload failed with HTTP 503.");
+        expect(errorText).toContain("Encrypted Tabula.md snapshot upload failed with HTTP 503: unavailable.");
         expect(errorText).not.toContain("This plaintext must stay local");
         expect(shareResult.structuredContent).toBeUndefined();
         expect(fetchMock).toHaveBeenCalledTimes(1);

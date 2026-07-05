@@ -22,6 +22,7 @@ npm run typecheck
 npm test
 npm run test:app
 npm run test:stdio
+npm run check:deploy-targets
 npm run check:exports
 npm run check:pack
 npm run release:pack
@@ -39,8 +40,12 @@ Expected results:
   local document save/open, and encrypted share upload checks. The stdio smoke
   also runs a zero-config path with no Tabula-specific environment variables:
   it creates a document, writes the default local checkpoint, restarts the
-  server, reopens the checkpoint, and shares with an explicit room server
-  argument.
+  server, reopens the checkpoint, and shares with an explicit JSON snapshot
+  service argument.
+- HTTP server tests pass, including `/health` metadata and a Streamable HTTP MCP
+  client connection to `/mcp`.
+- Vercel and Cloudflare deployment target checks pass: the Vercel API entrypoint
+  smokes locally, and Wrangler bundles the Cloudflare Worker with `--dry-run`.
 - Package ESM subpath exports import from built `dist/`.
 - npm package dry-run includes built package files and excludes generated MCPB artifacts.
 - MCPB validates, packs, and passes `check:mcpb` against both the staging
@@ -99,12 +104,18 @@ before manual Claude Desktop testing.
 
 The packed artifact smoke also covers the zero-config document flow without
 `TABULA_MCP_DOCUMENT_STORE_DIR`, `TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS`,
-`TABULA_ROOM_URL`, or write-mode environment variables. Share tests pass the
-room server URL as a tool argument, matching the no-installer-settings MCPB
-model.
+`TABULA_JSON_URL`, `TABULA_ROOM_URL`, or write-mode environment variables. Share
+tests pass the JSON snapshot service URL as a tool argument, matching the
+no-installer-settings MCPB model.
 
 The default MCPB must be read-only for room writes. Write-enabled testing uses
 manual stdio configuration, not installer prompts.
+
+Hosted release checks must keep production guardrails intact: production remote
+HTTP requires `TABULA_MCP_AUTH_TOKEN` and Redis/Upstash REST credentials, applies
+Origin/request/rate/session limits, defaults document-only hosted traffic to
+stateless HTTP, and does not expose room connection tools unless
+`TABULA_MCP_ALLOW_REMOTE_ROOM=1` is explicitly set.
 
 ## Manual Claude Desktop Check
 
@@ -119,11 +130,12 @@ After installing the generated `.mcpb`:
 7. Call `tabula_list_documents` and confirm the document checkpoint appears.
 8. Call `tabula_open_document` and confirm the App reopens the checkpoint.
 9. Click Send Changes and confirm Claude receives a compact summary.
-10. Click Share and confirm Claude receives a `https://tabula.md/#room=...,...`
+10. Click Share and confirm Claude receives a `https://tabula.md/#json=...,...`
    link.
-11. Connect that link with `tabula_connect_room`.
-12. Open the room view with `tabula_open_room_view`.
-13. Confirm Markdown preview, outline, refresh, and selection handoff work.
+11. Open that link in Tabula.md and confirm the snapshot import flow starts.
+12. For room testing, connect a separate live room link with `tabula_connect_room`.
+13. Open the room view with `tabula_open_room_view`.
+14. Confirm Markdown preview, outline, refresh, and selection handoff work.
 
 For local Tabula.md development, run the room server separately and use local
 links such as:
@@ -155,15 +167,19 @@ Before release, inspect security-sensitive changes for:
 - hash fragment handling
 - room server request bodies
 - encrypted snapshot upload
-- local plaintext document checkpointing
+- local and remote plaintext document checkpointing
+- remote HTTP checkpoint store selection
+- Vercel and Cloudflare deployment entrypoints
 - local draft storage
 - write-mode gating
 - App-only tool visibility
 - manifest installer configuration
 
-Room keys and plaintext Markdown must stay inside the local MCP process and
-local MCP App host, except for encrypted snapshot envelopes sent to the room
-server.
+Room keys and plaintext Markdown must stay inside the intended MCP trust
+boundary. For local stdio/MCPB, that is the user's machine and MCP App host. For
+remote HTTP, that includes the hosted `tabula-mcp` process and configured
+checkpoint store. Encrypted room envelopes may go to the Tabula Room server;
+encrypted JSON snapshot bytes may go to the Tabula JSON snapshot service.
 
 ## PR Handoff Notes
 

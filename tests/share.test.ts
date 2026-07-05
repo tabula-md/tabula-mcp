@@ -4,14 +4,20 @@ import { decryptEnvelopeForRoom, importRoomKey } from "../src/crypto.js";
 import { decodeBase64Url, encodeBase64Url, type EncryptedEnvelope } from "../src/protocol.js";
 import {
   createEncryptedMarkdownSnapshot,
+  createEncryptedJsonShareSnapshot,
+  createJsonShareUrl,
   createRoomShareUrl,
+  generateJsonShareKey,
   generateRoomId,
   generateRoomKey,
+  resolveJsonShareServerUrl,
   shareMarkdownDocument,
 } from "../src/share.js";
 
 const roomId = "room_123";
 const roomKey = encodeBase64Url(new Uint8Array(32).fill(7));
+const snapshotId = "snapshot_123";
+const snapshotKey = encodeBase64Url(new Uint8Array(32).fill(9));
 
 const restoreMarkdown = async (envelope: EncryptedEnvelope) => {
   const importedRoomKey = await importRoomKey(roomKey);
@@ -26,17 +32,24 @@ const restoreMarkdown = async (envelope: EncryptedEnvelope) => {
 };
 
 describe("Tabula document sharing", () => {
-  it("generates URL-safe room ids and 32-byte keys", () => {
+  it("generates URL-safe room ids and 32-byte share keys", () => {
     expect(generateRoomId()).toMatch(/^[A-Za-z0-9_-]+$/);
 
     const generatedRoomKey = generateRoomKey();
     expect(generatedRoomKey).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(decodeBase64Url(generatedRoomKey).byteLength).toBe(32);
+
+    const generatedSnapshotKey = generateJsonShareKey();
+    expect(generatedSnapshotKey).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(decodeBase64Url(generatedSnapshotKey).byteLength).toBe(32);
   });
 
-  it("creates share URLs with the room key in the fragment", () => {
+  it("creates room and JSON share URLs with keys in the fragment", () => {
     expect(createRoomShareUrl({ appOrigin: "https://tabula.md", roomId, roomKey })).toBe(
       `https://tabula.md/#room=${roomId},${roomKey}`,
+    );
+    expect(createJsonShareUrl({ appOrigin: "https://tabula.md", snapshotId, snapshotKey })).toBe(
+      `https://tabula.md/#json=${snapshotId},${snapshotKey}`,
     );
   });
 
@@ -57,11 +70,33 @@ describe("Tabula document sharing", () => {
     expect(await restoreMarkdown(envelope)).toBe("# Secret\n\nLocal only");
   });
 
-  it("uploads only an encrypted snapshot and returns a bearer share URL", async () => {
+  it("encrypts Markdown into an opaque JSON snapshot blob", async () => {
+    const encrypted = await createEncryptedJsonShareSnapshot({
+      title: "Secret Plan",
+      markdown: "# Secret\n\nLocal only",
+      snapshotKey,
+      now: () => new Date("2026-07-05T00:00:00.000Z"),
+    });
+    const body = Buffer.from(encrypted).toString("utf8");
+
+    expect(encrypted.slice(0, 4)).toEqual(new Uint8Array([0x54, 0x42, 0x45, 0x31]));
+    expect(body).not.toContain("# Secret");
+    expect(body).not.toContain("Local only");
+    expect(body).not.toContain(snapshotKey);
+  });
+
+  it("uploads only an encrypted JSON snapshot and returns a bearer share URL", async () => {
     const fetchCalls: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       fetchCalls.push({ url: String(url), init: init ?? {} });
-      return new Response(JSON.stringify({ ok: true }), { status: 201 });
+      return new Response(
+        JSON.stringify({
+          id: snapshotId,
+          data: `https://json.tabula.md/api/v2/${snapshotId}`,
+          expiresAt: "2026-07-12T00:00:00.000Z",
+        }),
+        { status: 200 },
+      );
     };
 
     const result = await shareMarkdownDocument({
@@ -69,81 +104,82 @@ describe("Tabula document sharing", () => {
       markdown: "# Secret\n\nDo not upload plaintext",
       appOrigin: "https://tabula.md",
       fetchImpl,
-      roomId,
-      roomKey,
+      snapshotKey,
+      now: () => new Date("2026-07-05T00:00:00.000Z"),
     });
 
     expect(result).toMatchObject({
       title: "Secret Plan",
-      roomId,
+      linkKind: "json-snapshot",
+      snapshotId,
       appOrigin: "https://tabula.md",
-      roomServerUrl: "https://rooms.tabula.md",
-      roomUrl: `https://tabula.md/#room=${roomId},${roomKey}`,
-      shareUrl: `https://tabula.md/#room=${roomId},${roomKey}`,
+      jsonServerUrl: "https://json.tabula.md",
+      snapshotUrl: `https://json.tabula.md/api/v2/${snapshotId}`,
+      shareUrl: `https://tabula.md/#json=${snapshotId},${snapshotKey}`,
       encrypted: true,
       secret: true,
       keyLocation: "url-fragment",
       textLength: "# Secret\n\nDo not upload plaintext".length,
-      snapshotVersion: 1,
-      connect: {
-        tool: "tabula_connect_room",
-        arguments: {
-          roomUrl: `https://tabula.md/#room=${roomId},${roomKey}`,
-          roomServerUrl: "https://rooms.tabula.md",
-        },
-      },
+      expiresAt: "2026-07-12T00:00:00.000Z",
     });
     expect(fetchCalls).toHaveLength(1);
-    expect(fetchCalls[0]?.url).toBe(`https://rooms.tabula.md/v1/rooms/${roomId}/snapshot`);
+    expect(fetchCalls[0]?.url).toBe("https://json.tabula.md/api/v2/post/");
 
-    const body = String(fetchCalls[0]?.init.body);
+    const body = Buffer.from(fetchCalls[0]?.init.body as ArrayBuffer).toString("utf8");
+    expect(fetchCalls[0]?.init.method).toBe("POST");
+    expect(fetchCalls[0]?.init.headers).toEqual({ "content-type": "application/octet-stream" });
     expect(body).not.toContain("# Secret");
     expect(body).not.toContain("Do not upload plaintext");
-    expect(body).not.toContain(roomKey);
-    expect(JSON.parse(body)).toMatchObject({
-      roomId,
-      kind: "snapshot",
-    });
+    expect(body).not.toContain(snapshotKey);
   });
 
-  it("uses local room server defaults for localhost app origins", async () => {
-    const fetchImpl = async () => new Response(JSON.stringify({ ok: true }), { status: 201 });
+  it("uses local JSON snapshot service defaults for localhost app origins", async () => {
+    const fetchImpl = async () =>
+      new Response(JSON.stringify({ id: snapshotId, data: `http://localhost:3004/api/v2/${snapshotId}` }), {
+        status: 200,
+      });
     const result = await shareMarkdownDocument({
       markdown: "# Local",
       appOrigin: "http://localhost:5173",
       fetchImpl,
-      roomId,
-      roomKey,
+      snapshotKey,
     });
 
-    expect(result.roomServerUrl).toBe("http://localhost:3002");
-    expect(result.roomUrl).toBe(`http://localhost:5173/#room=${roomId},${roomKey}`);
-    expect(result.shareUrl).toBe(`http://localhost:5173/#room=${roomId},${roomKey}`);
-    expect(result.connect.arguments).toEqual({
-      roomUrl: `http://localhost:5173/#room=${roomId},${roomKey}`,
-      roomServerUrl: "http://localhost:3002",
-    });
+    expect(result.jsonServerUrl).toBe("http://localhost:3004");
+    expect(result.snapshotUrl).toBe(`http://localhost:3004/api/v2/${snapshotId}`);
+    expect(result.shareUrl).toBe(`http://localhost:5173/#json=${snapshotId},${snapshotKey}`);
   });
 
-  it("preserves custom room server URLs in reconnect arguments", async () => {
-    const fetchImpl = async () => new Response(JSON.stringify({ ok: true }), { status: 201 });
+  it("preserves custom JSON snapshot service URLs", async () => {
+    const fetchImpl = async () =>
+      new Response(JSON.stringify({ id: snapshotId, data: `https://json.example.com/api/v2/${snapshotId}` }), {
+        status: 200,
+      });
     const result = await shareMarkdownDocument({
       markdown: "# Custom Transport",
       appOrigin: "https://tabula.md",
-      roomServerUrl: "https://rooms.example.com/",
+      jsonServerUrl: "https://json.example.com/",
       fetchImpl,
-      roomId,
-      roomKey,
+      snapshotKey,
     });
 
-    expect(result.roomServerUrl).toBe("https://rooms.example.com");
-    expect(result.connect).toEqual({
-      tool: "tabula_connect_room",
-      arguments: {
-        roomUrl: `https://tabula.md/#room=${roomId},${roomKey}`,
-        roomServerUrl: "https://rooms.example.com",
-      },
-    });
+    expect(result.jsonServerUrl).toBe("https://json.example.com");
+    expect(result.snapshotUrl).toBe(`https://json.example.com/api/v2/${snapshotId}`);
+    expect(result.shareUrl).toBe(`https://tabula.md/#json=${snapshotId},${snapshotKey}`);
+  });
+
+  it("resolves JSON snapshot service URLs", () => {
+    expect(resolveJsonShareServerUrl({ appOrigin: "https://tabula.md", env: {} })).toBe("https://json.tabula.md");
+    expect(resolveJsonShareServerUrl({ appOrigin: "http://localhost:5173", env: {} })).toBe("http://localhost:3004");
+    expect(
+      resolveJsonShareServerUrl({
+        appOrigin: "https://tabula.example.com",
+        env: { TABULA_JSON_URL: "https://json.example.com/" },
+      }),
+    ).toBe("https://json.example.com");
+    expect(() => resolveJsonShareServerUrl({ appOrigin: "https://tabula.example.com", env: {} })).toThrow(
+      /JSON snapshot service URL/,
+    );
   });
 
   it("returns clear errors when encrypted upload fails", async () => {
@@ -151,9 +187,8 @@ describe("Tabula document sharing", () => {
       shareMarkdownDocument({
         markdown: "# Draft",
         fetchImpl: async () => new Response(JSON.stringify({ error: "nope" }), { status: 500 }),
-        roomId,
-        roomKey,
+        snapshotKey,
       }),
-    ).rejects.toThrow(/HTTP 500/);
+    ).rejects.toThrow(/HTTP 500: nope/);
   });
 });

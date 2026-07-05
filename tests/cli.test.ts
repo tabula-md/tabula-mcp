@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { isDirectRun } from "../src/cli.js";
+import { isDirectRun, parseCliOptions } from "../src/cli.js";
 
 describe("CLI entrypoint detection", () => {
   it("recognizes direct execution through a symlinked path", () => {
@@ -28,5 +28,23 @@ describe("CLI entrypoint detection", () => {
 
   it("returns false when there is no entrypoint argv", () => {
     expect(isDirectRun(import.meta.url, ["node"])).toBe(false);
+  });
+});
+
+describe("CLI options", () => {
+  it("defaults to stdio mode", () => {
+    expect(parseCliOptions([])).toEqual({ mode: "stdio", port: undefined, host: undefined });
+  });
+
+  it("enables HTTP mode with host and port flags", () => {
+    expect(parseCliOptions(["--http", "--host", "127.0.0.1", "--port=3333"])).toEqual({
+      mode: "http",
+      host: "127.0.0.1",
+      port: 3333,
+    });
+  });
+
+  it("lets --stdio override --http for existing local MCP launchers", () => {
+    expect(parseCliOptions(["--http", "--stdio"])).toMatchObject({ mode: "stdio" });
   });
 });

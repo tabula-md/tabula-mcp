@@ -193,7 +193,8 @@ const runDocumentFlow = async (baseUrl, browser) => {
   const share = events.modelContexts.find((payload) => payload?.structuredContent?.tabulaShare);
   assert(share, "document flow should send encrypted share context");
   assert.equal(share.structuredContent.tabulaShare.encrypted, true);
-  assert.match(share.structuredContent.tabulaShare.shareUrl, /#room=[^,]+,/);
+  assert.equal(share.structuredContent.tabulaShare.linkKind, "json-snapshot");
+  assert.match(share.structuredContent.tabulaShare.shareUrl, /#json=[^,]+,/);
   assert(
     share.structuredContent.tabulaDocumentChange,
     "share context should include any unsent compact document change summary",

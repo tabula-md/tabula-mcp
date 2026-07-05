@@ -15,6 +15,9 @@ export const summarizeRoomStatus = (status: RoomStatus) => ({
   sha256: status.sha256,
   peerCount: status.peerCount,
   collaboratorCount: status.collaborators.length,
+  hydrationStatus: status.hydrationStatus,
+  stateReceived: status.stateReceived,
+  ...(status.lastStateReceivedAt ? { lastStateReceivedAt: status.lastStateReceivedAt } : {}),
 });
 
 export const documentSnapshotContent = (document: TabulaDocumentSnapshot) => ({

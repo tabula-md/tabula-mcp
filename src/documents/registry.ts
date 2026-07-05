@@ -26,24 +26,24 @@ export class DocumentRegistry {
       updatedAt: createdAt,
     };
 
-    this.#store.set(document);
+    await this.#store.set(document);
 
     return createDocumentSnapshot(document);
   }
 
   async get(documentId?: string) {
-    return createDocumentSnapshot(requireStoredDocument(this.#store, documentId));
+    return createDocumentSnapshot(await requireStoredDocument(this.#store, documentId));
   }
 
   async list() {
-    const snapshots = await Promise.all(this.#store.list().map(createDocumentSnapshot));
+    const snapshots = await Promise.all((await this.#store.list()).map(createDocumentSnapshot));
     return snapshots.map(summarizeDocument);
   }
 
   async update({ documentId, title, markdown }: { documentId: string; title?: string; markdown: string }) {
     assertMarkdownSize(markdown);
 
-    const document = requireStoredDocument(this.#store, documentId);
+    const document = await requireStoredDocument(this.#store, documentId);
     const updatedDocument = {
       ...document,
       title: title ? inferDocumentTitle(title, markdown) : document.title,
@@ -51,12 +51,12 @@ export class DocumentRegistry {
       updatedAt: new Date().toISOString(),
     };
 
-    this.#store.set(updatedDocument);
+    await this.#store.set(updatedDocument);
 
     return createDocumentSnapshot(updatedDocument);
   }
 
-  clear() {
-    this.#store.clear();
+  async clear() {
+    await this.#store.clear();
   }
 }

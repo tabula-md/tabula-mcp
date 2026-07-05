@@ -8,12 +8,22 @@ const expectedExports = [
   {
     specifier: ".",
     declaration: "dist/index.d.ts",
-    values: ["createTabulaMcpServer", "resolveWriteEnabled"],
+    values: [
+      "createTabulaMcpServer",
+      "createTabulaMcpHttpServer",
+      "createTabulaMcpWebHandler",
+      "resolveWriteEnabled",
+    ],
   },
   {
     specifier: "./server",
     declaration: "dist/server/index.d.ts",
-    values: ["createTabulaMcpServer", "resolveWriteEnabled"],
+    values: [
+      "createTabulaMcpServer",
+      "createTabulaMcpHttpServer",
+      "createTabulaMcpWebHandler",
+      "resolveWriteEnabled",
+    ],
   },
   {
     specifier: "./protocol",
@@ -23,7 +33,7 @@ const expectedExports = [
   {
     specifier: "./documents",
     declaration: "dist/documents/index.d.ts",
-    values: ["DocumentRegistry", "MemoryDocumentStore", "FileDocumentStore"],
+    values: ["DocumentRegistry", "MemoryDocumentStore", "FileDocumentStore", "UpstashRedisDocumentStore"],
   },
 ];
 

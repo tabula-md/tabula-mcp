@@ -7,8 +7,18 @@ const requiredFiles = [
   "assets/icon.png",
   "dist/index.js",
   "dist/index.d.ts",
+  "dist/env.js",
+  "dist/env.d.ts",
   "dist/server/index.js",
   "dist/server/index.d.ts",
+  "dist/server/http.js",
+  "dist/server/http.d.ts",
+  "dist/server/operational-policy.js",
+  "dist/server/operational-policy.d.ts",
+  "dist/server/origin-policy.js",
+  "dist/server/origin-policy.d.ts",
+  "dist/server/web.js",
+  "dist/server/web.d.ts",
   "dist/protocol.js",
   "dist/protocol.d.ts",
   "dist/documents/index.js",
@@ -16,6 +26,9 @@ const requiredFiles = [
   "dist/document-app.html",
   "README.md",
   "LICENSE",
+  "SECURITY.md",
+  "CONTRIBUTING.md",
+  "CHANGELOG.md",
 ];
 
 const isForbiddenGeneratedArtifact = (filePath) =>

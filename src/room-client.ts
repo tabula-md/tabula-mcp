@@ -9,7 +9,6 @@ import {
 } from "./crypto.js";
 import {
   assertEncryptedEnvelope,
-  type EncryptedEnvelope,
   type EnvelopeKind,
   type ParsedRoomShareUrl,
   TabulaMcpError,
@@ -22,6 +21,8 @@ import {
 } from "./text.js";
 
 export type ConnectionStatus = "connecting" | "connected" | "offline" | "closed";
+export type RoomRecoveryStatus = "relay-only";
+export type RoomHydrationStatus = "waiting-for-peer-state" | "ready";
 
 export type LiveSelection = {
   from: number;
@@ -55,6 +56,9 @@ type WaitResult = {
   changed: boolean;
   markdown: string;
   sha256: string;
+  hydrationStatus: RoomHydrationStatus;
+  stateReceived: boolean;
+  lastStateReceivedAt?: string;
 };
 
 type JoinedPayload = {
@@ -86,6 +90,9 @@ const isPeersPayload = (value: unknown, roomId: string): value is PeersPayload =
   value.roomId === roomId &&
   Array.isArray(value.peers) &&
   value.peers.every((peer) => typeof peer === "string");
+
+const isPeerJoinedPayload = (value: unknown, roomId: string): value is { roomId: string; clientId: string } =>
+  isRecord(value) && value.roomId === roomId && typeof value.clientId === "string";
 
 const decodePresence = (bytes: Uint8Array): Collaborator | null => {
   try {
@@ -123,10 +130,11 @@ export class TabulaRoomClient {
   private socket: Socket | null = null;
   private roomKey: CryptoKey | null = null;
   private envelopeVersion = 0;
-  private snapshotTimer: ReturnType<typeof setTimeout> | null = null;
   private peerCount = 0;
   private statusValue: ConnectionStatus = "connecting";
   private lastErrorValue = "";
+  private hasReceivedState = false;
+  private lastStateReceivedAtValue = "";
 
   constructor({ parsedRoom, roomServerUrl, writeAccess, identityName, identityColor }: RoomClientOptions) {
     this.roomId = parsedRoom.roomId;
@@ -154,7 +162,6 @@ export class TabulaRoomClient {
       }
 
       void this.emitEnvelope("yjs-update", update);
-      this.scheduleSnapshot();
     });
   }
 
@@ -174,22 +181,22 @@ export class TabulaRoomClient {
     return [...this.collaborators.values()].sort((first, second) => first.name.localeCompare(second.name));
   }
 
+  get hydrationStatus(): RoomHydrationStatus {
+    return this.hasReceivedState ? "ready" : "waiting-for-peer-state";
+  }
+
   async connect() {
     this.statusValue = "connecting";
     this.roomKey = await importRoomKey(this.roomKeyValue);
     await this.connectSocket();
-    const snapshotStatus = await this.restoreSnapshot();
+    this.statusValue = "connected";
     await this.publishPresence();
 
     if (this.writeAccess) {
       await this.emitEnvelope("yjs-update", Y.encodeStateAsUpdate(this.doc));
-      if (snapshotStatus === "missing" && this.markdown.length > 0) {
-        await this.storeSnapshot();
-      }
     }
 
-    this.statusValue = "connected";
-    return snapshotStatus;
+    return "relay-only" satisfies RoomRecoveryStatus;
   }
 
   async getStatus() {
@@ -204,6 +211,7 @@ export class TabulaRoomClient {
       textLength: this.markdown.length,
       sha256: await sha256Text(this.markdown),
       socketConnected: Boolean(this.socket?.connected),
+      ...this.roomStateReadiness(),
       peerCount: this.peerCount,
       collaborators: this.collaboratorList.map(({ id, name, color, fileTitle, selection, lastSeen }) => ({
         id,
@@ -225,6 +233,7 @@ export class TabulaRoomClient {
       markdown: this.markdown,
       textLength: this.markdown.length,
       sha256: await sha256Text(this.markdown),
+      ...this.roomStateReadiness(),
     };
   }
 
@@ -234,12 +243,16 @@ export class TabulaRoomClient {
       roomId: this.roomId,
       outline: getMarkdownOutline(this.markdown),
       sha256: await sha256Text(this.markdown),
+      ...this.roomStateReadiness(),
     };
   }
 
   async applyPatches({ patches, baseSha256 }: { patches: readonly TextPatch[]; baseSha256?: string }) {
     if (!this.writeAccess) {
       throw new TabulaMcpError("This session is read-only. Restart tabula-mcp with write mode enabled before editing.");
+    }
+    if (!this.hasReceivedState) {
+      throw new TabulaMcpError("Room state has not been received yet. Wait for a live peer to send state-init/yjs-update before editing.");
     }
 
     const previousMarkdown = this.markdown;
@@ -276,7 +289,6 @@ export class TabulaRoomClient {
       }
     }, "local");
 
-    await this.storeSnapshot();
     const sha256 = await sha256Text(this.markdown);
     return {
       sessionId: this.sessionId,
@@ -315,6 +327,7 @@ export class TabulaRoomClient {
         changed: true,
         markdown: currentMarkdown,
         sha256: currentSha256,
+        ...this.roomStateReadiness(),
       };
     }
 
@@ -325,6 +338,7 @@ export class TabulaRoomClient {
           changed: false,
           markdown: this.markdown,
           sha256: currentSha256,
+          ...this.roomStateReadiness(),
         });
       }, Math.max(0, Math.min(timeoutMs, 30_000)));
 
@@ -339,17 +353,14 @@ export class TabulaRoomClient {
 
   disconnect() {
     this.statusValue = "closed";
-    if (this.snapshotTimer) {
-      clearTimeout(this.snapshotTimer);
-      this.snapshotTimer = null;
-    }
     for (const waiter of this.waiters) {
       clearTimeout(waiter.timer);
-      waiter.resolve({
-        changed: false,
-        markdown: this.markdown,
-        sha256: "",
-      });
+        waiter.resolve({
+          changed: false,
+          markdown: this.markdown,
+          sha256: "",
+          ...this.roomStateReadiness(),
+        });
     }
     this.waiters.clear();
     this.socket?.disconnect();
@@ -368,6 +379,13 @@ export class TabulaRoomClient {
     socket.on("room:message", (envelope) => {
       void this.applyIncomingEnvelope(envelope);
     });
+    socket.on("room:peer-joined", (message) => {
+      if (!isPeerJoinedPayload(message, this.roomId) || message.clientId === this.identity.id) {
+        return;
+      }
+      void this.emitCurrentState();
+      void this.publishPresence();
+    });
     socket.on("room:peers", (message) => {
       if (!isPeersPayload(message, this.roomId)) {
         return;
@@ -378,6 +396,10 @@ export class TabulaRoomClient {
         if (!peers.has(collaboratorId)) {
           this.collaborators.delete(collaboratorId);
         }
+      }
+      if (message.peers.length > 1) {
+        void this.emitCurrentState();
+        void this.publishPresence();
       }
     });
     socket.on("room:error", (message: { error?: string }) => {
@@ -437,30 +459,6 @@ export class TabulaRoomClient {
     return response.json() as Promise<unknown>;
   }
 
-  private async restoreSnapshot() {
-    if (!this.roomKey) {
-      throw new TabulaMcpError("Room key is not available.");
-    }
-
-    const response = await fetch(`${this.roomServerUrl}/v1/rooms/${encodeURIComponent(this.roomId)}/snapshot`);
-    if (response.status === 404) {
-      this.notifyChange();
-      return "missing" as const;
-    }
-    if (!response.ok) {
-      throw new TabulaMcpError(`Room snapshot request failed with HTTP ${response.status}.`);
-    }
-
-    const envelope = assertEncryptedEnvelope(await response.json(), this.roomId, "snapshot");
-    const previousMarkdown = this.markdown;
-    const update = await decryptEnvelopeForRoom(this.roomKey, envelope);
-    Y.applyUpdate(this.doc, update, REMOTE_ORIGIN);
-    if (this.markdown !== previousMarkdown) {
-      this.notifyChange();
-    }
-    return "restored" as const;
-  }
-
   private async applyIncomingEnvelope(value: unknown) {
     if (!this.roomKey) {
       return;
@@ -469,9 +467,10 @@ export class TabulaRoomClient {
     try {
       const envelope = assertEncryptedEnvelope(value, this.roomId);
       const plaintext = await decryptEnvelopeForRoom(this.roomKey, envelope);
-      if (envelope.kind === "yjs-update") {
+      if (envelope.kind === "yjs-update" || envelope.kind === "state-init") {
         const previousMarkdown = this.markdown;
         Y.applyUpdate(this.doc, plaintext, REMOTE_ORIGIN);
+        this.markReceivedState();
         if (this.markdown !== previousMarkdown) {
           this.notifyChange();
         }
@@ -498,7 +497,7 @@ export class TabulaRoomClient {
     return encryptBytesForRoom(this.roomKey, this.roomId, kind, this.envelopeVersion, plaintext);
   }
 
-  private async emitEnvelope(kind: EnvelopeKind, plaintext: Uint8Array) {
+  private async emitEnvelope(kind: EnvelopeKind, plaintext: Uint8Array, options: { volatile?: boolean } = {}) {
     if (!this.socket?.connected || this.statusValue === "closed") {
       return false;
     }
@@ -506,7 +505,7 @@ export class TabulaRoomClient {
     const envelope = await this.encryptEnvelope(kind, plaintext);
     return new Promise<boolean>((resolve) => {
       const timeout = setTimeout(() => resolve(false), 3_000);
-      this.socket?.emit("room:message", envelope, (ack: { ok?: boolean; error?: string }) => {
+      this.socket?.emit(options.volatile ? "room:volatile-message" : "room:message", envelope, (ack: { ok?: boolean; error?: string }) => {
         clearTimeout(timeout);
         if (ack?.ok === false) {
           this.lastErrorValue = ack.error || "Room message was rejected.";
@@ -520,45 +519,25 @@ export class TabulaRoomClient {
 
   private async publishPresence() {
     this.identity.lastSeen = Date.now();
-    const payload = textEncoder.encode(JSON.stringify(this.identity));
-    await this.emitEnvelope("presence", payload);
+    const payload = textEncoder.encode(JSON.stringify({ ...this.identity, roomId: this.roomId }));
+    await this.emitEnvelope("presence", payload, { volatile: true });
   }
 
-  private scheduleSnapshot() {
-    if (!this.writeAccess) {
-      return;
-    }
-    if (this.snapshotTimer) {
-      clearTimeout(this.snapshotTimer);
-    }
-    this.snapshotTimer = setTimeout(() => {
-      void this.storeSnapshot().catch((error) => {
-        this.lastErrorValue = error instanceof Error ? error.message : "Snapshot could not be stored.";
-      });
-    }, 1_000);
+  private async emitCurrentState() {
+    await this.emitEnvelope("state-init", Y.encodeStateAsUpdate(this.doc));
   }
 
-  private async storeSnapshot() {
-    if (!this.writeAccess) {
-      return;
-    }
-    if (this.snapshotTimer) {
-      clearTimeout(this.snapshotTimer);
-      this.snapshotTimer = null;
-    }
+  private roomStateReadiness() {
+    return {
+      hydrationStatus: this.hydrationStatus,
+      stateReceived: this.hasReceivedState,
+      ...(this.lastStateReceivedAtValue ? { lastStateReceivedAt: this.lastStateReceivedAtValue } : {}),
+    };
+  }
 
-    const envelope = await this.encryptEnvelope("snapshot", Y.encodeStateAsUpdate(this.doc));
-    const response = await fetch(`${this.roomServerUrl}/v1/rooms/${encodeURIComponent(this.roomId)}/snapshot`, {
-      method: "PUT",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(envelope satisfies EncryptedEnvelope),
-    });
-
-    if (!response.ok) {
-      throw new TabulaMcpError(`Room snapshot store failed with HTTP ${response.status}.`);
-    }
+  private markReceivedState() {
+    this.hasReceivedState = true;
+    this.lastStateReceivedAtValue = new Date().toISOString();
   }
 
   private notifyChange() {
@@ -577,6 +556,7 @@ export class TabulaRoomClient {
           changed: true,
           markdown: this.markdown,
           sha256,
+          ...this.roomStateReadiness(),
         });
       }
     });

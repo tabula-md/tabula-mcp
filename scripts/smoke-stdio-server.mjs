@@ -24,24 +24,30 @@ const collectRequestBody = async (request) =>
   new Promise((resolve, reject) => {
     const chunks = [];
     request.on("data", (chunk) => chunks.push(chunk));
-    request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    request.on("end", () => resolve(Buffer.concat(chunks)));
     request.on("error", reject);
   });
 
 const createShareCaptureServer = async () => {
   const uploads = [];
   const server = createHttpServer(async (request, response) => {
-    if (request.method !== "PUT" || !request.url?.startsWith("/v1/rooms/")) {
+    if (request.method !== "POST" || request.url !== "/api/v2/post/") {
       response.writeHead(404).end();
       return;
     }
 
+    const snapshotId = `snapshot_${String(uploads.length + 1).padStart(3, "0")}`;
     uploads.push({
       method: request.method,
       url: request.url,
       body: await collectRequestBody(request),
     });
-    response.writeHead(201, { "content-type": "application/json" }).end(JSON.stringify({ ok: true }));
+    response.writeHead(200, { "content-type": "application/json" }).end(
+      JSON.stringify({
+        id: snapshotId,
+        data: `http://${request.headers.host}/api/v2/${snapshotId}`,
+      }),
+    );
   });
 
   await new Promise((resolve, reject) => {
@@ -103,9 +109,9 @@ const parseArgs = (argv) => {
   return parsed;
 };
 
-const configuredServerEnv = ({ storeDir, roomServerUrl }) => ({
+const configuredServerEnv = ({ storeDir, jsonServerUrl }) => ({
   TABULA_MCP_DOCUMENT_STORE_DIR: storeDir,
-  TABULA_ROOM_URL: roomServerUrl,
+  TABULA_JSON_URL: jsonServerUrl,
 });
 
 const zeroConfigServerEnv = (homeDir) => ({
@@ -155,15 +161,15 @@ const withStdioClient = async ({ mcpApps = false, serverCwd, serverEntrypoint, s
 
 const toolNamesFrom = (tools) => tools.tools.map((tool) => tool.name);
 
-const roomKeyFromShareUrl = (shareUrl) => {
+const snapshotKeyFromShareUrl = (shareUrl) => {
   const url = new URL(shareUrl);
-  const roomValue = url.hash.replace(/^#room=/, "");
-  const [, roomKey] = roomValue.split(",");
-  return roomKey || "";
+  const jsonValue = url.hash.replace(/^#json=/, "");
+  const [, snapshotKey] = jsonValue.split(",");
+  return snapshotKey || "";
 };
 
-const runNonAppClientSmoke = async ({ storeDir, roomServerUrl, serverCwd, serverEntrypoint }) => {
-  const serverEnv = configuredServerEnv({ storeDir, roomServerUrl });
+const runNonAppClientSmoke = async ({ storeDir, jsonServerUrl, serverCwd, serverEntrypoint }) => {
+  const serverEnv = configuredServerEnv({ storeDir, jsonServerUrl });
   await withStdioClient({ serverCwd, serverEntrypoint, serverEnv }, async (client) => {
     const tools = await client.listTools();
     const toolNames = toolNamesFrom(tools);
@@ -181,8 +187,8 @@ const runNonAppClientSmoke = async ({ storeDir, roomServerUrl, serverCwd, server
   });
 };
 
-const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads, serverCwd, serverEntrypoint }) => {
-  const serverEnv = configuredServerEnv({ storeDir, roomServerUrl });
+const runAppClientSmoke = async ({ storeDir, jsonServerUrl, uploads, serverCwd, serverEntrypoint }) => {
+  const serverEnv = configuredServerEnv({ storeDir, jsonServerUrl });
   return withStdioClient({ mcpApps: true, serverCwd, serverEntrypoint, serverEnv }, async (client) => {
     const tools = await client.listTools();
     const toolNames = toolNamesFrom(tools);
@@ -244,14 +250,14 @@ const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads, serverCwd, 
     });
     const share = shareResult.structuredContent?.share;
     assert.equal(share?.encrypted, true);
-    assert.equal(share?.roomServerUrl, roomServerUrl);
-    assert.match(share?.shareUrl || "", /^http:\/\/127\.0\.0\.1:5173\/#room=[^,]+,/);
+    assert.equal(share?.jsonServerUrl, jsonServerUrl);
+    assert.match(share?.shareUrl || "", /^http:\/\/127\.0\.0\.1:5173\/#json=[^,]+,/);
 
     assert.equal(uploads.length, 1, "share flow should upload exactly one encrypted snapshot");
-    assert.match(uploads[0].url, /^\/v1\/rooms\/[^/]+\/snapshot$/);
-    assert(uploads[0].body.includes('"kind":"snapshot"'), "share upload should contain an encrypted snapshot envelope");
-    assert(!uploads[0].body.includes("Updated local checkpoint"), "share upload must not include plaintext Markdown");
-    assert(!uploads[0].body.includes(roomKeyFromShareUrl(share.shareUrl)), "share upload must not include the room key");
+    assert.equal(uploads[0].url, "/api/v2/post/");
+    const uploadText = uploads[0].body.toString("utf8");
+    assert(!uploadText.includes("Updated local checkpoint"), "share upload must not include plaintext Markdown");
+    assert(!uploadText.includes(snapshotKeyFromShareUrl(share.shareUrl)), "share upload must not include the snapshot key");
 
     return {
       documentId,
@@ -263,14 +269,14 @@ const runAppClientSmoke = async ({ storeDir, roomServerUrl, uploads, serverCwd, 
 
 const runRestartPersistenceSmoke = async ({
   storeDir,
-  roomServerUrl,
+  jsonServerUrl,
   documentId,
   title,
   updatedMarkdown,
   serverCwd,
   serverEntrypoint,
 }) => {
-  const serverEnv = configuredServerEnv({ storeDir, roomServerUrl });
+  const serverEnv = configuredServerEnv({ storeDir, jsonServerUrl });
   await withStdioClient({ mcpApps: true, serverCwd, serverEntrypoint, serverEnv }, async (client) => {
     const listResult = await client.callTool({ name: "tabula_list_documents", arguments: {} });
     const restored = listResult.structuredContent?.documents?.find((document) => document.documentId === documentId);
@@ -288,7 +294,7 @@ const runRestartPersistenceSmoke = async ({
   });
 };
 
-const runZeroConfigSmoke = async ({ roomServerUrl, uploads, serverCwd, serverEntrypoint }) => {
+const runZeroConfigSmoke = async ({ jsonServerUrl, uploads, serverCwd, serverEntrypoint }) => {
   const homeDir = await mkdtemp(path.join(tmpdir(), "tabula-mcp-zero-home-"));
   const serverEnv = zeroConfigServerEnv(homeDir);
   const updatedMarkdown = "# Zero Config Smoke\n\nSaved without Tabula installer env.";
@@ -332,15 +338,16 @@ const runZeroConfigSmoke = async ({ roomServerUrl, uploads, serverCwd, serverEnt
         arguments: {
           documentId,
           appOrigin: "http://127.0.0.1:5173",
-          roomServerUrl,
+          jsonServerUrl,
         },
       });
       const share = shareResult.structuredContent?.share;
-      assert.equal(share?.roomServerUrl, roomServerUrl);
-      assert.match(share?.shareUrl || "", /^http:\/\/127\.0\.0\.1:5173\/#room=[^,]+,/);
+      assert.equal(share?.jsonServerUrl, jsonServerUrl);
+      assert.match(share?.shareUrl || "", /^http:\/\/127\.0\.0\.1:5173\/#json=[^,]+,/);
       assert.equal(uploads.length, uploadCountBeforeShare + 1, "zero-config share should upload one encrypted snapshot");
-      assert(!uploads.at(-1)?.body.includes("Saved without Tabula installer env"), "zero-config share upload must not include plaintext");
-      assert(!uploads.at(-1)?.body.includes(roomKeyFromShareUrl(share.shareUrl)), "zero-config share upload must not include the room key");
+      const uploadText = uploads.at(-1)?.body.toString("utf8") ?? "";
+      assert(!uploadText.includes("Saved without Tabula installer env"), "zero-config share upload must not include plaintext");
+      assert(!uploadText.includes(snapshotKeyFromShareUrl(share.shareUrl)), "zero-config share upload must not include the snapshot key");
     });
 
     await withStdioClient({ mcpApps: true, serverCwd, serverEntrypoint, serverEnv }, async (client) => {
@@ -370,21 +377,21 @@ const main = async () => {
   };
 
   try {
-    await runNonAppClientSmoke({ storeDir, roomServerUrl: shareServer.url, ...runtime });
+    await runNonAppClientSmoke({ storeDir, jsonServerUrl: shareServer.url, ...runtime });
     const checkpoint = await runAppClientSmoke({
       storeDir,
-      roomServerUrl: shareServer.url,
+      jsonServerUrl: shareServer.url,
       uploads: shareServer.uploads,
       ...runtime,
     });
     await runRestartPersistenceSmoke({
       storeDir,
-      roomServerUrl: shareServer.url,
+      jsonServerUrl: shareServer.url,
       ...runtime,
       ...checkpoint,
     });
     await runZeroConfigSmoke({
-      roomServerUrl: shareServer.url,
+      jsonServerUrl: shareServer.url,
       uploads: shareServer.uploads,
       ...runtime,
     });

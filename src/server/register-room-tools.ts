@@ -74,16 +74,20 @@ export const registerRoomTools = (
           identityName,
           identityColor,
         });
-        const snapshotStatus = await client.connect();
+        const recoveryStatus = await client.connect();
         registry.add(client);
         const status = await client.getStatus();
+        const hydrationNote =
+          status.hydrationStatus === "ready"
+            ? "Room state has been received."
+            : "Room content is relay-only and may remain empty until a live peer sends state-init/yjs-update.";
 
         return {
           ...status,
-          snapshotStatus,
+          recoveryStatus,
           note: writeEnabled
-            ? "Connected with server-level write access. Use tabula_apply_text_patches with a current base hash."
-            : "Connected read-only. Restart tabula-mcp with TABULA_MCP_ENABLE_WRITE=1 or --enable-write to edit.",
+            ? `Connected with server-level write access. ${hydrationNote} Use tabula_apply_text_patches only after stateReceived is true and with a current base hash.`
+            : `Connected read-only. ${hydrationNote} Restart tabula-mcp with TABULA_MCP_ENABLE_WRITE=1 or --enable-write to edit.`,
         };
       }),
   );
@@ -120,7 +124,8 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_read_markdown",
     {
-      description: "Read the current decrypted Markdown text from a connected Tabula room.",
+      description:
+        "Read decrypted Markdown currently received by this MCP session from a connected Tabula room. Check stateReceived/hydrationStatus before treating empty text as authoritative.",
       inputSchema: optionalSessionSchema,
       outputSchema: readMarkdownOutputShape,
       annotations: {

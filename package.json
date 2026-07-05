@@ -1,7 +1,7 @@
 {
   "name": "@tabula-md/mcp",
   "version": "0.1.0",
-  "description": "Local MCP server and MCP App for Tabula.md Markdown documents and encrypted rooms.",
+  "description": "MCP server and MCP App for Tabula.md Markdown documents, encrypted rooms, and remote checkpoints.",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -36,7 +36,10 @@
     "!dist/*.mcpb.sha256",
     "docs",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
@@ -46,9 +49,14 @@
     "build": "npm run clean && npm run build:app && tsc -p tsconfig.json",
     "build:app": "vite build --config vite.config.app.mjs",
     "check:exports": "node scripts/check-package-exports.mjs",
+    "check:vercel": "node -e \"JSON.parse(require('node:fs').readFileSync('vercel.json','utf8'))\" && npm run build && node --import tsx scripts/smoke-vercel-entrypoint.mjs",
+    "check:cloudflare": "npx wrangler deploy --dry-run --outdir /tmp/tabula-mcp-wrangler-dry-run",
+    "check:deploy-targets": "npm run check:vercel && npm run check:cloudflare",
     "check:mcpb": "node scripts/check-mcpb.mjs",
     "check:pack": "node scripts/check-npm-pack.mjs",
     "build:mcpb": "npm run build && node scripts/build-mcpb.mjs",
+    "deploy:cloudflare": "npx wrangler deploy",
+    "deploy:vercel": "npx vercel deploy --prod",
     "dev:app": "vite --config vite.config.dev.mjs",
     "dev": "npm run build:app && tsx src/index.ts",
     "start": "node dist/index.js",
@@ -57,7 +65,7 @@
     "test:app:flow": "node scripts/smoke-mcp-app-flow.mjs",
     "test:stdio": "npm run build && node scripts/smoke-stdio-server.mjs",
     "release:pack": "node scripts/pack-release.mjs",
-    "release:verify": "npm run typecheck && npm test && npm run test:app && npm run test:stdio && npm run release:pack && npm audit --json && git diff --check",
+    "release:verify": "npm run typecheck && npm test && npm run test:app && npm run test:stdio && npm run check:deploy-targets && npm run release:pack && npm run check:exports && npm run check:pack && npm audit --json && git diff --check",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

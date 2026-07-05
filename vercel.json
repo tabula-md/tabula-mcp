@@ -1,0 +1,55 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "functions": {
+    "api/mcp.ts": {
+      "maxDuration": 60,
+      "includeFiles": "dist/document-app.html"
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Authorization, Content-Type, Last-Event-ID, Mcp-Protocol-Version, Mcp-Session-Id"
+        },
+        {
+          "key": "Access-Control-Expose-Headers",
+          "value": "Mcp-Protocol-Version, Mcp-Session-Id"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/ready",
+      "destination": "/api/ready"
+    },
+    {
+      "source": "/mcp",
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/sse",
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/message",
+      "destination": "/api/mcp"
+    }
+  ]
+}

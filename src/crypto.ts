@@ -4,9 +4,13 @@ import { decodeBase64Url, encodeBase64Url } from "./protocol.js";
 
 const AES_GCM_IV_BYTES = 12;
 const cryptoImpl = globalThis.crypto ?? webcrypto;
+const textEncoder = new TextEncoder();
 
 const toArrayBuffer = (bytes: Uint8Array) =>
   bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+const createRoomAad = ({ v, roomId, kind, version, createdAt }: Pick<EncryptedEnvelope, "v" | "roomId" | "kind" | "version" | "createdAt">) =>
+  textEncoder.encode(JSON.stringify({ v, roomId, kind, version, createdAt }));
 
 export const importRoomKey = async (encodedKey: string) => {
   const rawKey = decodeBase64Url(encodedKey);
@@ -22,18 +26,25 @@ export const encryptBytesForRoom = async (
 ): Promise<EncryptedEnvelope> => {
   const iv = new Uint8Array(AES_GCM_IV_BYTES);
   cryptoImpl.getRandomValues(iv);
-  const ciphertext = new Uint8Array(
-    await cryptoImpl.subtle.encrypt({ name: "AES-GCM", iv }, roomKey, toArrayBuffer(plaintext)),
-  );
-
-  return {
+  const metadata = {
     v: 1,
     roomId,
     kind,
     version,
+    createdAt: new Date().toISOString(),
+  } as const;
+  const ciphertext = new Uint8Array(
+    await cryptoImpl.subtle.encrypt(
+      { name: "AES-GCM", iv, additionalData: toArrayBuffer(createRoomAad(metadata)) },
+      roomKey,
+      toArrayBuffer(plaintext),
+    ),
+  );
+
+  return {
+    ...metadata,
     iv: encodeBase64Url(iv),
     ciphertext: encodeBase64Url(ciphertext),
-    createdAt: new Date().toISOString(),
   };
 };
 
@@ -41,7 +52,11 @@ export const decryptEnvelopeForRoom = async (roomKey: CryptoKey, envelope: Encry
   const iv = decodeBase64Url(envelope.iv);
   const ciphertext = decodeBase64Url(envelope.ciphertext);
   return new Uint8Array(
-    await cryptoImpl.subtle.decrypt({ name: "AES-GCM", iv }, roomKey, toArrayBuffer(ciphertext)),
+    await cryptoImpl.subtle.decrypt(
+      { name: "AES-GCM", iv, additionalData: toArrayBuffer(createRoomAad(envelope)) },
+      roomKey,
+      toArrayBuffer(ciphertext),
+    ),
   );
 };
 

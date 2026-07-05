@@ -7,6 +7,12 @@ const possiblyClearedSha256Schema = z.union([sha256Schema, z.literal("")]);
 
 const sessionIdOutputSchema = z.string().uuid();
 const roomIdOutputSchema = z.string();
+const roomHydrationStatusOutputSchema = z.enum(["waiting-for-peer-state", "ready"]);
+const roomHydrationOutputShape = {
+  hydrationStatus: roomHydrationStatusOutputSchema,
+  stateReceived: z.boolean(),
+  lastStateReceivedAt: isoDateStringSchema.optional(),
+};
 
 const liveSelectionOutputSchema = z.object({
   from: z.number().int().nonnegative(),
@@ -63,6 +69,7 @@ export const roomSummaryOutputSchema = z.object({
   sha256: sha256Schema,
   peerCount: z.number().int().nonnegative(),
   collaboratorCount: z.number().int().nonnegative(),
+  ...roomHydrationOutputShape,
 });
 
 export const roomStatusOutputShape = {
@@ -75,6 +82,7 @@ export const roomStatusOutputShape = {
   textLength: z.number().int().nonnegative(),
   sha256: sha256Schema,
   socketConnected: z.boolean(),
+  ...roomHydrationOutputShape,
   peerCount: z.number().int().nonnegative(),
   collaborators: z.array(collaboratorOutputSchema),
   metadata: z.unknown().nullable(),
@@ -83,7 +91,7 @@ export const roomStatusOutputShape = {
 
 export const connectRoomOutputShape = {
   ...roomStatusOutputShape,
-  snapshotStatus: z.enum(["missing", "restored"]),
+  recoveryStatus: z.literal("relay-only"),
   note: z.string(),
 };
 
@@ -97,6 +105,7 @@ export const readMarkdownOutputShape = {
   markdown: z.string(),
   textLength: z.number().int().nonnegative(),
   sha256: sha256Schema,
+  ...roomHydrationOutputShape,
 };
 
 export const outlineOutputShape = {
@@ -104,6 +113,7 @@ export const outlineOutputShape = {
   roomId: roomIdOutputSchema,
   outline: z.array(markdownHeadingOutputSchema),
   sha256: sha256Schema,
+  ...roomHydrationOutputShape,
 };
 
 export const applyTextPatchesOutputShape = {
@@ -125,6 +135,7 @@ export const waitForChangesOutputShape = {
   changed: z.boolean(),
   markdown: z.string(),
   sha256: possiblyClearedSha256Schema,
+  ...roomHydrationOutputShape,
 };
 
 export const disconnectRoomOutputShape = {
@@ -148,24 +159,18 @@ export const roomSnapshotOutputShape = {
 export const shareOutputShape = {
   share: z.object({
     title: z.string(),
-    roomId: z.string(),
+    linkKind: z.literal("json-snapshot"),
+    snapshotId: z.string(),
     appOrigin: z.string().url(),
-    roomServerUrl: z.string().url(),
-    roomUrl: z.string().url(),
+    jsonServerUrl: z.string().url(),
+    snapshotUrl: z.string().url(),
     shareUrl: z.string().url(),
     textLength: z.number().int().nonnegative(),
     sha256: sha256Schema,
     encrypted: z.literal(true),
     secret: z.literal(true),
     keyLocation: z.literal("url-fragment"),
-    snapshotVersion: z.number().int().positive(),
-    connect: z.object({
-      tool: z.literal("tabula_connect_room"),
-      arguments: z.object({
-        roomUrl: z.string().url(),
-        roomServerUrl: z.string().url(),
-      }),
-    }),
+    expiresAt: isoDateStringSchema.optional(),
   }),
 };
 

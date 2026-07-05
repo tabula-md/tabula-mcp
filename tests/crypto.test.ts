@@ -36,6 +36,19 @@ describe("room encryption", () => {
     expect(restoredDoc.getText("markdown").toString()).toBe("# Shared\n\nHello from Tabula MCP");
   });
 
+  it("authenticates room envelope metadata and supports state-init", async () => {
+    const key = await importRoomKey(roomKey);
+    const envelope = await encryptBytesForRoom(key, "room_123", "state-init", 2, new TextEncoder().encode("state"));
+
+    await expect(decryptEnvelopeForRoom(key, envelope)).resolves.toEqual(new TextEncoder().encode("state"));
+    await expect(
+      decryptEnvelopeForRoom(key, {
+        ...envelope,
+        kind: "yjs-update",
+      }),
+    ).rejects.toThrow();
+  });
+
   it("hashes Markdown deterministically for patch preconditions", async () => {
     await expect(sha256Text("same text")).resolves.toBe(await sha256Text("same text"));
     await expect(sha256Text("same text")).resolves.not.toBe(await sha256Text("different text"));

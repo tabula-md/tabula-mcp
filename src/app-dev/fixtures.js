@@ -38,6 +38,9 @@ export const roomFixture = {
     sha256: "fixture-room-hash",
     textLength: 80,
     peerCount: 2,
+    hydrationStatus: "ready",
+    stateReceived: true,
+    lastStateReceivedAt: "2026-06-28T00:00:00.000Z",
   },
   markdown: "# Shared Room\n\nThis read-only fixture simulates an encrypted Tabula.md room snapshot.\n\n## Notes",
   outline: [

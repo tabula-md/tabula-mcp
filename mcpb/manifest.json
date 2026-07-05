@@ -52,7 +52,7 @@
     },
     {
       "name": "tabula_share_document",
-      "description": "Export a local Tabula.md document as an encrypted room share link."
+      "description": "Export a local Tabula.md document as an encrypted JSON snapshot link."
     },
     {
       "name": "tabula_connect_room",
