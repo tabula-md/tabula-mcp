@@ -163,6 +163,23 @@ describe("UpstashRedisDocumentStore", () => {
     );
     await expect(store.checkReady()).resolves.toBeUndefined();
   });
+
+  it("calls the configured fetch implementation with the global binding expected by Workers", async () => {
+    let fetchThis: unknown;
+    const fetchMock = vi.fn(function (this: unknown) {
+      fetchThis = this;
+      return Promise.resolve(new Response(JSON.stringify({ result: "PONG" }), { status: 200 }));
+    });
+    const store = new UpstashRedisDocumentStore({
+      restUrl: "https://redis.example.com",
+      token: "token",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(store.checkReady()).resolves.toBeUndefined();
+
+    expect(fetchThis).toBe(globalThis);
+  });
 });
 
 describe("default document store", () => {

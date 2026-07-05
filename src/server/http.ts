@@ -14,8 +14,10 @@ import {
 import { createTabulaMcpServer, type TabulaMcpServerInstance } from "./create-server.js";
 import {
   authorizeBearerToken,
+  errorMessageForLog,
   errorMessageForClient,
   FixedWindowRateLimiter,
+  logOperationalError,
   logRequest,
   RequestTimeoutError,
   RequestTooLargeError,
@@ -425,7 +427,13 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
             documentStore: sharedDocumentStore.kind,
             statelessHttp: policy.statelessHttp,
           });
-        } catch {
+        } catch (error) {
+          logOperationalError(policy, "tabula_mcp_readiness_failed", {
+            deploymentMode: resolved.deploymentMode,
+            documentStore: sharedDocumentStore.kind,
+            error: errorMessageForLog(error),
+            errorName: error instanceof Error ? error.name : typeof error,
+          });
           httpJson(response, 503, {
             ok: false,
             service: "tabula-mcp",

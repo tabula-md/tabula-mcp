@@ -45,6 +45,8 @@ export type RequestLogEntry = {
   status: number;
 };
 
+export type OperationalLogEntry = Record<string, boolean | number | string | null | undefined>;
+
 const defaultMaxRequestBytes = 6 * 1024 * 1024;
 const defaultMaxActiveSessions = 100;
 const defaultSessionIdleTtlMs = 15 * 60 * 1000;
@@ -52,6 +54,13 @@ const defaultRequestTimeoutMs = 55 * 1000;
 const defaultRateLimitMax = 120;
 const defaultRateLimitWindowMs = 60 * 1000;
 const logLevels: readonly LogLevel[] = ["silent", "error", "warn", "info", "debug"];
+const allowedLevels: Record<LogLevel, number> = {
+  silent: 0,
+  error: 1,
+  warn: 2,
+  info: 3,
+  debug: 4,
+};
 
 export class RequestTooLargeError extends Error {
   constructor() {
@@ -211,19 +220,29 @@ export const errorMessageForClient = (error: unknown, production: boolean) => {
   return production ? "Internal server error." : error instanceof Error ? error.message : "Internal server error.";
 };
 
+export const errorMessageForLog = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/Bearer\s+[-._~+/=A-Za-z0-9]+/gi, "Bearer [redacted]").slice(0, 500);
+};
+
+export const logOperationalError = (
+  policy: OperationalPolicy,
+  event: string,
+  entry: OperationalLogEntry = {},
+) => {
+  if (allowedLevels[policy.logLevel] < allowedLevels.error) {
+    return;
+  }
+
+  console.error(JSON.stringify({ event, ...entry }));
+};
+
 export const logRequest = (policy: OperationalPolicy, entry: RequestLogEntry) => {
   if (policy.logLevel === "silent") {
     return;
   }
 
   const level = entry.status >= 500 ? "error" : entry.status >= 400 ? "warn" : "info";
-  const allowedLevels: Record<LogLevel, number> = {
-    silent: 0,
-    error: 1,
-    warn: 2,
-    info: 3,
-    debug: 4,
-  };
   if (allowedLevels[policy.logLevel] < allowedLevels[level]) {
     return;
   }

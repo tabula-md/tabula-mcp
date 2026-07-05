@@ -370,6 +370,17 @@ type UpstashResponse = {
 
 const normalizeRedisRestUrl = (url: string) => url.trim().replace(/\/+$/, "");
 
+const parseUpstashJson = async <T>(response: Response): Promise<T> => {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new TabulaMcpError(
+      `Remote Tabula MCP document checkpoint store returned a non-JSON response (${response.status} ${response.statusText}).`,
+    );
+  }
+};
+
 const parseStoredDocumentJson = (value: unknown): StoredDocument | null => {
   if (typeof value !== "string") {
     return null;
@@ -491,7 +502,7 @@ export class UpstashRedisDocumentStore implements DocumentStore {
   }
 
   async #pipeline(commands: readonly (readonly unknown[])[]) {
-    const response = await this.#fetchImpl(`${this.#restUrl}/pipeline`, {
+    const response = await this.#fetchImpl.call(globalThis, `${this.#restUrl}/pipeline`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${this.#token}`,
@@ -500,9 +511,11 @@ export class UpstashRedisDocumentStore implements DocumentStore {
       body: JSON.stringify(commands),
     });
 
-    const parsed = (await response.json()) as unknown;
+    const parsed = await parseUpstashJson<unknown>(response);
     if (!response.ok || !Array.isArray(parsed)) {
-      throw new TabulaMcpError("Remote Tabula MCP document checkpoint store request failed.");
+      throw new TabulaMcpError(
+        `Remote Tabula MCP document checkpoint store request failed (${response.status} ${response.statusText}).`,
+      );
     }
 
     const failures = parsed.filter((entry): entry is { error: string } => isRecord(entry) && typeof entry.error === "string");
@@ -514,7 +527,7 @@ export class UpstashRedisDocumentStore implements DocumentStore {
   }
 
   async #request(command: readonly unknown[]) {
-    const response = await this.#fetchImpl(this.#restUrl, {
+    const response = await this.#fetchImpl.call(globalThis, this.#restUrl, {
       method: "POST",
       headers: {
         authorization: `Bearer ${this.#token}`,
@@ -522,10 +535,12 @@ export class UpstashRedisDocumentStore implements DocumentStore {
       },
       body: JSON.stringify(command),
     });
-    const parsed = (await response.json()) as UpstashResponse;
+    const parsed = await parseUpstashJson<UpstashResponse>(response);
 
     if (!response.ok || parsed.error) {
-      throw new TabulaMcpError(`Remote Tabula MCP document checkpoint store failed: ${parsed.error ?? response.statusText}`);
+      throw new TabulaMcpError(
+        `Remote Tabula MCP document checkpoint store failed (${response.status} ${response.statusText}): ${parsed.error ?? "Unknown error"}`,
+      );
     }
 
     return parsed;
