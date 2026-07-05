@@ -102,7 +102,8 @@ Remote checkpoint controls:
 Production/public HTTP controls:
 
 - `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables fail-fast production guardrails.
-- `TABULA_MCP_AUTH_TOKEN` is required in production and gates `/mcp` with Bearer auth.
+- `TABULA_MCP_AUTH_TOKEN` is required in production unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
+- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth for anonymous document workflows, ignores any configured auth token, forces stateless HTTP, blocks remote room tools, and requires Redis checkpoints.
 - Production remote mode requires Redis/Upstash REST credentials by default.
 - Production memory checkpoints require explicit unsafe opt-in with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and `TABULA_MCP_ALLOW_MEMORY_STORE=1`.
 - Production browser requests with an `Origin` header are rejected unless the origin is in `TABULA_MCP_ALLOWED_ORIGINS`.
@@ -183,6 +184,7 @@ Treat these as release blockers:
 - plaintext Markdown is uploaded during share/export
 - remote HTTP mode silently uses local file checkpoints
 - official hosted production uses `TABULA_MCP_ALLOW_MEMORY_STORE=1`
+- public unauthenticated production exposes remote room tools
 - production HTTP allows wildcard browser origins by default
 - docs imply that remote MCP checkpoints are encrypted Tabula JSON snapshots
 - `tabula_apply_text_patches` is exposed in default read-only mode

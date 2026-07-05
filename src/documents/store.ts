@@ -567,10 +567,16 @@ export const createDefaultDocumentStore = (config: DefaultDocumentStoreConfig = 
   const requestedDriver = env.TABULA_MCP_DOCUMENT_STORE_DRIVER?.trim().toLowerCase();
   const production = resolveProductionMode({ env, production: config.production });
   const allowProductionMemoryStore = isTruthyEnvValue(env.TABULA_MCP_ALLOW_MEMORY_STORE);
+  const publicUnauthenticated =
+    deploymentMode === "remote" && production && isTruthyEnvValue(env.TABULA_MCP_PUBLIC_UNAUTHENTICATED);
 
   if (deploymentMode === "remote") {
     if (requestedDriver && !["memory", "redis", "upstash-redis"].includes(requestedDriver)) {
       throw new TabulaMcpError("Remote Tabula MCP document store driver must be memory or redis.");
+    }
+
+    if (publicUnauthenticated && requestedDriver === "memory") {
+      throw new TabulaMcpError("Public unauthenticated production Tabula MCP requires Redis checkpoints.");
     }
 
     if (production && requestedDriver === "memory" && !allowProductionMemoryStore) {
@@ -588,6 +594,12 @@ export const createDefaultDocumentStore = (config: DefaultDocumentStoreConfig = 
         maxDocuments,
         ttlSeconds: positiveIntegerFromEnv(env.TABULA_MCP_DOCUMENT_TTL_SECONDS, defaultRemoteDocumentTtlSeconds),
       });
+    }
+
+    if (publicUnauthenticated) {
+      throw new TabulaMcpError(
+        "Public unauthenticated production Tabula MCP requires TABULA_MCP_REDIS_REST_URL/UPSTASH_REDIS_REST_URL and a matching REST token.",
+      );
     }
 
     if (production && !(requestedDriver === "memory" && allowProductionMemoryStore)) {

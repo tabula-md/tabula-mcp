@@ -124,6 +124,12 @@ Official hosted target:
 https://mcp.tabula.md/mcp
 ```
 
+The official hosted endpoint is intended to match Tabula.md's no-login product
+shape: MCP clients can connect without a bearer token. It exposes only anonymous
+document/app workflows, runs stateless HTTP, and keeps remote room tools
+disabled. Authenticated account/workspace MCP belongs on a future API endpoint,
+not this public app endpoint.
+
 This repository contains the deployable code for that shape. Domain binding,
 secrets, Redis/Upstash credentials, logs, and abuse controls live in the hosting
 environment, not in the repository.
@@ -161,7 +167,7 @@ REST credentials:
 ```sh
 TABULA_MCP_DEPLOYMENT_MODE=remote \
 TABULA_MCP_PRODUCTION=1 \
-TABULA_MCP_AUTH_TOKEN='change-me' \
+TABULA_MCP_PUBLIC_UNAUTHENTICATED=1 \
 TABULA_MCP_ALLOWED_ORIGINS='https://tabula.md' \
 UPSTASH_REDIS_REST_URL=https://... \
 UPSTASH_REDIS_REST_TOKEN=... \
@@ -190,7 +196,8 @@ send `Origin` are still allowed through the Origin gate.
 Production/public endpoint controls:
 
 - `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables production guardrails.
-- `TABULA_MCP_AUTH_TOKEN` is required in production and protects `/mcp` with Bearer auth.
+- `TABULA_MCP_AUTH_TOKEN` is required in production unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
+- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth for anonymous document workflows. This mode ignores any stale auth token secret, forces stateless HTTP, rejects remote room tools, and requires Redis checkpoints.
 - Production remote mode requires Redis/Upstash REST credentials by default.
 - Production memory checkpoints require explicit unsafe opt-in with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and `TABULA_MCP_ALLOW_MEMORY_STORE=1`.
 - Production remote document workflows default to stateless HTTP when remote room tools are disabled.

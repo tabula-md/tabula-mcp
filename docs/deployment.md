@@ -15,6 +15,10 @@ https://mcp.tabula.md/mcp
 Cloudflare Workers is the preferred target for the official hosted service.
 Vercel remains supported for previews, self-hosting, and compatibility testing.
 
+The official `mcp.tabula.md` endpoint is a public app-style MCP endpoint. It
+does not require a bearer token, matching Tabula.md's no-login document product.
+Keep authenticated account/workspace MCP on a separate future API endpoint.
+
 Both targets use the shared Web-standard MCP handler in `src/server/web.ts`.
 Both expose:
 
@@ -33,7 +37,7 @@ Upstash Redis or Vercel KV-compatible REST credentials:
 ```sh
 TABULA_MCP_DEPLOYMENT_MODE=remote
 TABULA_MCP_PRODUCTION=1
-TABULA_MCP_AUTH_TOKEN=...
+TABULA_MCP_PUBLIC_UNAUTHENTICATED=1
 TABULA_MCP_DOCUMENT_STORE_DRIVER=redis
 UPSTASH_REDIS_REST_URL=https://...
 UPSTASH_REDIS_REST_TOKEN=...
@@ -41,18 +45,20 @@ UPSTASH_REDIS_REST_TOKEN=...
 
 The same store is used by both Vercel and Cloudflare deployments. Export/share
 still goes through `tabula-json` as encrypted `#json` snapshot links.
-When production mode is enabled, startup fails if the auth token is missing.
-Redis REST credentials are required by default. Excalidraw-style production
-memory fallback is available only when both `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory`
-and `TABULA_MCP_ALLOW_MEMORY_STORE=1` are set; do not use that override for
-`mcp.tabula.md`.
+When production mode is enabled, startup fails if the auth token is missing
+unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is explicitly set. Redis REST
+credentials are required by default. Excalidraw-style production memory fallback
+is available only when both `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and
+`TABULA_MCP_ALLOW_MEMORY_STORE=1` are set; public unauthenticated production
+still rejects that memory fallback and must use Redis.
 
 ## Public Endpoint Guardrails
 
 Production mode is enabled by `TABULA_MCP_PRODUCTION=1`,
 `TABULA_MCP_PUBLIC_ENDPOINT=1`, or Vercel's production runtime. In production:
 
-- `/mcp` requires `Authorization: Bearer <TABULA_MCP_AUTH_TOKEN>`.
+- `/mcp` requires `Authorization: Bearer <TABULA_MCP_AUTH_TOKEN>` unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
+- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes `/mcp` public/no-auth, ignores any configured auth token, forces stateless HTTP, blocks remote room tools, and requires Redis checkpoints.
 - memory document checkpoints require explicit unsafe opt-in; configure Redis/Upstash REST for official production.
 - browser requests with an `Origin` header are rejected unless the origin is in
   `TABULA_MCP_ALLOWED_ORIGINS`.
@@ -89,7 +95,7 @@ CLI:
 TABULA_MCP_DEPLOYMENT_MODE=remote
 TABULA_MCP_PRODUCTION=1
 TABULA_MCP_ALLOWED_ORIGINS=https://tabula.md
-TABULA_MCP_AUTH_TOKEN=...
+TABULA_MCP_PUBLIC_UNAUTHENTICATED=1
 TABULA_MCP_DOCUMENT_STORE_DRIVER=redis
 UPSTASH_REDIS_REST_URL=https://...
 UPSTASH_REDIS_REST_TOKEN=...
@@ -117,10 +123,10 @@ The Cloudflare target uses:
 `wrangler.jsonc` enables `nodejs_compat`, runs `npm run build` before bundling,
 and imports the generated `dist/document-app.html` as a text module.
 
-Set the Redis REST token as a secret:
+Set Redis REST credentials as secrets:
 
 ```sh
-npx wrangler secret put TABULA_MCP_AUTH_TOKEN
+npx wrangler secret put UPSTASH_REDIS_REST_URL
 npx wrangler secret put UPSTASH_REDIS_REST_TOKEN
 ```
 
@@ -132,9 +138,9 @@ environment:
   "vars": {
     "TABULA_MCP_DEPLOYMENT_MODE": "remote",
     "TABULA_MCP_PRODUCTION": "1",
+    "TABULA_MCP_PUBLIC_UNAUTHENTICATED": "1",
     "TABULA_MCP_ALLOWED_ORIGINS": "https://tabula.md",
-    "TABULA_MCP_DOCUMENT_STORE_DRIVER": "redis",
-    "UPSTASH_REDIS_REST_URL": "https://..."
+    "TABULA_MCP_DOCUMENT_STORE_DRIVER": "redis"
   }
 }
 ```

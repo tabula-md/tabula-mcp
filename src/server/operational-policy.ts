@@ -35,6 +35,7 @@ export type OperationalPolicy = {
   requestTimeoutMs: number;
   sessionIdleTtlMs: number;
   statelessHttp: boolean;
+  publicUnauthenticated: boolean;
 };
 
 export type RequestLogEntry = {
@@ -127,9 +128,16 @@ export const resolveOperationalPolicy = ({
   options?: OperationalPolicyOptions;
 }): OperationalPolicy => {
   const production = resolveProductionMode({ env, production: options.production });
-  const authToken = options.authToken === undefined ? secretFromEnv(env) : options.authToken?.trim() || null;
+  const publicUnauthenticated =
+    deploymentMode === "remote" && production && isTruthyEnvValue(env.TABULA_MCP_PUBLIC_UNAUTHENTICATED);
+  const authToken = publicUnauthenticated
+    ? null
+    : options.authToken === undefined
+      ? secretFromEnv(env)
+      : options.authToken?.trim() || null;
+  const requestedRemoteRoomConnections = isTruthyEnvValue(env.TABULA_MCP_ALLOW_REMOTE_ROOM);
   const allowRemoteRoomConnections =
-    deploymentMode === "local" || !production || isTruthyEnvValue(env.TABULA_MCP_ALLOW_REMOTE_ROOM);
+    deploymentMode === "local" || (!production && !publicUnauthenticated) || requestedRemoteRoomConnections;
   const forceStatelessHttp = isTruthyEnvValue(env.TABULA_MCP_STATELESS_HTTP);
   const forceStatefulHttp = isTruthyEnvValue(env.TABULA_MCP_STATEFUL_HTTP);
 
@@ -137,17 +145,27 @@ export const resolveOperationalPolicy = ({
     throw new TabulaMcpError("Set only one of TABULA_MCP_STATELESS_HTTP or TABULA_MCP_STATEFUL_HTTP.");
   }
 
+  if (publicUnauthenticated && requestedRemoteRoomConnections) {
+    throw new TabulaMcpError("Public unauthenticated Tabula MCP cannot expose remote room tools.");
+  }
+
+  if (publicUnauthenticated && (forceStatefulHttp || options.statelessHttp === false)) {
+    throw new TabulaMcpError("Public unauthenticated Tabula MCP requires stateless HTTP.");
+  }
+
   const statelessHttp =
-    options.statelessHttp ??
-    (forceStatefulHttp
-      ? false
-      : forceStatelessHttp || (deploymentMode === "remote" && production && !allowRemoteRoomConnections));
+    publicUnauthenticated
+      ? true
+      : options.statelessHttp ??
+        (forceStatefulHttp
+          ? false
+          : forceStatelessHttp || (deploymentMode === "remote" && production && !allowRemoteRoomConnections));
 
   if (statelessHttp && allowRemoteRoomConnections && deploymentMode === "remote") {
     throw new TabulaMcpError("Remote room tools require stateful MCP HTTP sessions.");
   }
 
-  if (production && !authToken) {
+  if (production && !authToken && !publicUnauthenticated) {
     throw new TabulaMcpError("Production Tabula MCP HTTP requires TABULA_MCP_AUTH_TOKEN.");
   }
 
@@ -174,6 +192,7 @@ export const resolveOperationalPolicy = ({
       options.sessionIdleTtlMs ??
       positiveIntegerFromEnv(env.TABULA_MCP_SESSION_IDLE_TTL_MS, defaultSessionIdleTtlMs),
     statelessHttp,
+    publicUnauthenticated,
   };
 };
 

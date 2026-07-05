@@ -236,6 +236,7 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
       deploymentMode: resolved.deploymentMode,
       documentStore: sharedDocumentStore,
       allowRoomTools: policy.allowRemoteRoomConnections,
+      forceDocumentAppTools: policy.statelessHttp,
       writeEnabled: options.writeEnabled,
     });
 
@@ -411,6 +412,7 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
         service: "tabula-mcp",
         deploymentMode: resolved.deploymentMode,
         documentStore: sharedDocumentStore.kind,
+        publicUnauthenticated: policy.publicUnauthenticated,
         statelessHttp: policy.statelessHttp,
       });
       return;
@@ -425,6 +427,7 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
             service: "tabula-mcp",
             deploymentMode: resolved.deploymentMode,
             documentStore: sharedDocumentStore.kind,
+            publicUnauthenticated: policy.publicUnauthenticated,
             statelessHttp: policy.statelessHttp,
           });
         } catch (error) {
@@ -455,6 +458,7 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
         ready: "/ready",
         deploymentMode: resolved.deploymentMode,
         documentStore: sharedDocumentStore.kind,
+        publicUnauthenticated: policy.publicUnauthenticated,
         statelessHttp: policy.statelessHttp,
       });
       return;

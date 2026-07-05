@@ -20,6 +20,7 @@ import { resolveWriteEnabled } from "./write-access.js";
 export type TabulaMcpServerOptions = {
   allowRoomTools?: boolean;
   documentAppHtml?: string;
+  forceDocumentAppTools?: boolean;
   writeEnabled?: boolean;
   documentStore?: DocumentStore;
   deploymentMode?: DocumentStoreDeploymentMode;
@@ -85,14 +86,21 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   registerDocumentAppResource(server, { documentAppHtml: options.documentAppHtml });
 
   let documentAppToolsRegistered = false;
+  const registerAppTools = () => {
+    registerDocumentAppTools(server, registry, documents, { allowRoomTools });
+    documentAppToolsRegistered = true;
+  };
+  if (options.forceDocumentAppTools) {
+    registerAppTools();
+  }
+
   server.server.oninitialized = () => {
     const uiCapability = getUiCapability(server.server.getClientCapabilities());
     if (documentAppToolsRegistered || !uiCapability?.mimeTypes?.includes(RESOURCE_MIME_TYPE)) {
       return;
     }
 
-    registerDocumentAppTools(server, registry, documents);
-    documentAppToolsRegistered = true;
+    registerAppTools();
     server.sendToolListChanged();
   };
 

@@ -53,7 +53,10 @@ export const registerDocumentAppTools = (
   server: McpServer,
   registry: SessionRegistry,
   documents: DocumentRegistry,
+  options: { allowRoomTools?: boolean } = {},
 ) => {
+  const allowRoomTools = options.allowRoomTools ?? true;
+
   registerAppTool(
     server,
     "tabula_create_document",
@@ -161,40 +164,42 @@ export const registerDocumentAppTools = (
       }),
   );
 
-  registerAppTool(
-    server,
-    "tabula_open_room_view",
-    {
-      title: "Open Tabula Room View",
-      description:
-        "Open a read-only MCP App view for a connected Tabula.md room, including status, outline, Markdown preview, refresh, and selection handoff.",
-      inputSchema: optionalSessionSchema,
-      outputSchema: roomViewOutputShape,
-      annotations: {
-        readOnlyHint: true,
-        openWorldHint: true,
-      },
-      _meta: {
-        ui: {
-          resourceUri: tabulaDocumentAppResourceUri,
+  if (allowRoomTools) {
+    registerAppTool(
+      server,
+      "tabula_open_room_view",
+      {
+        title: "Open Tabula Room View",
+        description:
+          "Open a read-only MCP App view for a connected Tabula.md room, including status, outline, Markdown preview, refresh, and selection handoff.",
+        inputSchema: optionalSessionSchema,
+        outputSchema: roomViewOutputShape,
+        annotations: {
+          readOnlyHint: true,
+          openWorldHint: true,
         },
-      },
-    },
-    async ({ sessionId }) =>
-      runStructuredTool(async () => {
-        const status = await registry.get(sessionId).getStatus();
-        const room = summarizeRoomStatus(status);
-
-        return {
-          value: {
-            mode: "room",
-            room,
+        _meta: {
+          ui: {
             resourceUri: tabulaDocumentAppResourceUri,
           },
-          text: `Opening Tabula Room View for room ${status.roomId}.`,
-        };
-      }),
-  );
+        },
+      },
+      async ({ sessionId }) =>
+        runStructuredTool(async () => {
+          const status = await registry.get(sessionId).getStatus();
+          const room = summarizeRoomStatus(status);
+
+          return {
+            value: {
+              mode: "room",
+              room,
+              resourceUri: tabulaDocumentAppResourceUri,
+            },
+            text: `Opening Tabula Room View for room ${status.roomId}.`,
+          };
+        }),
+    );
+  }
 
   registerAppTool(
     server,
@@ -251,29 +256,31 @@ export const registerDocumentAppTools = (
       }),
   );
 
-  registerAppTool(
-    server,
-    "tabula_app_room_snapshot",
-    {
-      description: "Read a connected room snapshot for the Tabula Document MCP App.",
-      inputSchema: optionalSessionSchema,
-      outputSchema: roomSnapshotOutputShape,
-      annotations: {
-        readOnlyHint: true,
-        openWorldHint: true,
-      },
-      _meta: {
-        ui: {
-          visibility: ["app"],
+  if (allowRoomTools) {
+    registerAppTool(
+      server,
+      "tabula_app_room_snapshot",
+      {
+        description: "Read a connected room snapshot for the Tabula Document MCP App.",
+        inputSchema: optionalSessionSchema,
+        outputSchema: roomSnapshotOutputShape,
+        annotations: {
+          readOnlyHint: true,
+          openWorldHint: true,
+        },
+        _meta: {
+          ui: {
+            visibility: ["app"],
+          },
         },
       },
-    },
-    async ({ sessionId }) =>
-      runStructuredTool(async () => ({
-        value: await readRoomSnapshot(registry, sessionId),
-        text: "Tabula room snapshot loaded.",
-      })),
-  );
+      async ({ sessionId }) =>
+        runStructuredTool(async () => ({
+          value: await readRoomSnapshot(registry, sessionId),
+          text: "Tabula room snapshot loaded.",
+        })),
+    );
+  }
 
   registerAppTool(
     server,

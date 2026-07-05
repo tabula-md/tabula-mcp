@@ -275,6 +275,30 @@ describe("default document store", () => {
     expect(store.kind).toBe("memory");
   });
 
+  it("requires Redis checkpoints for public unauthenticated production", () => {
+    expect(() =>
+      createDefaultDocumentStore({
+        deploymentMode: "remote",
+        env: {
+          TABULA_MCP_PUBLIC_UNAUTHENTICATED: "1",
+        },
+        production: true,
+      }),
+    ).toThrow(/requires .*REST token/i);
+
+    expect(() =>
+      createDefaultDocumentStore({
+        deploymentMode: "remote",
+        env: {
+          TABULA_MCP_ALLOW_MEMORY_STORE: "1",
+          TABULA_MCP_DOCUMENT_STORE_DRIVER: "memory",
+          TABULA_MCP_PUBLIC_UNAUTHENTICATED: "1",
+        },
+        production: true,
+      }),
+    ).toThrow(/requires Redis checkpoints/i);
+  });
+
   it("resolves stable platform-specific default directories", () => {
     expect(
       resolveDefaultDocumentStoreDirectory({

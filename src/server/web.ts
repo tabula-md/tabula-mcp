@@ -246,6 +246,7 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
       documentAppHtml: options.documentAppHtml,
       documentStore,
       allowRoomTools: policy.allowRemoteRoomConnections,
+      forceDocumentAppTools: policy.statelessHttp,
       writeEnabled: options.writeEnabled,
     });
 
@@ -391,6 +392,7 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
             service: "tabula-mcp",
             deploymentMode,
             documentStore: documentStore.kind,
+            publicUnauthenticated: policy.publicUnauthenticated,
             statelessHttp: policy.statelessHttp,
           });
           return response;
@@ -404,6 +406,7 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
               service: "tabula-mcp",
               deploymentMode,
               documentStore: documentStore.kind,
+              publicUnauthenticated: policy.publicUnauthenticated,
               statelessHttp: policy.statelessHttp,
             });
           } catch (error) {
@@ -433,6 +436,7 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
             ready: "/ready",
             deploymentMode,
             documentStore: documentStore.kind,
+            publicUnauthenticated: policy.publicUnauthenticated,
             statelessHttp: policy.statelessHttp,
           });
           return response;

@@ -4,6 +4,14 @@ import { describe, expect, it } from "vitest";
 import { MemoryDocumentStore } from "../src/documents/store.js";
 import { createTabulaMcpWebHandler } from "../src/server/web.js";
 
+const uiCapabilities = {
+  extensions: {
+    "io.modelcontextprotocol/ui": {
+      mimeTypes: ["text/html;profile=mcp-app"],
+    },
+  },
+};
+
 describe("Tabula MCP Web handler", () => {
   it("serves health metadata for serverless deployment targets", async () => {
     const handler = createTabulaMcpWebHandler({
@@ -97,6 +105,79 @@ describe("Tabula MCP Web handler", () => {
         production: true,
       }),
     ).toThrow(/TABULA_MCP_AUTH_TOKEN/);
+  });
+
+  it("allows explicit public unauthenticated hosted production without bearer headers", async () => {
+    const handler = createTabulaMcpWebHandler({
+      deploymentMode: "remote",
+      documentStore: new MemoryDocumentStore(),
+      documentAppHtml: "<!doctype html><title>Tabula.md Document</title>",
+      env: {
+        TABULA_MCP_AUTH_TOKEN: "stale-secret",
+        TABULA_MCP_PUBLIC_UNAUTHENTICATED: "1",
+      },
+      production: true,
+    });
+    const health = await handler.fetch(new Request("https://mcp.example.com/health"));
+    const client = new Client(
+      { name: "tabula-public-web-handler-test", version: "0.0.0" },
+      { capabilities: uiCapabilities },
+    );
+    const fetchImpl = (request: RequestInfo | URL, init?: RequestInit) =>
+      handler.fetch(request instanceof Request ? request : new Request(request, init));
+    const transport = new StreamableHTTPClientTransport(new URL("https://mcp.example.com/mcp"), {
+      fetch: fetchImpl,
+    });
+
+    try {
+      await expect(health.json()).resolves.toMatchObject({
+        ok: true,
+        publicUnauthenticated: true,
+        statelessHttp: true,
+      });
+      await client.connect(transport);
+      const tools = await client.listTools();
+      const toolNames = tools.tools.map((tool) => tool.name);
+
+      expect(toolNames).toContain("tabula_read_me");
+      expect(toolNames).toContain("tabula_create_document");
+      expect(toolNames).toContain("tabula_open_document");
+      expect(toolNames).toContain("tabula_share_document");
+      expect(toolNames).not.toContain("tabula_connect_room");
+      expect(toolNames).not.toContain("tabula_open_room_view");
+      expect(toolNames).not.toContain("tabula_app_room_snapshot");
+      expect(transport.sessionId).toBeUndefined();
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("rejects public unauthenticated production with remote room tools enabled", () => {
+    expect(() =>
+      createTabulaMcpWebHandler({
+        deploymentMode: "remote",
+        documentStore: new MemoryDocumentStore(),
+        env: {
+          TABULA_MCP_ALLOW_REMOTE_ROOM: "1",
+          TABULA_MCP_PUBLIC_UNAUTHENTICATED: "1",
+        },
+        production: true,
+      }),
+    ).toThrow(/cannot expose remote room tools/i);
+  });
+
+  it("rejects public unauthenticated production with stateful HTTP", () => {
+    expect(() =>
+      createTabulaMcpWebHandler({
+        deploymentMode: "remote",
+        documentStore: new MemoryDocumentStore(),
+        env: {
+          TABULA_MCP_PUBLIC_UNAUTHENTICATED: "1",
+          TABULA_MCP_STATEFUL_HTTP: "1",
+        },
+        production: true,
+      }),
+    ).toThrow(/requires stateless HTTP/i);
   });
 
   it("rejects wildcard browser origins in production unless explicitly allowed", () => {
