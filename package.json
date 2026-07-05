@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "tabula-mcp": "./dist/index.js"
+    "tabula-mcp": "dist/index.js"
   },
   "exports": {
     ".": {
