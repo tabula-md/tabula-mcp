@@ -93,6 +93,7 @@ working state; they are not Tabula JSON encrypted snapshots.
 Remote checkpoint controls:
 
 - `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory|redis`
+- `TABULA_MCP_ALLOW_MEMORY_STORE=1`, unsafe production override only when `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory`
 - `TABULA_MCP_DOCUMENT_TTL_SECONDS`, default 30 days
 - `TABULA_MCP_MAX_DOCUMENT_CHECKPOINTS`, default 20
 - `TABULA_MCP_REDIS_REST_URL` / `UPSTASH_REDIS_REST_URL` / `KV_REST_API_URL`
@@ -102,7 +103,8 @@ Production/public HTTP controls:
 
 - `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables fail-fast production guardrails.
 - `TABULA_MCP_AUTH_TOKEN` is required in production and gates `/mcp` with Bearer auth.
-- Production remote mode rejects memory checkpoint storage and requires Redis/Upstash REST credentials.
+- Production remote mode requires Redis/Upstash REST credentials by default.
+- Production memory checkpoints require explicit unsafe opt-in with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and `TABULA_MCP_ALLOW_MEMORY_STORE=1`.
 - Production browser requests with an `Origin` header are rejected unless the origin is in `TABULA_MCP_ALLOWED_ORIGINS`.
 - Production remote document workflows default to stateless HTTP when hosted room tools are disabled.
 - `TABULA_MCP_RATE_LIMIT_MAX` / `TABULA_MCP_RATE_LIMIT_WINDOW_MS` throttle per-client MCP requests.
@@ -180,6 +182,7 @@ Treat these as release blockers:
 - snapshot key appears in request bodies sent to the JSON snapshot service
 - plaintext Markdown is uploaded during share/export
 - remote HTTP mode silently uses local file checkpoints
+- official hosted production uses `TABULA_MCP_ALLOW_MEMORY_STORE=1`
 - production HTTP allows wildcard browser origins by default
 - docs imply that remote MCP checkpoints are encrypted Tabula JSON snapshots
 - `tabula_apply_text_patches` is exposed in default read-only mode

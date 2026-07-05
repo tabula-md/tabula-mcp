@@ -112,10 +112,12 @@ The default MCPB must be read-only for room writes. Write-enabled testing uses
 manual stdio configuration, not installer prompts.
 
 Hosted release checks must keep production guardrails intact: production remote
-HTTP requires `TABULA_MCP_AUTH_TOKEN` and Redis/Upstash REST credentials, applies
-Origin/request/rate/session limits, defaults document-only hosted traffic to
-stateless HTTP, and does not expose room connection tools unless
-`TABULA_MCP_ALLOW_REMOTE_ROOM=1` is explicitly set.
+HTTP requires `TABULA_MCP_AUTH_TOKEN`, uses Redis/Upstash REST credentials by
+default, applies Origin/request/rate/session limits, defaults document-only
+hosted traffic to stateless HTTP, and does not expose room connection tools
+unless `TABULA_MCP_ALLOW_REMOTE_ROOM=1` is explicitly set. Production memory
+checkpoints are allowed only when both `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory`
+and `TABULA_MCP_ALLOW_MEMORY_STORE=1` are explicitly set.
 
 ## Manual Claude Desktop Check
 

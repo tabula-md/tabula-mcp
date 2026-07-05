@@ -551,14 +551,17 @@ export const createDefaultDocumentStore = (config: DefaultDocumentStoreConfig = 
   const maxDocuments = positiveIntegerFromEnv(env.TABULA_MCP_MAX_DOCUMENT_CHECKPOINTS, defaultMaxStoredDocuments);
   const requestedDriver = env.TABULA_MCP_DOCUMENT_STORE_DRIVER?.trim().toLowerCase();
   const production = resolveProductionMode({ env, production: config.production });
+  const allowProductionMemoryStore = isTruthyEnvValue(env.TABULA_MCP_ALLOW_MEMORY_STORE);
 
   if (deploymentMode === "remote") {
     if (requestedDriver && !["memory", "redis", "upstash-redis"].includes(requestedDriver)) {
       throw new TabulaMcpError("Remote Tabula MCP document store driver must be memory or redis.");
     }
 
-    if (production && requestedDriver === "memory") {
-      throw new TabulaMcpError("Production remote Tabula MCP requires a Redis document checkpoint store.");
+    if (production && requestedDriver === "memory" && !allowProductionMemoryStore) {
+      throw new TabulaMcpError(
+        "Production remote Tabula MCP requires Redis unless TABULA_MCP_ALLOW_MEMORY_STORE=1 is explicitly set.",
+      );
     }
 
     const redisConfig = requestedDriver === "memory" ? null : resolveUpstashRedisConfig(env);
@@ -572,9 +575,9 @@ export const createDefaultDocumentStore = (config: DefaultDocumentStoreConfig = 
       });
     }
 
-    if (production) {
+    if (production && !(requestedDriver === "memory" && allowProductionMemoryStore)) {
       throw new TabulaMcpError(
-        "Production remote Tabula MCP requires TABULA_MCP_REDIS_REST_URL/UPSTASH_REDIS_REST_URL and a matching REST token.",
+        "Production remote Tabula MCP requires TABULA_MCP_REDIS_REST_URL/UPSTASH_REDIS_REST_URL and a matching REST token, or explicit TABULA_MCP_DOCUMENT_STORE_DRIVER=memory with TABULA_MCP_ALLOW_MEMORY_STORE=1.",
       );
     }
 

@@ -171,6 +171,7 @@ node dist/index.js --http --port 3005
 Supported remote checkpoint environment variables:
 
 - `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory|redis`
+- `TABULA_MCP_ALLOW_MEMORY_STORE=1` allows `memory` in production only when `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` is also set
 - `TABULA_MCP_DOCUMENT_TTL_SECONDS` defaults to 30 days
 - `TABULA_MCP_MAX_DOCUMENT_CHECKPOINTS` defaults to 20
 - `TABULA_MCP_REDIS_REST_URL` or `UPSTASH_REDIS_REST_URL` or `KV_REST_API_URL`
@@ -190,7 +191,8 @@ Production/public endpoint controls:
 
 - `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables production guardrails.
 - `TABULA_MCP_AUTH_TOKEN` is required in production and protects `/mcp` with Bearer auth.
-- Production remote mode requires Redis/Upstash REST credentials; memory checkpoints are rejected.
+- Production remote mode requires Redis/Upstash REST credentials by default.
+- Production memory checkpoints require explicit unsafe opt-in with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and `TABULA_MCP_ALLOW_MEMORY_STORE=1`.
 - Production remote document workflows default to stateless HTTP when remote room tools are disabled.
 - `TABULA_MCP_RATE_LIMIT_MAX` and `TABULA_MCP_RATE_LIMIT_WINDOW_MS` control per-client request throttling.
 - `TABULA_MCP_MAX_ACTIVE_SESSIONS` and `TABULA_MCP_SESSION_IDLE_TTL_MS` bound in-memory MCP sessions.

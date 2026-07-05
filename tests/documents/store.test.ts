@@ -231,7 +231,31 @@ describe("default document store", () => {
         },
         production: true,
       }),
-    ).toThrow(/requires a Redis document checkpoint store/i);
+    ).toThrow(/requires Redis/i);
+
+    expect(() =>
+      createDefaultDocumentStore({
+        deploymentMode: "remote",
+        env: {
+          TABULA_MCP_ALLOW_MEMORY_STORE: "1",
+        },
+        production: true,
+      }),
+    ).toThrow(/DOCUMENT_STORE_DRIVER=memory/i);
+  });
+
+  it("allows explicit unsafe production memory checkpoints for Excalidraw-style self-hosting", () => {
+    const store = createDefaultDocumentStore({
+      deploymentMode: "remote",
+      env: {
+        TABULA_MCP_ALLOW_MEMORY_STORE: "1",
+        TABULA_MCP_DOCUMENT_STORE_DRIVER: "memory",
+      },
+      production: true,
+    });
+
+    expect(store).toBeInstanceOf(MemoryDocumentStore);
+    expect(store.kind).toBe("memory");
   });
 
   it("resolves stable platform-specific default directories", () => {

@@ -27,7 +27,7 @@ Both expose:
 ## Production Checkpoint Store
 
 Hosted MCP document checkpoints are plaintext working state for agent editing.
-Do not use the default memory store for production traffic. Configure
+Do not use the default memory store for official production traffic. Configure
 Upstash Redis or Vercel KV-compatible REST credentials:
 
 ```sh
@@ -41,8 +41,11 @@ UPSTASH_REDIS_REST_TOKEN=...
 
 The same store is used by both Vercel and Cloudflare deployments. Export/share
 still goes through `tabula-json` as encrypted `#json` snapshot links.
-When production mode is enabled, startup fails if the auth token or Redis REST
-credentials are missing.
+When production mode is enabled, startup fails if the auth token is missing.
+Redis REST credentials are required by default. Excalidraw-style production
+memory fallback is available only when both `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory`
+and `TABULA_MCP_ALLOW_MEMORY_STORE=1` are set; do not use that override for
+`mcp.tabula.md`.
 
 ## Public Endpoint Guardrails
 
@@ -50,7 +53,7 @@ Production mode is enabled by `TABULA_MCP_PRODUCTION=1`,
 `TABULA_MCP_PUBLIC_ENDPOINT=1`, or Vercel's production runtime. In production:
 
 - `/mcp` requires `Authorization: Bearer <TABULA_MCP_AUTH_TOKEN>`.
-- memory document checkpoints are rejected; configure Redis/Upstash REST.
+- memory document checkpoints require explicit unsafe opt-in; configure Redis/Upstash REST for official production.
 - browser requests with an `Origin` header are rejected unless the origin is in
   `TABULA_MCP_ALLOWED_ORIGINS`.
 - document-only remote workflows run stateless HTTP by default when remote room

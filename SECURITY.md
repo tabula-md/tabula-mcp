@@ -32,6 +32,10 @@ Remote room access is disabled for hosted production by default. Enabling
 processor for room keys and decrypted Markdown.
 
 Production HTTP deployments must use authentication, Redis/Upstash-backed
-checkpoints, and an explicit browser Origin allowlist. Do not deploy public
-remote MCP endpoints with wildcard browser origins unless the endpoint is
-intentionally unauthenticated test infrastructure.
+checkpoints, and an explicit browser Origin allowlist. Production memory
+checkpoints are available only through the explicit unsafe
+`TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` plus `TABULA_MCP_ALLOW_MEMORY_STORE=1`
+override for self-hosting and tests. Do not use that override for the official
+hosted `mcp.tabula.md` service. Do not deploy public remote MCP endpoints with
+wildcard browser origins unless the endpoint is intentionally unauthenticated
+test infrastructure.

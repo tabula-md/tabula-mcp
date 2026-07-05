@@ -8,6 +8,8 @@
   structured request logging.
 - Added stateless production HTTP mode for hosted document workflows when remote
   room tools are disabled.
+- Added an explicit unsafe production memory checkpoint override for
+  Excalidraw-style self-hosting.
 - Added `/ready` readiness metadata alongside `/health`.
 - Hardened production browser Origin handling and default local HTTP binding.
 - Added MIT/open-source operations documents: `SECURITY.md`,
