@@ -2,14 +2,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { jsonContent, errorContent } from "../json.js";
 import {
-  applyTextPatchesOutputShape,
   connectRoomOutputShape,
   disconnectRoomOutputShape,
   listSessionsOutputShape,
-  outlineOutputShape,
-  proposeTextPatchesOutputShape,
   proposeWorkspaceChangesOutputShape,
-  readMarkdownOutputShape,
   readWorkspaceDocumentOutputShape,
   readWorkspaceOutputShape,
   roomStatusOutputShape,
@@ -27,7 +23,7 @@ const optionalSessionSchema = {
 const sha256HexSchema = z
   .string()
   .regex(/^[a-f0-9]{64}$/)
-  .describe("Lowercase SHA-256 hex value returned by tabula_read_markdown or tabula_room_status.");
+  .describe("Lowercase SHA-256 hex value returned by tabula_read_workspace_document or tabula_room_status.");
 
 const textPatchInputSchema = z.object({
   from: z.number().int().nonnegative(),
@@ -131,8 +127,8 @@ export const registerRoomTools = (
           ...status,
           recoveryStatus,
           note: writeEnabled
-            ? `Connected with server-level write access. ${hydrationNote} Prefer tabula_propose_text_patches for reviewable agent edits; use tabula_apply_text_patches only after stateReceived is true and with a current base hash.`
-            : `Connected as a proposal-first agent. ${hydrationNote} Use tabula_propose_text_patches for reviewable edits; restart tabula-mcp with TABULA_MCP_ENABLE_WRITE=1 or --enable-write only for direct edits.`,
+            ? `Connected with server-level write capability. ${hydrationNote} Use tabula_read_workspace, tabula_read_workspace_document, and tabula_propose_workspace_changes for reviewable agent edits.`
+            : `Connected as a proposal-first agent. ${hydrationNote} Use tabula_read_workspace, tabula_read_workspace_document, and tabula_propose_workspace_changes for reviewable edits.`,
         };
       }),
   );
@@ -164,33 +160,6 @@ export const registerRoomTools = (
       },
     },
     async ({ sessionId }) => runTool(async () => registry.get(sessionId).getStatus()),
-  );
-
-  server.registerTool(
-    "tabula_read_markdown",
-    {
-      description:
-        "Read decrypted Markdown currently received by this MCP session from a connected Tabula room. Check stateReceived/hydrationStatus before treating empty text as authoritative.",
-      inputSchema: optionalSessionSchema,
-      outputSchema: readMarkdownOutputShape,
-      annotations: {
-        readOnlyHint: true,
-      },
-    },
-    async ({ sessionId }) => runTool(async () => registry.get(sessionId).readMarkdown()),
-  );
-
-  server.registerTool(
-    "tabula_get_outline",
-    {
-      description: "Return Markdown headings for the current room text.",
-      inputSchema: optionalSessionSchema,
-      outputSchema: outlineOutputShape,
-      annotations: {
-        readOnlyHint: true,
-      },
-    },
-    async ({ sessionId }) => runTool(async () => registry.get(sessionId).getOutline()),
   );
 
   server.registerTool(
@@ -251,60 +220,6 @@ export const registerRoomTools = (
     async ({ sessionId, title, description, changes }) =>
       runTool(async () => registry.get(sessionId).proposeWorkspaceChanges({ title, description, changes })),
   );
-
-  server.registerTool(
-    "tabula_propose_text_patches",
-    {
-      description:
-        "Propose non-overlapping text patches to a connected Tabula room as an encrypted room-event. This does not directly mutate the document; Tabula.md clients can review and accept or reject it.",
-      inputSchema: {
-        ...optionalSessionSchema,
-        baseSha256: sha256HexSchema,
-        title: z.string().min(1).max(120).optional().describe("Short human-readable proposal title."),
-        description: z.string().min(1).max(2000).optional().describe("Optional rationale or summary for collaborators."),
-        patches: z
-          .array(textPatchInputSchema)
-          .min(1)
-          .describe("Patches in old-document character offsets. They must not overlap."),
-      },
-      outputSchema: proposeTextPatchesOutputShape,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
-    },
-    async ({ sessionId, baseSha256, patches, title, description }) =>
-      runTool(async () => registry.get(sessionId).proposePatches({ baseSha256, patches, title, description })),
-  );
-
-  if (writeEnabled) {
-    server.registerTool(
-      "tabula_apply_text_patches",
-      {
-        description:
-          "Apply non-overlapping text patches to a connected Tabula room. Requires server-level write mode and a current baseSha256.",
-        inputSchema: {
-          ...optionalSessionSchema,
-          baseSha256: sha256HexSchema,
-          patches: z
-            .array(textPatchInputSchema)
-            .min(1)
-            .describe("Patches in old-document character offsets. They must not overlap."),
-        },
-        outputSchema: applyTextPatchesOutputShape,
-        annotations: {
-          readOnlyHint: false,
-          destructiveHint: true,
-          idempotentHint: false,
-          openWorldHint: true,
-        },
-      },
-      async ({ sessionId, baseSha256, patches }) =>
-        runTool(async () => registry.get(sessionId).applyPatches({ baseSha256, patches })),
-    );
-  }
 
   server.registerTool(
     "tabula_set_presence",

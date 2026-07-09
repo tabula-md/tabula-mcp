@@ -63,14 +63,6 @@
       "description": "List encrypted Tabula.md room sessions connected in this local MCP process."
     },
     {
-      "name": "tabula_read_markdown",
-      "description": "Read the current decrypted Markdown from a connected room."
-    },
-    {
-      "name": "tabula_get_outline",
-      "description": "Extract Markdown headings from the connected room."
-    },
-    {
       "name": "tabula_read_workspace",
       "description": "Read the latest Tabula workspace tree metadata from a connected room."
     },
@@ -89,10 +81,6 @@
     {
       "name": "tabula_open_room_view",
       "description": "Open a connected room inside the Tabula.md MCP App for status, outline, Markdown preview, refresh, fullscreen, and selection handoff."
-    },
-    {
-      "name": "tabula_propose_text_patches",
-      "description": "Propose guarded text patches to a connected room as an encrypted reviewable room event."
     },
     {
       "name": "tabula_set_presence",

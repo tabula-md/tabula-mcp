@@ -89,12 +89,12 @@ The manifest must not contain installer `user_config`.
 The manifest must point `icon` and a `512x512` `icons` entry at
 `assets/icon.png`.
 The manifest must list all default model-facing tools exposed by the
-proposal-first MCPB server, including document, sharing, room status, proposal,
-presence, wait, and disconnect tools. It must not list App-only helper tools or
-the direct-write-only `tabula_apply_text_patches` tool. `check:mcpb` starts the
-bundled default server from the staged and unpacked bundle layouts and compares
-the actual model-facing tool list against the manifest so future tool
-registration drift is caught automatically.
+proposal-first MCPB server, including document, sharing, workspace room status,
+workspace proposal, presence, wait, and disconnect tools. It must not list
+App-only helper tools or legacy single-document room patch tools. `check:mcpb`
+starts the bundled default server from the staged and unpacked bundle layouts
+and compares the actual model-facing tool list against the manifest so future
+tool registration drift is caught automatically.
 The packed artifact must not include packaging-only lockfiles.
 
 The packed artifact must also start successfully over stdio from its unpacked

@@ -76,21 +76,21 @@ Expected behavior:
 
 1. `tabula_connect_room` connects the encrypted room as a proposal-first agent.
 2. `tabula_open_room_view` opens the App room view.
-3. `tabula_read_markdown` and `tabula_get_outline` return decrypted local
-   single-document Markdown to the model.
-4. `tabula_read_workspace`, `tabula_read_workspace_document`, and
+3. `tabula_read_workspace`, `tabula_read_workspace_document`, and
    `tabula_propose_workspace_changes` let the agent inspect and propose
-   multi-document workspace changes when a workspace peer has published
-   workspace state.
-5. The room server only receives encrypted envelopes.
+   workspace document changes when a workspace peer has published workspace
+   state. A one-document room is still represented as a workspace with one
+   document.
+4. The room server only receives encrypted envelopes.
 
 The `#room` fragment contains the room key and is a bearer secret. Do not paste
 production room links into logs, issue trackers, or public screenshots.
 
 ## Write-Enabled Development
 
-The MCPB is intentionally proposal-first for room edits. To test direct write
-mode, use a manual stdio MCP configuration instead of the MCPB:
+The MCPB is intentionally proposal-first for room edits. Manual write-capable
+stdio sessions are trusted development sessions; the model-facing room surface
+still uses workspace proposals:
 
 ```json
 {

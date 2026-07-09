@@ -4,8 +4,8 @@ MCP server and MCP App for drafting Tabula.md Markdown documents and joining
 encrypted Tabula.md live rooms from Codex, Claude, and other MCP clients.
 
 Tabula MCP lets an agent create a Markdown document checkpoint in an MCP App,
-read a shared Markdown room, and, when explicitly enabled, apply text patches
-back into the room. The checkpoint store is MCP working state. Final handoff
+join a shared Tabula workspace room, and propose workspace document changes for
+human review. The checkpoint store is MCP working state. Final handoff
 links still use Tabula.md's encrypted JSON snapshot flow, where the JSON service
 receives only encrypted bytes and the snapshot key stays in the `#json`
 fragment.
@@ -13,12 +13,12 @@ fragment.
 ## Status
 
 Early implementation. The server supports MCP App document checkpoints,
-encrypted share links for App documents, one-file live rooms, Markdown reads,
-outline extraction, presence, guarded text patches, bounded selection/change
-handoff from the bundled App, stdio/MCPB local launch, and a Streamable HTTP
-`/mcp` endpoint for remote deployments. The repository is MIT-licensed and
-contains the same deployment entrypoints intended for self-hosting and the
-official hosted Tabula MCP endpoint.
+encrypted share links for App documents, encrypted workspace rooms, presence,
+workspace proposals, bounded selection/change handoff from the bundled App,
+stdio/MCPB local launch, and a Streamable HTTP `/mcp` endpoint for remote
+deployments. The repository is MIT-licensed and contains the same deployment
+entrypoints intended for self-hosting and the official hosted Tabula MCP
+endpoint.
 
 ## Documentation
 
@@ -92,11 +92,13 @@ https://tabula.md/#room=<roomId>,<roomKey>
 The `#room` fragment contains the room key and is a secret. Anyone or any agent
 with that URL can decrypt the room. Treat room links like bearer tokens.
 
-Direct write access is disabled by default at the MCP process level. Agents can
-still use `tabula_propose_workspace_changes` to publish encrypted workspace
-proposals for collaborators to review, or `tabula_propose_text_patches` for
-legacy single-document patch proposals. To start a direct-write server, opt in
-when launching the process:
+Agents edit rooms through proposal-first workspace changes. A Tabula room is a
+workspace room; a one-document room is represented as a workspace with one
+document. Agents use `tabula_propose_workspace_changes` to publish encrypted
+workspace proposals for collaborators to review.
+
+Direct write capability is a server-level opt-in for trusted development
+sessions, but the model-facing room tools remain workspace proposal-first:
 
 ```json
 {
@@ -242,14 +244,10 @@ small ESM surface for tests and local embedding:
 - `tabula_connect_room`: connect to a room URL as a `tabula-mcp` agent actor. Direct writes are disabled by default.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
 - `tabula_room_status`: inspect connection state, room metadata, hash, actor capabilities, pending proposals, and collaborators.
-- `tabula_read_markdown`: read decrypted Markdown received by this MCP session; check `stateReceived`/`hydrationStatus` before treating empty text as authoritative.
-- `tabula_get_outline`: extract Markdown headings.
 - `tabula_read_workspace`: read decrypted workspace tree metadata received by this MCP session, including document ids, titles, hashes, and local cache status.
 - `tabula_read_workspace_document`: read decrypted Markdown for one cached workspace document.
 - `tabula_propose_workspace_changes`: publish multi-document `document.patch`/`document.create`/`document.rename`/`document.move`/`document.delete` changes as an encrypted `workspace.proposal.created` room event. This does not directly mutate the workspace.
 - `tabula_open_room_view`: open a connected room in the MCP App for status, outline, Markdown preview, refresh, and selection handoff in clients that support MCP Apps.
-- `tabula_propose_text_patches`: publish guarded non-overlapping text patches as an encrypted `patch.proposed` room event. This does not directly mutate the document.
-- `tabula_apply_text_patches`: directly edit with guarded non-overlapping text patches. Only exposed when the MCP process starts with write mode enabled.
 - `tabula_set_presence`: publish cursor/selection presence to collaborators.
 - `tabula_wait_for_changes`: wait until the room text hash changes or a room event arrives.
 - `tabula_disconnect_room`: close a session.
@@ -268,12 +266,10 @@ The Document App is bundled into `dist/document-app.html` during `npm run build`
 Inline mode shows a Markdown preview with `Open in Tabula` and `Edit` actions.
 Editing happens in fullscreen, where the App provides title editing, outline
 context, and Editor/Split/Preview modes for local Markdown drafts. It also opens connected rooms through
-`tabula_open_room_view` as a read-only room mode. It does not replace the text
-tools: clients without MCP Apps support can keep using `tabula_read_markdown`,
-`tabula_get_outline`, `tabula_read_workspace`,
-`tabula_read_workspace_document`, `tabula_propose_workspace_changes`,
-`tabula_propose_text_patches`, and, when direct write mode is enabled,
-`tabula_apply_text_patches` normally.
+`tabula_open_room_view` as a read-only room mode. It does not replace the
+workspace room tools: clients without MCP Apps support can keep using
+`tabula_read_workspace`, `tabula_read_workspace_document`, and
+`tabula_propose_workspace_changes` normally.
 
 Local stdio/MCPB App documents are checkpointed as plaintext files in this
 machine's local application state so the MCP server can recover them across
@@ -390,26 +386,18 @@ a fresh environment, run `npx playwright install chromium`.
 
 ## Editing Model
 
-Editing has two paths. Workspace proposal-first editing is available by default
-through `tabula_propose_workspace_changes`, which sends an encrypted
+Room editing uses one model: workspace proposal-first editing through
+`tabula_propose_workspace_changes`. This sends an encrypted
 `workspace.proposal.created` room event for a Tabula.md client to review. It can
 bundle multiple `document.patch`, `document.create`, `document.rename`,
-`document.move`, and `document.delete` changes in one proposal. Legacy
-single-document proposal-first editing remains available through
-`tabula_propose_text_patches`, which sends an encrypted `patch.proposed` room
-event. Direct editing is a server startup decision, not a per-tool argument. In
-the default mode, the MCP server does not expose `tabula_apply_text_patches`, so
-an agent cannot grant itself direct write access by changing `tabula_connect_room`
-arguments.
+`document.move`, and `document.delete` changes in one proposal. A one-document
+room is still represented as a workspace with one document.
 
-To directly edit, start the MCP process with `TABULA_MCP_ENABLE_WRITE=1` or
-`--enable-write`, then connect to the room normally.
-
-Patch proposals and direct edits must use the latest `baseSha256` returned by
-`tabula_read_markdown`, `tabula_read_workspace_document`, or
-`tabula_room_status`. Hashes are lowercase SHA-256 hex values, matching
-Tabula.md's room collaboration contract. This avoids blind full-file overwrites
-when another collaborator has changed the room.
+Patch proposals must use the latest `baseSha256` returned by
+`tabula_read_workspace_document` or `tabula_room_status`. Hashes are lowercase
+SHA-256 hex values, matching Tabula.md's room collaboration contract. This
+avoids blind full-file overwrites when another collaborator has changed the
+room.
 
 Patch offsets are JavaScript string offsets in the old document:
 

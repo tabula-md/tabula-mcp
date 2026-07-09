@@ -10,14 +10,12 @@ import {
 import {
   assertEncryptedEnvelope,
   decodeBase64Url,
-  encodeBase64Url,
   type EnvelopeKind,
   type ParsedRoomShareUrl,
   TabulaMcpError,
 } from "./protocol.js";
 import {
   createAgentActor,
-  createProposalId,
   createRoomEventId,
   createWorkspaceProposalId,
   decodeRoomEvent,
@@ -27,7 +25,6 @@ import {
   type RoomPresenceSelection,
   type RoomActor,
   type RoomEvent,
-  type RoomPatchProposal,
   type WorkspaceChange,
   type WorkspaceDocumentNode,
   type WorkspaceFolderNode,
@@ -133,15 +130,6 @@ const isPeersPayload = (value: unknown, roomId: string): value is PeersPayload =
 const isPeerJoinedPayload = (value: unknown, roomId: string): value is { roomId: string; clientId: string } =>
   isRecord(value) && value.roomId === roomId && typeof value.clientId === "string";
 
-const formatProposalSummary = (title?: string, description?: string) => {
-  const trimmedTitle = title?.trim();
-  const trimmedDescription = description?.trim();
-  if (trimmedTitle && trimmedDescription) {
-    return `${trimmedTitle}\n\n${trimmedDescription}`;
-  }
-  return trimmedDescription || trimmedTitle || undefined;
-};
-
 const decodePresence = (bytes: Uint8Array): Collaborator | null => {
   try {
     const decoded = JSON.parse(textDecoder.decode(bytes)) as Partial<Collaborator>;
@@ -176,7 +164,6 @@ export class TabulaRoomClient {
   private readonly doc = new Y.Doc();
   private readonly text: Y.Text;
   private readonly collaborators = new Map<string, Collaborator>();
-  private readonly pendingProposals = new Map<string, RoomPatchProposal>();
   private readonly pendingWorkspaceProposals = new Map<string, WorkspaceProposal>();
   private readonly workspaceDocuments = new Map<string, WorkspaceDocumentCache>();
   private readonly workspaceYDocs = new Map<string, WorkspaceYDocState>();
@@ -292,8 +279,7 @@ export class TabulaRoomClient {
         lastSeen,
         actor,
       })),
-      pendingProposalCount: this.pendingProposals.size + this.pendingWorkspaceProposals.size,
-      pendingTextProposalCount: this.pendingProposals.size,
+      pendingProposalCount: this.pendingWorkspaceProposals.size,
       pendingWorkspaceProposalCount: this.pendingWorkspaceProposals.size,
       workspaceMode: Boolean(this.workspaceStateValue),
       activeDocumentId: this.workspaceStateValue?.activeDocumentId,
@@ -430,136 +416,6 @@ export class TabulaRoomClient {
       note: emitted
         ? undefined
         : "The workspace proposal was prepared locally but was not acknowledged by the room relay. Check the room connection and server support for room-event envelopes.",
-    };
-  }
-
-  async applyPatches({ patches, baseSha256 }: { patches: readonly TextPatch[]; baseSha256?: string }) {
-    if (!this.writeAccess) {
-      throw new TabulaMcpError("This session is read-only. Restart tabula-mcp with write mode enabled before editing.");
-    }
-    if (!this.hasReceivedState) {
-      throw new TabulaMcpError("Room state has not been received yet. Wait for a live peer to send state-init/yjs-update before editing.");
-    }
-
-    const previousMarkdown = this.markdown;
-    const previousSha256 = await sha256Text(previousMarkdown);
-    if (baseSha256 && baseSha256 !== previousSha256) {
-      throw new TabulaMcpError("Base hash does not match the current room text. Read again before applying patches.");
-    }
-
-    const normalizedPatches = normalizeTextPatches(patches);
-    const nextMarkdown = applyTextPatchesToString(previousMarkdown, normalizedPatches);
-    if (nextMarkdown === null) {
-      throw new TabulaMcpError("Patches are overlapping or outside the current Markdown text.");
-    }
-    if (nextMarkdown === previousMarkdown) {
-      return {
-        sessionId: this.sessionId,
-        roomId: this.roomId,
-        changed: false,
-        textLength: previousMarkdown.length,
-        previousSha256,
-        sha256: previousSha256,
-      };
-    }
-
-    const descendingPatches = [...normalizedPatches].sort((first, second) => second.from - first.from || second.to - first.to);
-    this.doc.transact(() => {
-      for (const patch of descendingPatches) {
-        if (patch.to > patch.from) {
-          this.text.delete(patch.from, patch.to - patch.from);
-        }
-        if (patch.insert) {
-          this.text.insert(patch.from, patch.insert);
-        }
-      }
-    }, "local");
-
-    const sha256 = await sha256Text(this.markdown);
-    await this.publishRoomEvent({
-      id: createRoomEventId(),
-      type: "text.updated",
-      roomId: this.roomId,
-      actorId: this.actor.id,
-      documentId: this.workspaceStateValue?.activeDocumentId,
-      baseHash: previousSha256,
-      baseSha256: previousSha256,
-      sha256,
-      update: encodeBase64Url(Y.encodeStateAsUpdate(this.doc)),
-      createdAt: new Date().toISOString(),
-    });
-
-    return {
-      sessionId: this.sessionId,
-      roomId: this.roomId,
-      changed: true,
-      textLength: this.markdown.length,
-      previousSha256,
-      sha256,
-    };
-  }
-
-  async proposePatches({
-    patches,
-    baseSha256,
-    title,
-    description,
-  }: {
-    patches: readonly TextPatch[];
-    baseSha256: string;
-    title?: string;
-    description?: string;
-  }) {
-    if (!this.hasReceivedState) {
-      throw new TabulaMcpError("Room state has not been received yet. Wait for a live peer to send state-init/yjs-update before proposing edits.");
-    }
-
-    const previousMarkdown = this.markdown;
-    const previousSha256 = await sha256Text(previousMarkdown);
-    if (baseSha256 !== previousSha256) {
-      throw new TabulaMcpError("Base hash does not match the current room text. Read again before proposing patches.");
-    }
-
-    const normalizedPatches = normalizeTextPatches(patches);
-    const nextMarkdown = applyTextPatchesToString(previousMarkdown, normalizedPatches);
-    if (nextMarkdown === null) {
-      throw new TabulaMcpError("Patches are overlapping or outside the current Markdown text.");
-    }
-
-    const createdAt = new Date().toISOString();
-    const proposal: RoomPatchProposal = {
-      id: createProposalId(),
-      roomId: this.roomId,
-      proposerId: this.actor.id,
-      proposerName: this.actor.name,
-      baseHash: previousSha256,
-      patches: normalizedPatches,
-      createdAt,
-      summary: formatProposalSummary(title, description),
-      status: "pending",
-    };
-    const event: RoomEvent = {
-      id: createRoomEventId(),
-      type: "patch.proposed",
-      roomId: this.roomId,
-      actorId: this.actor.id,
-      actor: this.actor,
-      proposal,
-      createdAt,
-    };
-    const emitted = await this.publishRoomEvent(event);
-    if (emitted) {
-      this.recordRoomEvent(event);
-    }
-
-    return {
-      sessionId: this.sessionId,
-      roomId: this.roomId,
-      emitted,
-      proposal,
-      note: emitted
-        ? undefined
-        : "The proposal was prepared locally but was not acknowledged by the room relay. Check the room connection and server support for room-event envelopes.",
     };
   }
 
@@ -891,12 +747,6 @@ export class TabulaRoomClient {
     }
     if (event.type === "text.updated") {
       void this.applyTextUpdatedEvent(event);
-    }
-    if (event.type === "patch.proposed") {
-      this.pendingProposals.set(event.proposal.id, event.proposal);
-    }
-    if (event.type === "patch.decided") {
-      this.pendingProposals.delete(event.proposalId);
     }
     if (event.type === "workspace.updated") {
       this.workspaceStateValue = event.workspace;

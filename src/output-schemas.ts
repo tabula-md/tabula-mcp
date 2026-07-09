@@ -115,19 +115,6 @@ const workspaceChangeOutputSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const patchProposalOutputSchema = z.object({
-  id: z.string(),
-  roomId: roomIdOutputSchema,
-  fileId: z.string().optional(),
-  proposerId: z.string(),
-  proposerName: z.string().optional(),
-  baseHash: sha256Schema,
-  patches: z.array(textPatchOutputSchema),
-  createdAt: isoDateStringSchema,
-  summary: z.string().optional(),
-  status: z.literal("pending"),
-});
-
 const workspaceProposalOutputSchema = z.object({
   id: z.string(),
   roomId: roomIdOutputSchema,
@@ -211,7 +198,6 @@ export const roomStatusOutputShape = {
   peerCount: z.number().int().nonnegative(),
   collaborators: z.array(collaboratorOutputSchema),
   pendingProposalCount: z.number().int().nonnegative(),
-  pendingTextProposalCount: z.number().int().nonnegative().optional(),
   pendingWorkspaceProposalCount: z.number().int().nonnegative().optional(),
   workspaceMode: z.boolean().optional(),
   activeDocumentId: z.string().optional(),
@@ -229,23 +215,6 @@ export const connectRoomOutputShape = {
 
 export const listSessionsOutputShape = {
   sessions: z.array(z.object(roomStatusOutputShape)),
-};
-
-export const readMarkdownOutputShape = {
-  sessionId: sessionIdOutputSchema,
-  roomId: roomIdOutputSchema,
-  markdown: z.string(),
-  textLength: z.number().int().nonnegative(),
-  sha256: sha256Schema,
-  ...roomHydrationOutputShape,
-};
-
-export const outlineOutputShape = {
-  sessionId: sessionIdOutputSchema,
-  roomId: roomIdOutputSchema,
-  outline: z.array(markdownHeadingOutputSchema),
-  sha256: sha256Schema,
-  ...roomHydrationOutputShape,
 };
 
 export const readWorkspaceOutputShape = {
@@ -270,23 +239,6 @@ export const readWorkspaceDocumentOutputShape = {
   sha256: sha256Schema,
   cachedAt: isoDateStringSchema,
   ...roomHydrationOutputShape,
-};
-
-export const applyTextPatchesOutputShape = {
-  sessionId: sessionIdOutputSchema,
-  roomId: roomIdOutputSchema,
-  changed: z.boolean(),
-  textLength: z.number().int().nonnegative(),
-  previousSha256: sha256Schema,
-  sha256: sha256Schema,
-};
-
-export const proposeTextPatchesOutputShape = {
-  sessionId: sessionIdOutputSchema,
-  roomId: roomIdOutputSchema,
-  emitted: z.boolean(),
-  proposal: patchProposalOutputSchema,
-  note: z.string().optional(),
 };
 
 export const proposeWorkspaceChangesOutputShape = {

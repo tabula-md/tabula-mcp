@@ -69,19 +69,6 @@ describe("TabulaRoomClient room state hydration", () => {
     }
   });
 
-  it("blocks room writes before a state-init or yjs-update has arrived", async () => {
-    const client = createClient();
-    try {
-      await expect(
-        client.applyPatches({
-          patches: [{ from: 0, to: 0, insert: "# Draft" }],
-        }),
-      ).rejects.toThrow(/state has not been received/);
-    } finally {
-      client.disconnect();
-    }
-  });
-
   it("reports an agent actor with proposal capability", async () => {
     const client = createClient(false);
     try {
@@ -95,67 +82,6 @@ describe("TabulaRoomClient room state hydration", () => {
         capabilities: ["presence", "read", "propose"],
         pendingProposalCount: 0,
       });
-    } finally {
-      client.disconnect();
-    }
-  });
-
-  it("emits patch proposals as encrypted room-event envelopes", async () => {
-    const client = createClient(false);
-    const key = await importRoomKey(roomKey);
-    const sourceDoc = new Y.Doc();
-    sourceDoc.getText("markdown").insert(0, "# Draft\n");
-    const stateInit = await encryptBytesForRoom(key, "room_123", "state-init", 1, Y.encodeStateAsUpdate(sourceDoc));
-    const emitted: unknown[] = [];
-    const socket = {
-      connected: true,
-      disconnect: vi.fn(),
-      emit: vi.fn((_eventName: string, envelope: unknown, acknowledge?: (ack: { ok?: boolean }) => void) => {
-        emitted.push(envelope);
-        acknowledge?.({ ok: true });
-      }),
-    };
-
-    try {
-      (client as unknown as { roomKey: CryptoKey }).roomKey = key;
-      await (client as unknown as { applyIncomingEnvelope(value: unknown): Promise<void> }).applyIncomingEnvelope(stateInit);
-      (client as unknown as { socket: typeof socket }).socket = socket;
-
-      const baseSha256 = await sha256Text("# Draft\n");
-      const result = await client.proposePatches({
-        baseSha256,
-        title: "Add intro",
-        description: "Add a short opening sentence.",
-        patches: [{ from: 8, to: 8, insert: "\nHello from an agent.\n" }],
-      });
-
-      expect(result).toMatchObject({
-        emitted: true,
-        proposal: {
-          roomId: "room_123",
-          proposerId: client.actor.id,
-          proposerName: "Tabula Agent",
-          baseHash: baseSha256,
-          summary: "Add intro\n\nAdd a short opening sentence.",
-          status: "pending",
-        },
-      });
-      expect(await client.getStatus()).toMatchObject({
-        pendingProposalCount: 1,
-      });
-
-      const envelope = emitted.at(-1);
-      expect(envelope).toMatchObject({
-        kind: "room-event",
-        roomId: "room_123",
-      });
-      expect(JSON.stringify(envelope)).not.toContain("Hello from an agent");
-
-      const decoded = JSON.parse(
-        new TextDecoder().decode(await decryptEnvelopeForRoom(key, envelope as Parameters<typeof decryptEnvelopeForRoom>[1])),
-      ) as { type: string; proposal: { patches: Array<{ insert: string }> } };
-      expect(decoded.type).toBe("patch.proposed");
-      expect(decoded.proposal.patches[0]?.insert).toBe("\nHello from an agent.\n");
     } finally {
       client.disconnect();
     }
@@ -300,55 +226,4 @@ describe("TabulaRoomClient room state hydration", () => {
     }
   });
 
-  it("emits direct writes as text.updated room events with base64url Yjs updates", async () => {
-    const client = createClient(true);
-    const key = await importRoomKey(roomKey);
-    const sourceDoc = new Y.Doc();
-    sourceDoc.getText("markdown").insert(0, "# Draft\n");
-    const stateInit = await encryptBytesForRoom(key, "room_123", "state-init", 1, Y.encodeStateAsUpdate(sourceDoc));
-    const emitted: unknown[] = [];
-    const socket = {
-      connected: true,
-      disconnect: vi.fn(),
-      emit: vi.fn((_eventName: string, envelope: unknown, acknowledge?: (ack: { ok?: boolean }) => void) => {
-        emitted.push(envelope);
-        acknowledge?.({ ok: true });
-      }),
-    };
-
-    try {
-      (client as unknown as { roomKey: CryptoKey }).roomKey = key;
-      await (client as unknown as { applyIncomingEnvelope(value: unknown): Promise<void> }).applyIncomingEnvelope(stateInit);
-      (client as unknown as { socket: typeof socket }).socket = socket;
-
-      const baseSha256 = await sha256Text("# Draft\n");
-      await client.applyPatches({
-        baseSha256,
-        patches: [{ from: 8, to: 8, insert: "\nDirect write.\n" }],
-      });
-
-      const decodedEvents = await Promise.all(
-        emitted
-          .filter((envelope): envelope is Parameters<typeof decryptEnvelopeForRoom>[1] =>
-            Boolean(envelope && typeof envelope === "object" && (envelope as { kind?: unknown }).kind === "room-event"),
-          )
-          .map(async (envelope) =>
-            JSON.parse(new TextDecoder().decode(await decryptEnvelopeForRoom(key, envelope))) as {
-              type: string;
-              baseHash?: string;
-              update?: string;
-            },
-          ),
-      );
-      const textUpdated = decodedEvents.find((event) => event.type === "text.updated");
-
-      expect(textUpdated).toMatchObject({
-        type: "text.updated",
-        baseHash: baseSha256,
-      });
-      expect(textUpdated?.update).toMatch(/^[A-Za-z0-9_-]+$/);
-    } finally {
-      client.disconnect();
-    }
-  });
 });

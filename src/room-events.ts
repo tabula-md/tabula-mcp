@@ -45,20 +45,7 @@ export type RoomPresence = {
   lastSeen: number;
 };
 
-export type RoomPatchProposalStatus = "pending" | "accepted" | "rejected" | "stale" | "failed";
-
-export type RoomPatchProposal = {
-  id: string;
-  roomId: string;
-  fileId?: string;
-  proposerId: string;
-  proposerName?: string;
-  baseHash: string;
-  patches: TextPatch[];
-  createdAt: string;
-  summary?: string;
-  status: RoomPatchProposalStatus;
-};
+export type RoomProposalStatus = "pending" | "accepted" | "rejected" | "stale" | "failed";
 
 export type WorkspaceFolderNode = {
   id: string;
@@ -130,7 +117,7 @@ export type WorkspaceProposal = {
   title?: string;
   description?: string;
   createdAt: string;
-  status: RoomPatchProposalStatus;
+  status: RoomProposalStatus;
   changes: WorkspaceChange[];
 };
 
@@ -179,25 +166,6 @@ export type RoomEvent =
       baseSha256?: string;
       sha256?: string;
       update: string;
-      createdAt: string;
-    }
-  | {
-      id: string;
-      type: "patch.proposed";
-      roomId: string;
-      actorId: string;
-      actor?: RoomActor;
-      proposal: RoomPatchProposal;
-      createdAt: string;
-    }
-  | {
-      id: string;
-      type: "patch.decided";
-      roomId: string;
-      actorId: string;
-      proposalId: string;
-      decision: "accepted" | "rejected" | "stale" | "failed";
-      reason?: string;
       createdAt: string;
     }
   | {
@@ -326,7 +294,6 @@ export const createAgentActor = ({
 });
 
 export const createRoomEventId = () => `event_${randomUUID()}`;
-export const createProposalId = () => `proposal_${randomUUID()}`;
 export const createWorkspaceProposalId = () => `workspace_proposal_${randomUUID()}`;
 
 export const encodeRoomEvent = (event: RoomEvent) => textEncoder.encode(JSON.stringify(event));
@@ -367,28 +334,8 @@ const isTextPatch = (value: unknown): value is TextPatch =>
   value.to >= value.from &&
     typeof value.insert === "string";
 
-const isPatchProposalStatus = (value: unknown): value is RoomPatchProposalStatus =>
+const isRoomProposalStatus = (value: unknown): value is RoomProposalStatus =>
   value === "pending" || value === "accepted" || value === "rejected" || value === "stale" || value === "failed";
-
-export const isRoomPatchProposal = (value: unknown): value is RoomPatchProposal => {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  return (
-    typeof value.id === "string" &&
-    typeof value.roomId === "string" &&
-    (value.fileId === undefined || typeof value.fileId === "string") &&
-    typeof value.proposerId === "string" &&
-    (value.proposerName === undefined || typeof value.proposerName === "string") &&
-    typeof value.baseHash === "string" &&
-    Array.isArray(value.patches) &&
-    value.patches.every(isTextPatch) &&
-    typeof value.createdAt === "string" &&
-    (value.summary === undefined || typeof value.summary === "string") &&
-    isPatchProposalStatus(value.status)
-  );
-};
 
 const isWorkspaceNode = (value: unknown): value is WorkspaceNode => {
   if (
@@ -463,7 +410,7 @@ export const isWorkspaceProposal = (value: unknown): value is WorkspaceProposal 
   (value.title === undefined || typeof value.title === "string") &&
   (value.description === undefined || typeof value.description === "string") &&
   typeof value.createdAt === "string" &&
-  isPatchProposalStatus(value.status) &&
+  isRoomProposalStatus(value.status) &&
   Array.isArray(value.changes) &&
   value.changes.every(isWorkspaceChange);
 
@@ -495,17 +442,6 @@ export const isRoomEvent = (value: unknown): value is RoomEvent => {
         (value.baseHash === undefined || typeof value.baseHash === "string") &&
         (value.baseSha256 === undefined || typeof value.baseSha256 === "string") &&
         (value.sha256 === undefined || typeof value.sha256 === "string")
-      );
-    case "patch.proposed":
-      return (value.actor === undefined || isRoomActor(value.actor)) && isRoomPatchProposal(value.proposal);
-    case "patch.decided":
-      return (
-        typeof value.proposalId === "string" &&
-        (value.decision === "accepted" ||
-          value.decision === "rejected" ||
-          value.decision === "stale" ||
-          value.decision === "failed") &&
-        (value.reason === undefined || typeof value.reason === "string")
       );
     case "comment.created":
       return "comment" in value;

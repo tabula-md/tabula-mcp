@@ -162,17 +162,13 @@ Model-facing tools:
 - `tabula_connect_room`
 - `tabula_list_sessions`
 - `tabula_room_status`
-- `tabula_read_markdown`
-- `tabula_get_outline`
 - `tabula_open_room_view`
 - `tabula_read_workspace`
 - `tabula_read_workspace_document`
 - `tabula_propose_workspace_changes`
-- `tabula_propose_text_patches`
 - `tabula_set_presence`
 - `tabula_wait_for_changes`
 - `tabula_disconnect_room`
-- `tabula_apply_text_patches` only when server write mode is enabled
 
 App-only tools:
 

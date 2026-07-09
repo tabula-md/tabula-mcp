@@ -49,13 +49,13 @@ describe("room encryption", () => {
     ).rejects.toThrow();
   });
 
-  it("round-trips encrypted room events without exposing proposal plaintext in the envelope", async () => {
+  it("round-trips encrypted workspace room events without exposing proposal plaintext in the envelope", async () => {
     const key = await importRoomKey(roomKey);
     const event = new TextEncoder().encode(
       JSON.stringify({
         v: 1,
         id: "event_123",
-        type: "patch.proposed",
+        type: "workspace.proposal.created",
         roomId: "room_123",
         actorId: "agent_123",
         createdAt: "2026-06-18T00:00:00.000Z",
@@ -69,7 +69,7 @@ describe("room encryption", () => {
       kind: "room-event",
       version: 3,
     });
-    expect(JSON.stringify(envelope)).not.toContain("patch.proposed");
+    expect(JSON.stringify(envelope)).not.toContain("workspace.proposal.created");
     await expect(decryptEnvelopeForRoom(key, envelope)).resolves.toEqual(event);
   });
 
