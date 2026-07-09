@@ -14,6 +14,7 @@ import {
 import { formatTabulaReadMe, getTabulaReadMe, tabulaReadMeTopics } from "../guidance.js";
 import { readMeOutputShape } from "../output-schemas.js";
 import { SessionRegistry } from "../registry.js";
+import { WorkspaceRegistry } from "../workspaces.js";
 import { registerRoomTools } from "./register-room-tools.js";
 import { resolveWriteEnabled } from "./write-access.js";
 
@@ -29,6 +30,7 @@ export type TabulaMcpServerOptions = {
 export type TabulaMcpServerInstance = {
   server: McpServer;
   registry: SessionRegistry;
+  workspaces: WorkspaceRegistry;
   documents: DocumentRegistry;
   writeEnabled: boolean;
   deploymentMode: DocumentStoreDeploymentMode;
@@ -77,6 +79,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const deploymentMode = resolveDocumentStoreDeploymentMode({ deploymentMode: options.deploymentMode });
   const documentStore = options.documentStore ?? createDefaultDocumentStore({ deploymentMode });
   const registry = new SessionRegistry();
+  const workspaces = new WorkspaceRegistry();
   const documents = new DocumentRegistry(documentStore);
   const server = new McpServer({
     name: "tabula-mcp",
@@ -106,8 +109,8 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
 
   registerReadMeTool(server);
   if (allowRoomTools) {
-    registerRoomTools(server, registry, { writeEnabled });
+    registerRoomTools(server, registry, workspaces, { writeEnabled });
   }
 
-  return { server, registry, documents, writeEnabled, deploymentMode, documentStoreKind: documentStore.kind };
+  return { server, registry, workspaces, documents, writeEnabled, deploymentMode, documentStoreKind: documentStore.kind };
 };

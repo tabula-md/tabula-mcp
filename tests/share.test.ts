@@ -5,6 +5,7 @@ import { decodeBase64Url, encodeBase64Url, type EncryptedEnvelope } from "../src
 import {
   createEncryptedMarkdownSnapshot,
   createEncryptedJsonShareSnapshot,
+  createEncryptedJsonShareWorkspaceSnapshot,
   createJsonShareUrl,
   createRoomShareUrl,
   generateJsonShareKey,
@@ -12,6 +13,7 @@ import {
   generateRoomKey,
   resolveJsonShareServerUrl,
   shareMarkdownDocument,
+  shareMarkdownWorkspace,
 } from "../src/share.js";
 
 const roomId = "room_123";
@@ -85,6 +87,24 @@ describe("Tabula document sharing", () => {
     expect(body).not.toContain(snapshotKey);
   });
 
+  it("encrypts multi-file workspaces into opaque JSON snapshot blobs", async () => {
+    const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+      files: [
+        { id: "readme", title: "README.md", text: "# Readme\n" },
+        { id: "plan", title: "Plan.md", text: "# Plan\n\nSecret plan" },
+      ],
+      activeFileId: "plan",
+      snapshotKey,
+      now: () => new Date("2026-07-05T00:00:00.000Z"),
+    });
+    const body = Buffer.from(encrypted).toString("utf8");
+
+    expect(encrypted.slice(0, 4)).toEqual(new Uint8Array([0x54, 0x42, 0x45, 0x31]));
+    expect(body).not.toContain("Secret plan");
+    expect(body).not.toContain("Plan.md");
+    expect(body).not.toContain(snapshotKey);
+  });
+
   it("uploads only an encrypted JSON snapshot and returns a bearer share URL", async () => {
     const fetchCalls: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
@@ -129,6 +149,49 @@ describe("Tabula document sharing", () => {
     expect(fetchCalls[0]?.init.method).toBe("POST");
     expect(fetchCalls[0]?.init.headers).toEqual({ "content-type": "application/octet-stream" });
     expect(body).not.toContain("# Secret");
+    expect(body).not.toContain("Do not upload plaintext");
+    expect(body).not.toContain(snapshotKey);
+  });
+
+  it("uploads encrypted workspace snapshots with multiple files", async () => {
+    const fetchCalls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
+      fetchCalls.push({ url: String(url), init: init ?? {} });
+      return new Response(
+        JSON.stringify({
+          id: snapshotId,
+          data: `https://json.tabula.md/api/v2/${snapshotId}`,
+        }),
+        { status: 200 },
+      );
+    };
+
+    const result = await shareMarkdownWorkspace({
+      title: "Workspace",
+      files: [
+        { id: "readme", title: "README.md", text: "# Readme\n" },
+        { id: "plan", title: "Plan.md", text: "# Plan\n\nDo not upload plaintext" },
+      ],
+      activeFileId: "plan",
+      appOrigin: "https://tabula.md",
+      fetchImpl,
+      snapshotKey,
+      now: () => new Date("2026-07-05T00:00:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      title: "Workspace",
+      linkKind: "json-snapshot",
+      snapshotId,
+      fileCount: 2,
+      textLength: "# Readme\n".length + "# Plan\n\nDo not upload plaintext".length,
+      shareUrl: `https://tabula.md/#json=${snapshotId},${snapshotKey}`,
+      encrypted: true,
+      secret: true,
+      keyLocation: "url-fragment",
+    });
+    expect(fetchCalls).toHaveLength(1);
+    const body = Buffer.from(fetchCalls[0]?.init.body as ArrayBuffer).toString("utf8");
     expect(body).not.toContain("Do not upload plaintext");
     expect(body).not.toContain(snapshotKey);
   });

@@ -176,7 +176,17 @@ const runNonAppClientSmoke = async ({ storeDir, jsonServerUrl, serverCwd, server
     assert(toolNames.includes("tabula_read_me"), "read_me should be available without MCP Apps");
     assert(!toolNames.includes("tabula_create_document"), "document App tools must require MCP Apps support");
     assert(!toolNames.includes("tabula_share_document"), "share App tool must require MCP Apps support");
-    assert(!toolNames.includes("tabula_apply_text_patches"), "default stdio server must be read-only");
+    assert(toolNames.includes("tabula_create_workspace"), "default stdio server should expose workspace create tool");
+    assert(toolNames.includes("tabula_import_markdown_workspace"), "default stdio server should expose workspace import tool");
+    assert(toolNames.includes("tabula_share_workspace"), "default stdio server should expose workspace share tool");
+    assert(toolNames.includes("tabula_create_workspace_room"), "default stdio server should expose workspace room create tool");
+    assert(toolNames.includes("tabula_read_workspace"), "default stdio server should expose workspace read tool");
+    assert(toolNames.includes("tabula_read_workspace_document"), "default stdio server should expose workspace document read tool");
+    assert(toolNames.includes("tabula_propose_workspace_changes"), "default stdio server should expose workspace proposal tool");
+    assert(!toolNames.includes("tabula_read_markdown"), "default stdio server should not expose legacy room Markdown reads");
+    assert(!toolNames.includes("tabula_get_outline"), "default stdio server should not expose legacy room outline reads");
+    assert(!toolNames.includes("tabula_propose_text_patches"), "default stdio server should not expose legacy single-document proposals");
+    assert(!toolNames.includes("tabula_apply_text_patches"), "default stdio server must not expose direct room writes");
 
     const readMe = await client.callTool({
       name: "tabula_read_me",
@@ -200,7 +210,17 @@ const runAppClientSmoke = async ({ storeDir, jsonServerUrl, uploads, serverCwd, 
     ]) {
       assert(toolNames.includes(toolName), `MCP Apps stdio client should expose ${toolName}`);
     }
-    assert(!toolNames.includes("tabula_apply_text_patches"), "MCPB-compatible stdio smoke should stay read-only");
+    assert(toolNames.includes("tabula_read_workspace"), "MCPB-compatible stdio smoke should expose workspace read tool");
+    assert(toolNames.includes("tabula_create_workspace"), "MCPB-compatible stdio smoke should expose workspace create tool");
+    assert(toolNames.includes("tabula_import_markdown_workspace"), "MCPB-compatible stdio smoke should expose workspace import tool");
+    assert(toolNames.includes("tabula_share_workspace"), "MCPB-compatible stdio smoke should expose workspace share tool");
+    assert(toolNames.includes("tabula_create_workspace_room"), "MCPB-compatible stdio smoke should expose workspace room create tool");
+    assert(toolNames.includes("tabula_read_workspace_document"), "MCPB-compatible stdio smoke should expose workspace document read tool");
+    assert(toolNames.includes("tabula_propose_workspace_changes"), "MCPB-compatible stdio smoke should expose workspace proposal tool");
+    assert(!toolNames.includes("tabula_read_markdown"), "MCPB-compatible stdio smoke should not expose legacy room Markdown reads");
+    assert(!toolNames.includes("tabula_get_outline"), "MCPB-compatible stdio smoke should not expose legacy room outline reads");
+    assert(!toolNames.includes("tabula_propose_text_patches"), "MCPB-compatible stdio smoke should not expose legacy single-document proposals");
+    assert(!toolNames.includes("tabula_apply_text_patches"), "MCPB-compatible stdio smoke should not expose direct writes");
 
     const resource = await client.readResource({ uri: documentAppResourceUri });
     const appHtml = resource.contents?.[0]?.text || "";
@@ -306,7 +326,17 @@ const runZeroConfigSmoke = async ({ jsonServerUrl, uploads, serverCwd, serverEnt
       const toolNames = toolNamesFrom(tools);
       assert(toolNames.includes("tabula_create_document"), "zero-config MCP Apps client should expose document tools");
       assert(toolNames.includes("tabula_share_document"), "zero-config MCP Apps client should expose share tool");
-      assert(!toolNames.includes("tabula_apply_text_patches"), "zero-config MCPB smoke should stay read-only");
+      assert(toolNames.includes("tabula_read_workspace"), "zero-config MCPB smoke should expose workspace read tool");
+      assert(toolNames.includes("tabula_create_workspace"), "zero-config MCPB smoke should expose workspace create tool");
+      assert(toolNames.includes("tabula_import_markdown_workspace"), "zero-config MCPB smoke should expose workspace import tool");
+      assert(toolNames.includes("tabula_share_workspace"), "zero-config MCPB smoke should expose workspace share tool");
+      assert(toolNames.includes("tabula_create_workspace_room"), "zero-config MCPB smoke should expose workspace room create tool");
+      assert(toolNames.includes("tabula_read_workspace_document"), "zero-config MCPB smoke should expose workspace document read tool");
+      assert(toolNames.includes("tabula_propose_workspace_changes"), "zero-config MCPB smoke should expose workspace proposal tool");
+      assert(!toolNames.includes("tabula_read_markdown"), "zero-config MCPB smoke should not expose legacy room Markdown reads");
+      assert(!toolNames.includes("tabula_get_outline"), "zero-config MCPB smoke should not expose legacy room outline reads");
+      assert(!toolNames.includes("tabula_propose_text_patches"), "zero-config MCPB smoke should not expose legacy single-document proposals");
+      assert(!toolNames.includes("tabula_apply_text_patches"), "zero-config MCPB smoke should not expose direct writes");
 
       const createResult = await client.callTool({
         name: "tabula_create_document",

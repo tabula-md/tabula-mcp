@@ -2,10 +2,11 @@ import { z } from "zod";
 import { tabulaReadMeTopics } from "./guidance.js";
 
 const isoDateStringSchema = z.string().datetime();
-const sha256Schema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 const possiblyClearedSha256Schema = z.union([sha256Schema, z.literal("")]);
 
 const sessionIdOutputSchema = z.string().uuid();
+const workspaceIdOutputSchema = z.string().uuid();
 const roomIdOutputSchema = z.string();
 const roomHydrationStatusOutputSchema = z.enum(["waiting-for-peer-state", "ready"]);
 const roomHydrationOutputShape = {
@@ -15,8 +16,21 @@ const roomHydrationOutputShape = {
 };
 
 const liveSelectionOutputSchema = z.object({
+  documentId: z.string().optional(),
   from: z.number().int().nonnegative(),
   to: z.number().int().nonnegative(),
+});
+
+const roomCapabilityOutputSchema = z.enum(["presence", "read", "propose", "comment", "write", "create", "delete", "move"]);
+
+const roomActorOutputSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["human", "agent"]),
+  name: z.string(),
+  client: z.enum(["tabula-md", "tabula-mcp", "custom"]),
+  capabilities: z.array(roomCapabilityOutputSchema),
+  color: z.string().optional(),
+  joinedAt: isoDateStringSchema,
 });
 
 const collaboratorOutputSchema = z.object({
@@ -26,7 +40,105 @@ const collaboratorOutputSchema = z.object({
   lastSeen: z.number().int().nonnegative(),
   fileTitle: z.string().optional(),
   selection: liveSelectionOutputSchema.optional(),
+  actor: roomActorOutputSchema.optional(),
 });
+
+const textPatchOutputSchema = z.object({
+  from: z.number().int().nonnegative(),
+  to: z.number().int().nonnegative(),
+  insert: z.string(),
+});
+
+const workspaceFolderNodeOutputSchema = z.object({
+  id: z.string(),
+  type: z.literal("folder"),
+  parentId: z.string().nullable(),
+  title: z.string(),
+  order: z.number().optional(),
+  createdAt: isoDateStringSchema,
+  updatedAt: isoDateStringSchema,
+});
+
+const workspaceDocumentNodeOutputSchema = z.object({
+  id: z.string(),
+  type: z.literal("document"),
+  parentId: z.string().nullable(),
+  title: z.string(),
+  sha256: sha256Schema,
+  textLength: z.number().int().nonnegative(),
+  order: z.number().optional(),
+  createdAt: isoDateStringSchema,
+  updatedAt: isoDateStringSchema,
+});
+
+const workspaceNodeOutputSchema = z.union([workspaceFolderNodeOutputSchema, workspaceDocumentNodeOutputSchema]);
+
+const workspaceDocumentSummaryOutputSchema = workspaceDocumentNodeOutputSchema.extend({
+  cached: z.boolean(),
+  path: z.string().optional(),
+});
+
+const workspaceRoomStateOutputSchema = z.object({
+  roomId: roomIdOutputSchema,
+  mode: z.literal("workspace"),
+  version: z.number(),
+  rootId: z.string(),
+  nodes: z.array(workspaceNodeOutputSchema),
+  activeDocumentId: z.string().optional(),
+});
+
+const workspaceChangeOutputSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("document.patch"),
+    documentId: z.string(),
+    baseSha256: sha256Schema,
+    patches: z.array(textPatchOutputSchema),
+  }),
+  z.object({
+    type: z.literal("document.create"),
+    parentId: z.string().nullable(),
+    title: z.string(),
+    markdown: z.string(),
+  }),
+  z.object({
+    type: z.literal("document.rename"),
+    documentId: z.string(),
+    title: z.string(),
+  }),
+  z.object({
+    type: z.literal("document.move"),
+    documentId: z.string(),
+    parentId: z.string().nullable(),
+  }),
+  z.object({
+    type: z.literal("document.delete"),
+    documentId: z.string(),
+    baseSha256: sha256Schema.optional(),
+  }),
+]);
+
+const workspaceProposalOutputSchema = z.object({
+  id: z.string(),
+  roomId: roomIdOutputSchema,
+  actorId: z.string(),
+  actor: roomActorOutputSchema,
+  title: z.string().optional(),
+  description: z.string().optional(),
+  createdAt: isoDateStringSchema,
+  status: z.literal("pending"),
+  changes: z.array(workspaceChangeOutputSchema),
+});
+
+const roomEventOutputSchema = z
+  .object({
+    id: z.string(),
+    type: z.string(),
+    roomId: roomIdOutputSchema,
+    actorId: z.string(),
+    actor: roomActorOutputSchema.optional(),
+    createdAt: isoDateStringSchema,
+  })
+  .passthrough();
 
 export const markdownHeadingOutputSchema = z.object({
   depth: z.number().int().min(1).max(6),
@@ -79,12 +191,20 @@ export const roomStatusOutputShape = {
   roomServerUrl: z.string().url(),
   status: z.enum(["connecting", "connected", "offline", "closed"]),
   writeAccess: z.boolean(),
+  actor: roomActorOutputSchema,
+  capabilities: z.array(roomCapabilityOutputSchema),
   textLength: z.number().int().nonnegative(),
   sha256: sha256Schema,
   socketConnected: z.boolean(),
   ...roomHydrationOutputShape,
   peerCount: z.number().int().nonnegative(),
   collaborators: z.array(collaboratorOutputSchema),
+  pendingProposalCount: z.number().int().nonnegative(),
+  pendingWorkspaceProposalCount: z.number().int().nonnegative().optional(),
+  workspaceMode: z.boolean().optional(),
+  activeDocumentId: z.string().optional(),
+  workspaceVersion: z.number().optional(),
+  lastRoomEventAt: isoDateStringSchema.optional(),
   metadata: z.unknown().nullable(),
   lastError: z.string().optional(),
 };
@@ -99,30 +219,55 @@ export const listSessionsOutputShape = {
   sessions: z.array(z.object(roomStatusOutputShape)),
 };
 
-export const readMarkdownOutputShape = {
-  sessionId: sessionIdOutputSchema,
+export const readWorkspaceOutputShape = {
+  sessionId: sessionIdOutputSchema.optional(),
+  workspaceId: workspaceIdOutputSchema.optional(),
   roomId: roomIdOutputSchema,
+  workspace: workspaceRoomStateOutputSchema.nullable(),
+  activeDocumentId: z.string().optional(),
+  documents: z.array(workspaceDocumentSummaryOutputSchema),
+  cachedDocumentCount: z.number().int().nonnegative(),
+  pendingWorkspaceProposalCount: z.number().int().nonnegative(),
+  ...roomHydrationOutputShape,
+  createdAt: isoDateStringSchema.optional(),
+  updatedAt: isoDateStringSchema.optional(),
+  source: z.enum(["created", "imported"]).optional(),
+  sourceRootPath: z.string().optional(),
+  note: z.string().optional(),
+};
+
+export const readWorkspaceDocumentOutputShape = {
+  sessionId: sessionIdOutputSchema.optional(),
+  workspaceId: workspaceIdOutputSchema.optional(),
+  roomId: roomIdOutputSchema,
+  documentId: z.string(),
+  path: z.string().optional(),
+  title: z.string(),
   markdown: z.string(),
   textLength: z.number().int().nonnegative(),
   sha256: sha256Schema,
+  cachedAt: isoDateStringSchema,
   ...roomHydrationOutputShape,
 };
 
-export const outlineOutputShape = {
-  sessionId: sessionIdOutputSchema,
-  roomId: roomIdOutputSchema,
-  outline: z.array(markdownHeadingOutputSchema),
-  sha256: sha256Schema,
-  ...roomHydrationOutputShape,
+export const createWorkspaceOutputShape = readWorkspaceOutputShape;
+
+export const createWorkspaceRoomOutputShape = {
+  ...connectRoomOutputShape,
+  workspaceId: workspaceIdOutputSchema,
+  roomUrl: z.string().url(),
+  published: z.object({
+    emittedWorkspace: z.boolean(),
+    emittedDocumentCount: z.number().int().nonnegative(),
+  }),
 };
 
-export const applyTextPatchesOutputShape = {
+export const proposeWorkspaceChangesOutputShape = {
   sessionId: sessionIdOutputSchema,
   roomId: roomIdOutputSchema,
-  changed: z.boolean(),
-  textLength: z.number().int().nonnegative(),
-  previousSha256: sha256Schema,
-  sha256: sha256Schema,
+  emitted: z.boolean(),
+  proposal: workspaceProposalOutputSchema,
+  note: z.string().optional(),
 };
 
 export const setPresenceOutputShape = {
@@ -136,6 +281,7 @@ export const waitForChangesOutputShape = {
   markdown: z.string(),
   sha256: possiblyClearedSha256Schema,
   ...roomHydrationOutputShape,
+  roomEvents: z.array(roomEventOutputSchema).optional(),
 };
 
 export const disconnectRoomOutputShape = {
@@ -165,6 +311,26 @@ export const shareOutputShape = {
     jsonServerUrl: z.string().url(),
     snapshotUrl: z.string().url(),
     shareUrl: z.string().url(),
+    textLength: z.number().int().nonnegative(),
+    sha256: sha256Schema,
+    encrypted: z.literal(true),
+    secret: z.literal(true),
+    keyLocation: z.literal("url-fragment"),
+    expiresAt: isoDateStringSchema.optional(),
+  }),
+};
+
+export const shareWorkspaceOutputShape = {
+  workspaceId: workspaceIdOutputSchema,
+  share: z.object({
+    title: z.string(),
+    linkKind: z.literal("json-snapshot"),
+    snapshotId: z.string(),
+    appOrigin: z.string().url(),
+    jsonServerUrl: z.string().url(),
+    snapshotUrl: z.string().url(),
+    shareUrl: z.string().url(),
+    fileCount: z.number().int().nonnegative(),
     textLength: z.number().int().nonnegative(),
     sha256: sha256Schema,
     encrypted: z.literal(true),

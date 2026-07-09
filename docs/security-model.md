@@ -103,19 +103,17 @@ Production/public HTTP controls:
 
 - `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables fail-fast production guardrails.
 - `TABULA_MCP_AUTH_TOKEN` is required in production unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
-- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth for anonymous document workflows, ignores any configured auth token, forces stateless HTTP, blocks remote room tools, and requires Redis checkpoints.
+- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth and ignores any configured auth token.
 - Production remote mode requires Redis/Upstash REST credentials by default.
 - Production memory checkpoints require explicit unsafe opt-in with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and `TABULA_MCP_ALLOW_MEMORY_STORE=1`.
 - Production browser requests with an `Origin` header are rejected unless the origin is in `TABULA_MCP_ALLOWED_ORIGINS`.
-- Production remote document workflows default to stateless HTTP when hosted room tools are disabled.
 - `TABULA_MCP_RATE_LIMIT_MAX` / `TABULA_MCP_RATE_LIMIT_WINDOW_MS` throttle per-client MCP requests.
 - `TABULA_MCP_MAX_ACTIVE_SESSIONS` / `TABULA_MCP_SESSION_IDLE_TTL_MS` bound in-memory MCP transport sessions.
 - `TABULA_MCP_HTTP_MAX_REQUEST_BYTES` limits MCP request bodies.
 - `TABULA_MCP_REQUEST_TIMEOUT_MS` limits individual request handling.
 - `TABULA_MCP_LOG_LEVEL` enables structured JSON request logs.
-- `TABULA_MCP_ALLOW_REMOTE_ROOM=1` is required before hosted production exposes room connection tools.
-- `TABULA_MCP_STATELESS_HTTP=1` forces stateless HTTP sessions for serverless document workflows.
-- `TABULA_MCP_STATEFUL_HTTP=1` forces stateful HTTP sessions and should only be used with sticky routing, a single instance, or a session coordinator.
+- Remote room/workspace tools require stateful MCP HTTP sessions; `TABULA_MCP_STATELESS_HTTP=1` is rejected for remote deployments.
+- `TABULA_MCP_STATEFUL_HTTP=1` can force stateful HTTP sessions explicitly and should only be used with sticky routing, a single instance, or a session coordinator.
 
 The Document App also stores unsaved plaintext drafts in the local MCP App
 host's browser storage. Draft recovery is scoped by document id, size-limited,
@@ -148,16 +146,15 @@ Only send it to intended collaborators or agents.
 
 ## Room Write Policy
 
-Room write access is a server startup decision. The default MCPB and default
-stdio server are read-only for rooms.
+Direct room write access is a server startup decision. The default MCPB and
+default stdio server are proposal-first for rooms: they can send encrypted
+workspace proposals, but they do not expose direct write tools.
 
-Hosted production remote servers do not expose room connection tools by default
-because a remote MCP server that joins a room becomes a trusted plaintext
-processor for the room key and decrypted Markdown. Set
-`TABULA_MCP_ALLOW_REMOTE_ROOM=1` only when that trust boundary is intentional.
-Remote room tools also require stateful HTTP sessions; stateless production mode
-is for document checkpoints and encrypted snapshot sharing, not live room
-connections.
+Hosted production remote servers expose room/workspace tools as part of the
+agent-facing Tabula client surface. A remote MCP server that joins a room becomes
+a trusted plaintext processor for the room key and decrypted Markdown. Remote
+room/workspace tools require stateful HTTP sessions; deploy them with sticky
+routing, a single instance, or a future session coordinator.
 
 Write mode requires one of:
 
@@ -166,12 +163,16 @@ Write mode requires one of:
 
 `--read-only` forces read-only mode even if another setting enables writes.
 
-When write mode is disabled, `tabula_apply_text_patches` is not exposed to the
-model. An agent cannot grant itself write access by changing tool arguments.
+The model-facing room surface uses the workspace contract. An agent cannot
+grant itself direct write access by changing tool arguments. It uses
+`tabula_propose_workspace_changes` to send encrypted
+`workspace.proposal.created` events for collaborators to review. Legacy
+single-document `patch.proposed` tools are not exposed.
 
-When write mode is enabled, room edits must use guarded text patches with the
-latest `baseSha256`. This prevents blind full-document overwrites when another
-collaborator has changed the room.
+Workspace proposals must use guarded text patches with the latest `baseSha256`
+inside each `document.patch` change. The value is lowercase SHA-256 hex and maps
+to Tabula.md's room collaboration hash contract. This prevents blind
+full-document overwrites when another collaborator has changed the room.
 
 ## Release Blockers
 
@@ -184,8 +185,8 @@ Treat these as release blockers:
 - plaintext Markdown is uploaded during share/export
 - remote HTTP mode silently uses local file checkpoints
 - official hosted production uses `TABULA_MCP_ALLOW_MEMORY_STORE=1`
-- public unauthenticated production exposes remote room tools
+- public unauthenticated production runs without request/rate/session guardrails
 - production HTTP allows wildcard browser origins by default
 - docs imply that remote MCP checkpoints are encrypted Tabula JSON snapshots
-- `tabula_apply_text_patches` is exposed in default read-only mode
+- legacy single-document room patch tools are exposed in default proposal-first mode
 - docs or tool descriptions imply that `#room` or `#json` links are safe to publish

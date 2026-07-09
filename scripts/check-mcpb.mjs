@@ -34,10 +34,13 @@ const requiredFiles = [
   "server/server/web.js",
   "server/server/register-room-tools.js",
   "server/server/write-access.js",
+  "server/room-events.js",
   "server/share.js",
+  "server/workspaces.js",
   "server/guidance.js",
   "server/output-schemas.js",
   "README.md",
+  "docs/codex-cli.md",
   "docs/claude-desktop.md",
   "docs/security-model.md",
   "docs/mcp-app-architecture.md",
@@ -51,10 +54,15 @@ const requiredTools = [
   "tabula_list_documents",
   "tabula_open_document",
   "tabula_share_document",
+  "tabula_create_workspace",
+  "tabula_import_markdown_workspace",
+  "tabula_share_workspace",
+  "tabula_create_workspace_room",
   "tabula_connect_room",
   "tabula_list_sessions",
-  "tabula_read_markdown",
-  "tabula_get_outline",
+  "tabula_read_workspace",
+  "tabula_read_workspace_document",
+  "tabula_propose_workspace_changes",
   "tabula_room_status",
   "tabula_open_room_view",
   "tabula_set_presence",
@@ -66,6 +74,9 @@ const forbiddenManifestTools = [
   "tabula_app_room_snapshot",
   "tabula_app_document_snapshot",
   "tabula_app_save_document",
+  "tabula_read_markdown",
+  "tabula_get_outline",
+  "tabula_propose_text_patches",
   "tabula_apply_text_patches",
 ];
 
@@ -206,7 +217,7 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   assertMatchingToolNames(
     manifest.tools.map((tool) => tool.name).sort(),
     modelFacingTools,
-    `MCPB ${label} manifest tools must match the bundled read-only server's model-facing tools`,
+    `MCPB ${label} manifest tools must match the bundled proposal-first server's model-facing tools`,
   );
 
   const appHtml = await readFile(path.join(bundleDir, "server", "document-app.html"), "utf8");

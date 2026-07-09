@@ -49,6 +49,12 @@ type JsonShareCreateResponse = {
   expiresAt?: string;
 };
 
+export type ShareMarkdownWorkspaceFile = {
+  id: string;
+  title: string;
+  text: string;
+};
+
 export type ShareMarkdownDocumentOptions = {
   title?: string;
   markdown: string;
@@ -67,6 +73,34 @@ export type SharedMarkdownDocument = {
   jsonServerUrl: string;
   snapshotUrl: string;
   shareUrl: string;
+  textLength: number;
+  sha256: string;
+  encrypted: true;
+  secret: true;
+  keyLocation: "url-fragment";
+  expiresAt?: string;
+};
+
+export type ShareMarkdownWorkspaceOptions = {
+  title?: string;
+  files: readonly ShareMarkdownWorkspaceFile[];
+  activeFileId?: string;
+  appOrigin?: string;
+  jsonServerUrl?: string;
+  fetchImpl?: FetchLike;
+  snapshotKey?: string;
+  now?: () => Date;
+};
+
+export type SharedMarkdownWorkspace = {
+  title: string;
+  linkKind: "json-snapshot";
+  snapshotId: string;
+  appOrigin: string;
+  jsonServerUrl: string;
+  snapshotUrl: string;
+  shareUrl: string;
+  fileCount: number;
   textLength: number;
   sha256: string;
   encrypted: true;
@@ -206,27 +240,35 @@ export const createEncryptedMarkdownSnapshot = async ({
   }
 };
 
+const normalizeShareFile = (file: ShareMarkdownWorkspaceFile) => ({
+  id: file.id.trim(),
+  title: file.title.trim() || "Untitled Document",
+  text: file.text,
+});
+
 const createShareSnapshotPayload = ({
-  title,
-  markdown,
+  files,
+  activeFileId,
   now = () => new Date(),
 }: {
-  title?: string;
-  markdown: string;
+  files: readonly ShareMarkdownWorkspaceFile[];
+  activeFileId?: string;
   now?: () => Date;
-}): ShareSnapshotPayload => ({
-  schemaVersion: shareSnapshotSchemaVersion,
-  createdAt: now().toISOString(),
-  activeFileId: mainFileId,
-  files: [
-    {
-      id: mainFileId,
-      title: title?.trim() || "Untitled Document",
-      text: markdown,
-    },
-  ],
-  commentsByFileId: {},
-});
+}): ShareSnapshotPayload => {
+  const snapshotFiles = files.map(normalizeShareFile).filter((file) => file.id);
+  if (snapshotFiles.length === 0) {
+    throw new TabulaMcpError("At least one Markdown file is required for a Tabula.md snapshot link.");
+  }
+  const activeFile = snapshotFiles.find((file) => file.id === activeFileId) ?? snapshotFiles[0];
+
+  return {
+    schemaVersion: shareSnapshotSchemaVersion,
+    createdAt: now().toISOString(),
+    activeFileId: activeFile?.id ?? activeFileId ?? snapshotFiles[0]?.id ?? mainFileId,
+    files: snapshotFiles,
+    commentsByFileId: {},
+  };
+};
 
 const serializeShareSnapshot = (payload: ShareSnapshotPayload) => textEncoder.encode(JSON.stringify(payload));
 
@@ -281,7 +323,35 @@ export const createEncryptedJsonShareSnapshot = async ({
   snapshotKey: string;
   now?: () => Date;
 }) => {
-  const payload = createShareSnapshotPayload({ title, markdown, now });
+  const payload = createShareSnapshotPayload({
+    files: [
+      {
+        id: mainFileId,
+        title: title?.trim() || "Untitled Document",
+        text: markdown,
+      },
+    ],
+    activeFileId: mainFileId,
+    now,
+  });
+  return encodeEncryptedData(serializeShareSnapshot(payload), {
+    encryptionKey: snapshotKey,
+    metadata: { kind: "json-share", schemaVersion: payload.schemaVersion },
+  });
+};
+
+export const createEncryptedJsonShareWorkspaceSnapshot = async ({
+  files,
+  activeFileId,
+  snapshotKey,
+  now,
+}: {
+  files: readonly ShareMarkdownWorkspaceFile[];
+  activeFileId?: string;
+  snapshotKey: string;
+  now?: () => Date;
+}) => {
+  const payload = createShareSnapshotPayload({ files, activeFileId, now });
   return encodeEncryptedData(serializeShareSnapshot(payload), {
     encryptionKey: snapshotKey,
     metadata: { kind: "json-share", schemaVersion: payload.schemaVersion },
@@ -368,6 +438,61 @@ export const shareMarkdownDocument = async ({
     shareUrl,
     textLength: markdown.length,
     sha256: await sha256Text(markdown),
+    encrypted: true,
+    secret: true,
+    keyLocation: "url-fragment",
+    ...(created.expiresAt ? { expiresAt: created.expiresAt } : {}),
+  };
+};
+
+export const shareMarkdownWorkspace = async ({
+  title,
+  files,
+  activeFileId,
+  appOrigin = defaultTabulaAppOrigin,
+  jsonServerUrl,
+  fetchImpl = fetch,
+  snapshotKey = generateJsonShareKey(),
+  now,
+}: ShareMarkdownWorkspaceOptions): Promise<SharedMarkdownWorkspace> => {
+  const normalizedFiles = files.map(normalizeShareFile).filter((file) => file.id);
+  const normalizedJsonServerUrl = resolveJsonShareServerUrl({
+    appOrigin,
+    jsonServerUrl,
+  });
+  const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+    files: normalizedFiles,
+    activeFileId,
+    snapshotKey,
+    now,
+  });
+  const response = await fetchImpl(`${normalizedJsonServerUrl}${jsonSharePostPath}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+    },
+    body: toArrayBuffer(encrypted),
+  });
+
+  if (!response.ok) {
+    throw new TabulaMcpError(`Encrypted Tabula.md snapshot upload failed with HTTP ${response.status}: ${await readJsonShareError(response)}.`);
+  }
+
+  const created = validateJsonShareCreateResponse((await response.json()) as unknown, normalizedJsonServerUrl);
+  const shareUrl = createJsonShareUrl({ appOrigin, snapshotId: created.id, snapshotKey });
+  const textLength = normalizedFiles.reduce((total, file) => total + file.text.length, 0);
+
+  return {
+    title: title?.trim() || "Workspace",
+    linkKind: "json-snapshot",
+    snapshotId: created.id,
+    appOrigin,
+    jsonServerUrl: normalizedJsonServerUrl,
+    snapshotUrl: created.data,
+    shareUrl,
+    fileCount: normalizedFiles.length,
+    textLength,
+    sha256: await sha256Text(JSON.stringify(normalizedFiles)),
     encrypted: true,
     secret: true,
     keyLocation: "url-fragment",

@@ -4,8 +4,8 @@ MCP server and MCP App for drafting Tabula.md Markdown documents and joining
 encrypted Tabula.md live rooms from Codex, Claude, and other MCP clients.
 
 Tabula MCP lets an agent create a Markdown document checkpoint in an MCP App,
-read a shared Markdown room, and, when explicitly enabled, apply text patches
-back into the room. The checkpoint store is MCP working state. Final handoff
+join a shared Tabula workspace room, and propose workspace document changes for
+human review. The checkpoint store is MCP working state. Final handoff
 links still use Tabula.md's encrypted JSON snapshot flow, where the JSON service
 receives only encrypted bytes and the snapshot key stays in the `#json`
 fragment.
@@ -13,15 +13,16 @@ fragment.
 ## Status
 
 Early implementation. The server supports MCP App document checkpoints,
-encrypted share links for App documents, one-file live rooms, Markdown reads,
-outline extraction, presence, guarded text patches, bounded selection/change
-handoff from the bundled App, stdio/MCPB local launch, and a Streamable HTTP
-`/mcp` endpoint for remote deployments. The repository is MIT-licensed and
-contains the same deployment entrypoints intended for self-hosting and the
-official hosted Tabula MCP endpoint.
+encrypted share links for App documents, encrypted workspace rooms, presence,
+workspace proposals, bounded selection/change handoff from the bundled App,
+stdio/MCPB local launch, and a Streamable HTTP `/mcp` endpoint for remote
+deployments. The repository is MIT-licensed and contains the same deployment
+entrypoints intended for self-hosting and the official hosted Tabula MCP
+endpoint.
 
 ## Documentation
 
+- [Codex CLI](docs/codex-cli.md): local stdio setup, approval behavior, and room workflow checks.
 - [Claude Desktop](docs/claude-desktop.md): MCPB build, install, and manual smoke test.
 - [Deployment](docs/deployment.md): Vercel and Cloudflare hosted MCP targets.
 - [Security Model](docs/security-model.md): local trust boundary, room keys, share/export, and write policy.
@@ -89,11 +90,15 @@ https://tabula.md/#room=<roomId>,<roomKey>
 ```
 
 The `#room` fragment contains the room key and is a secret. Anyone or any agent
-with that URL can decrypt the room, and write access can edit it. Treat room
-links like bearer tokens.
+with that URL can decrypt the room. Treat room links like bearer tokens.
 
-Write access is disabled by default at the MCP process level. To start a
-write-enabled server, opt in when launching the process:
+Agents edit rooms through proposal-first workspace changes. A Tabula room is a
+workspace room; a one-document room is represented as a workspace with one
+document. Agents use `tabula_propose_workspace_changes` to publish encrypted
+workspace proposals for collaborators to review.
+
+Direct write capability is a server-level opt-in for trusted development
+sessions, but the model-facing room tools remain workspace proposal-first:
 
 ```json
 {
@@ -114,7 +119,7 @@ You can also pass `--enable-write` in `args`. If both are present,
 `--read-only` forces read-only mode.
 
 For the one-click Claude Desktop path, use the MCPB flow instead. It is
-zero-config and intentionally read-only for room writes.
+zero-config and proposal-first for room edits.
 
 ## Remote HTTP MCP
 
@@ -125,10 +130,12 @@ https://mcp.tabula.md/mcp
 ```
 
 The official hosted endpoint is intended to match Tabula.md's no-login product
-shape: MCP clients can connect without a bearer token. It exposes only anonymous
-document/app workflows, runs stateless HTTP, and keeps remote room tools
-disabled. Authenticated account/workspace MCP belongs on a future API endpoint,
-not this public app endpoint.
+shape: MCP clients can connect without a bearer token. It exposes the same
+agent workspace surface as local stdio where the runtime can support it:
+workspace creation/import from inline files, encrypted JSON snapshot export,
+new room creation, and existing room connection. Room and workspace tools require
+stateful MCP HTTP sessions because the MCP server keeps active room transports
+and workspace state between tool calls.
 
 This repository contains the deployable code for that shape. Domain binding,
 secrets, Redis/Upstash credentials, logs, and abuse controls live in the hosting
@@ -197,17 +204,15 @@ Production/public endpoint controls:
 
 - `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables production guardrails.
 - `TABULA_MCP_AUTH_TOKEN` is required in production unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
-- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth for anonymous document workflows. This mode ignores any stale auth token secret, forces stateless HTTP, rejects remote room tools, and requires Redis checkpoints.
+- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth and ignores any stale auth token secret.
 - Production remote mode requires Redis/Upstash REST credentials by default.
 - Production memory checkpoints require explicit unsafe opt-in with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and `TABULA_MCP_ALLOW_MEMORY_STORE=1`.
-- Production remote document workflows default to stateless HTTP when remote room tools are disabled.
 - `TABULA_MCP_RATE_LIMIT_MAX` and `TABULA_MCP_RATE_LIMIT_WINDOW_MS` control per-client request throttling.
 - `TABULA_MCP_MAX_ACTIVE_SESSIONS` and `TABULA_MCP_SESSION_IDLE_TTL_MS` bound in-memory MCP sessions.
 - `TABULA_MCP_HTTP_MAX_REQUEST_BYTES` limits MCP request body size.
 - `TABULA_MCP_REQUEST_TIMEOUT_MS` bounds individual MCP request handling.
 - `TABULA_MCP_LOG_LEVEL=silent|error|warn|info|debug` controls structured JSON request logs.
-- `TABULA_MCP_ALLOW_REMOTE_ROOM=1` is required before hosted production exposes room connection tools.
-- `TABULA_MCP_STATELESS_HTTP=1` forces stateless HTTP sessions for serverless document workflows.
+- `TABULA_MCP_STATELESS_HTTP=1` is rejected for remote deployments because room/workspace tools require stateful MCP sessions.
 - `TABULA_MCP_STATEFUL_HTTP=1` forces stateful HTTP sessions; use only with sticky routing or a single instance.
 
 Vercel and Cloudflare deployment targets are included:
@@ -236,15 +241,19 @@ small ESM surface for tests and local embedding:
 - `tabula_open_document`: open the latest or selected document checkpoint in the MCP App editor.
 - `tabula_read_me`: return workflow guidance for documents, rooms, sharing, and security boundaries.
 - `tabula_share_document`: export an App document checkpoint to an encrypted Tabula.md snapshot link. The JSON snapshot service receives only encrypted bytes; the snapshot key stays in the returned `#json` URL fragment.
-- `tabula_connect_room`: connect to a room URL using the server's current write mode. Read-only by default.
+- `tabula_create_workspace`: create a local MCP workspace from zero or more inline Markdown files.
+- `tabula_import_markdown_workspace`: import Markdown files into a local MCP workspace from a filesystem path visible to the MCP server or from an inline files array.
+- `tabula_share_workspace`: export a workspace as an encrypted multi-file Tabula.md `#json` snapshot link.
+- `tabula_create_workspace_room`: create a new encrypted Tabula.md live room from a workspace, publish workspace metadata and document state, and return a `#room` URL.
+- `tabula_connect_room`: connect to a room URL as a `tabula-mcp` agent actor. Direct writes are disabled by default.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
-- `tabula_room_status`: inspect connection state, room metadata, hash, and collaborators.
-- `tabula_read_markdown`: read decrypted Markdown received by this MCP session; check `stateReceived`/`hydrationStatus` before treating empty text as authoritative.
-- `tabula_get_outline`: extract Markdown headings.
+- `tabula_room_status`: inspect connection state, room metadata, hash, actor capabilities, pending proposals, and collaborators.
+- `tabula_read_workspace`: read decrypted workspace tree metadata from a connected room session or a local/imported MCP workspace, including document ids, titles, hashes, paths, and cache status.
+- `tabula_read_workspace_document`: read decrypted Markdown for one cached workspace document from a room session or local/imported workspace.
+- `tabula_propose_workspace_changes`: publish multi-document `document.patch`/`document.create`/`document.rename`/`document.move`/`document.delete` changes as an encrypted `workspace.proposal.created` room event. This does not directly mutate the workspace.
 - `tabula_open_room_view`: open a connected room in the MCP App for status, outline, Markdown preview, refresh, and selection handoff in clients that support MCP Apps.
-- `tabula_apply_text_patches`: edit with guarded non-overlapping text patches. Only exposed when the MCP process starts with write mode enabled.
 - `tabula_set_presence`: publish cursor/selection presence to collaborators.
-- `tabula_wait_for_changes`: wait until the room text hash changes.
+- `tabula_wait_for_changes`: wait until the room text hash changes or a room event arrives.
 - `tabula_disconnect_room`: close a session.
 
 ## MCP App Document
@@ -261,9 +270,12 @@ The Document App is bundled into `dist/document-app.html` during `npm run build`
 Inline mode shows a Markdown preview with `Open in Tabula` and `Edit` actions.
 Editing happens in fullscreen, where the App provides title editing, outline
 context, and Editor/Split/Preview modes for local Markdown drafts. It also opens connected rooms through
-`tabula_open_room_view` as a read-only room mode. It does not replace the text
-tools: clients without MCP Apps support can keep using `tabula_read_markdown`,
-`tabula_get_outline`, and `tabula_apply_text_patches` normally.
+`tabula_open_room_view` as a read-only room mode. It does not replace the
+workspace room tools: clients without MCP Apps support can keep using
+`tabula_read_workspace`, `tabula_read_workspace_document`, and
+`tabula_propose_workspace_changes` normally. Agents can also create/import a
+workspace first, share it as an encrypted `#json` link, or create a fresh live
+room with `tabula_create_workspace_room`.
 
 Local stdio/MCPB App documents are checkpointed as plaintext files in this
 machine's local application state so the MCP server can recover them across
@@ -336,9 +348,9 @@ surface. To share an App document checkpoint, use the App's `Share` control or
 ask the model to call `tabula_share_document`; this creates an encrypted JSON
 snapshot link without installer configuration.
 
-The MCPB is intentionally read-only. Use manual MCP client configuration with
-`TABULA_MCP_ENABLE_WRITE=1` only for explicit write-enabled development or
-review sessions.
+The MCPB is intentionally proposal-first for room edits. Use manual MCP client
+configuration with `TABULA_MCP_ENABLE_WRITE=1` only for explicit direct-write
+development or review sessions.
 
 For step-by-step installation and manual verification, see
 [Claude Desktop](docs/claude-desktop.md).
@@ -380,17 +392,18 @@ a fresh environment, run `npx playwright install chromium`.
 
 ## Editing Model
 
-Editing is a server startup decision, not a per-tool argument. In the default
-read-only mode, the MCP server does not expose `tabula_apply_text_patches`, so
-an agent cannot grant itself write access by changing `tabula_connect_room`
-arguments.
+Room editing uses one model: workspace proposal-first editing through
+`tabula_propose_workspace_changes`. This sends an encrypted
+`workspace.proposal.created` room event for a Tabula.md client to review. It can
+bundle multiple `document.patch`, `document.create`, `document.rename`,
+`document.move`, and `document.delete` changes in one proposal. A one-document
+room is still represented as a workspace with one document.
 
-To edit, start the MCP process with `TABULA_MCP_ENABLE_WRITE=1` or
-`--enable-write`, then connect to the room normally.
-
-Edits must use `tabula_apply_text_patches` with the latest `baseSha256` returned
-by `tabula_read_markdown` or `tabula_room_status`. This avoids blind full-file
-overwrites when another collaborator has changed the room.
+Patch proposals must use the latest `baseSha256` returned by
+`tabula_read_workspace_document` or `tabula_room_status`. Hashes are lowercase
+SHA-256 hex values, matching Tabula.md's room collaboration contract. This
+avoids blind full-file overwrites when another collaborator has changed the
+room.
 
 Patch offsets are JavaScript string offsets in the old document:
 
