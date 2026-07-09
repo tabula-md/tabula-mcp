@@ -159,6 +159,10 @@ Model-facing tools:
 - `tabula_list_documents`
 - `tabula_open_document`
 - `tabula_share_document`
+- `tabula_create_workspace`
+- `tabula_import_markdown_workspace`
+- `tabula_share_workspace`
+- `tabula_create_workspace_room`
 - `tabula_connect_room`
 - `tabula_list_sessions`
 - `tabula_room_status`

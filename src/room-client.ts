@@ -10,6 +10,7 @@ import {
 import {
   assertEncryptedEnvelope,
   decodeBase64Url,
+  encodeBase64Url,
   type EnvelopeKind,
   type ParsedRoomShareUrl,
   TabulaMcpError,
@@ -24,6 +25,7 @@ import {
   isWorkspaceChange,
   type RoomPresenceSelection,
   type RoomActor,
+  type RoomCapability,
   type RoomEvent,
   type WorkspaceChange,
   type WorkspaceDocumentNode,
@@ -65,6 +67,7 @@ export type RoomClientOptions = {
   writeAccess: boolean;
   identityName?: string;
   identityColor?: string;
+  actorCapabilities?: readonly RoomCapability[];
 };
 
 type Waiter = {
@@ -90,6 +93,13 @@ type WorkspaceDocumentCache = {
   textLength: number;
   sha256: string;
   updatedAt: string;
+};
+
+export type WorkspaceSnapshotDocument = {
+  documentId: string;
+  title: string;
+  markdown: string;
+  sha256?: string;
 };
 
 type WorkspaceYDocState = {
@@ -177,9 +187,10 @@ export class TabulaRoomClient {
   private statusValue: ConnectionStatus = "connecting";
   private lastErrorValue = "";
   private hasReceivedState = false;
+  private hasReceivedLegacyTextState = false;
   private lastStateReceivedAtValue = "";
 
-  constructor({ parsedRoom, roomServerUrl, writeAccess, identityName, identityColor }: RoomClientOptions) {
+  constructor({ parsedRoom, roomServerUrl, writeAccess, identityName, identityColor, actorCapabilities }: RoomClientOptions) {
     const actorId = `tabula-mcp-${randomUUID()}`;
     const actorColor = identityColor?.trim() || "#2563eb";
     const actorName = identityName?.trim() || "Tabula Agent";
@@ -195,6 +206,7 @@ export class TabulaRoomClient {
       name: actorName,
       color: actorColor,
       writeAccess,
+      capabilities: actorCapabilities,
     });
     this.identity = {
       id: actorId,
@@ -361,6 +373,76 @@ export class TabulaRoomClient {
       sha256: cached.sha256,
       cachedAt: cached.updatedAt,
       ...this.roomStateReadiness(),
+    };
+  }
+
+  async publishWorkspaceSnapshot({
+    workspace,
+    documents,
+  }: {
+    workspace: WorkspaceRoomState;
+    documents: readonly WorkspaceSnapshotDocument[];
+  }) {
+    if (!this.socket?.connected || this.statusValue === "closed") {
+      throw new TabulaMcpError("A connected room session is required before publishing a workspace snapshot.");
+    }
+    if (workspace.roomId !== this.roomId) {
+      throw new TabulaMcpError("Workspace roomId must match the connected room.");
+    }
+
+    this.workspaceStateValue = workspace;
+    this.pruneWorkspaceDocumentCaches();
+
+    const createdAt = new Date().toISOString();
+    const workspaceEvent: RoomEvent = {
+      id: createRoomEventId(),
+      type: "workspace.updated",
+      roomId: this.roomId,
+      actorId: this.actor.id,
+      workspace,
+      createdAt,
+    };
+    const emittedWorkspace = await this.publishRoomEvent(workspaceEvent);
+    if (emittedWorkspace) {
+      this.recordRoomEvent(workspaceEvent);
+    }
+
+    let emittedDocumentCount = 0;
+    for (const document of documents) {
+      const documentNode = this.getWorkspaceDocumentNode(document.documentId);
+      if (!documentNode) {
+        throw new TabulaMcpError(`Workspace document ${document.documentId} is not present in the workspace state.`);
+      }
+
+      const documentSha256 = document.sha256 ?? (await sha256Text(document.markdown));
+      await this.cacheWorkspaceDocumentMarkdown(document.documentId, document.markdown, documentSha256);
+      const ydoc = new Y.Doc();
+      try {
+        ydoc.getText("markdown").insert(0, document.markdown);
+        const documentEvent: RoomEvent = {
+          id: createRoomEventId(),
+          type: "text.updated",
+          roomId: this.roomId,
+          actorId: this.actor.id,
+          documentId: document.documentId,
+          sha256: documentSha256,
+          update: encodeBase64Url(Y.encodeStateAsUpdate(ydoc)),
+          createdAt: new Date().toISOString(),
+        };
+        const emittedDocument = await this.publishRoomEvent(documentEvent);
+        if (emittedDocument) {
+          emittedDocumentCount += 1;
+          this.recordRoomEvent(documentEvent);
+        }
+      } finally {
+        ydoc.destroy();
+      }
+    }
+
+    this.markReceivedState();
+    return {
+      emittedWorkspace,
+      emittedDocumentCount,
     };
   }
 
@@ -606,6 +688,7 @@ export class TabulaRoomClient {
       if (envelope.kind === "yjs-update" || envelope.kind === "state-init") {
         const previousMarkdown = this.markdown;
         Y.applyUpdate(this.doc, plaintext, REMOTE_ORIGIN);
+        this.hasReceivedLegacyTextState = true;
         this.markReceivedState();
         await this.syncActiveWorkspaceDocument();
         if (this.markdown !== previousMarkdown) {
@@ -874,6 +957,7 @@ export class TabulaRoomClient {
 
       const previousMarkdown = this.markdown;
       Y.applyUpdate(this.doc, update, REMOTE_ORIGIN);
+      this.hasReceivedLegacyTextState = true;
       this.markReceivedState();
       await this.syncActiveWorkspaceDocument();
       if (this.markdown !== previousMarkdown) {
@@ -968,7 +1052,7 @@ export class TabulaRoomClient {
 
   private async syncActiveWorkspaceDocument() {
     const activeDocumentId = this.workspaceStateValue?.activeDocumentId;
-    if (!activeDocumentId || !this.hasReceivedState) {
+    if (!activeDocumentId || !this.hasReceivedLegacyTextState) {
       return;
     }
     await this.cacheWorkspaceDocumentMarkdown(activeDocumentId, this.markdown);

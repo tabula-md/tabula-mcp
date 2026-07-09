@@ -278,18 +278,20 @@ export const createAgentActor = ({
   name,
   color,
   writeAccess,
+  capabilities,
 }: {
   id: string;
   name: string;
   color?: string;
   writeAccess: boolean;
+  capabilities?: readonly RoomCapability[];
 }): RoomActor => ({
   id,
   kind: "agent",
   name,
   client: "tabula-mcp",
   color,
-  capabilities: writeAccess ? ["presence", "read", "propose", "write"] : ["presence", "read", "propose"],
+  capabilities: capabilities ? [...capabilities] : writeAccess ? ["presence", "read", "propose", "write"] : ["presence", "read", "propose"],
   joinedAt: new Date().toISOString(),
 });
 

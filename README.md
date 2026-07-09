@@ -130,10 +130,12 @@ https://mcp.tabula.md/mcp
 ```
 
 The official hosted endpoint is intended to match Tabula.md's no-login product
-shape: MCP clients can connect without a bearer token. It exposes only anonymous
-document/app workflows, runs stateless HTTP, and keeps remote room tools
-disabled. Authenticated account/workspace MCP belongs on a future API endpoint,
-not this public app endpoint.
+shape: MCP clients can connect without a bearer token. It exposes the same
+agent workspace surface as local stdio where the runtime can support it:
+workspace creation/import from inline files, encrypted JSON snapshot export,
+new room creation, and existing room connection. Room and workspace tools require
+stateful MCP HTTP sessions because the MCP server keeps active room transports
+and workspace state between tool calls.
 
 This repository contains the deployable code for that shape. Domain binding,
 secrets, Redis/Upstash credentials, logs, and abuse controls live in the hosting
@@ -202,17 +204,15 @@ Production/public endpoint controls:
 
 - `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables production guardrails.
 - `TABULA_MCP_AUTH_TOKEN` is required in production unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
-- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth for anonymous document workflows. This mode ignores any stale auth token secret, forces stateless HTTP, rejects remote room tools, and requires Redis checkpoints.
+- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth and ignores any stale auth token secret.
 - Production remote mode requires Redis/Upstash REST credentials by default.
 - Production memory checkpoints require explicit unsafe opt-in with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and `TABULA_MCP_ALLOW_MEMORY_STORE=1`.
-- Production remote document workflows default to stateless HTTP when remote room tools are disabled.
 - `TABULA_MCP_RATE_LIMIT_MAX` and `TABULA_MCP_RATE_LIMIT_WINDOW_MS` control per-client request throttling.
 - `TABULA_MCP_MAX_ACTIVE_SESSIONS` and `TABULA_MCP_SESSION_IDLE_TTL_MS` bound in-memory MCP sessions.
 - `TABULA_MCP_HTTP_MAX_REQUEST_BYTES` limits MCP request body size.
 - `TABULA_MCP_REQUEST_TIMEOUT_MS` bounds individual MCP request handling.
 - `TABULA_MCP_LOG_LEVEL=silent|error|warn|info|debug` controls structured JSON request logs.
-- `TABULA_MCP_ALLOW_REMOTE_ROOM=1` is required before hosted production exposes room connection tools.
-- `TABULA_MCP_STATELESS_HTTP=1` forces stateless HTTP sessions for serverless document workflows.
+- `TABULA_MCP_STATELESS_HTTP=1` is rejected for remote deployments because room/workspace tools require stateful MCP sessions.
 - `TABULA_MCP_STATEFUL_HTTP=1` forces stateful HTTP sessions; use only with sticky routing or a single instance.
 
 Vercel and Cloudflare deployment targets are included:
@@ -241,11 +241,15 @@ small ESM surface for tests and local embedding:
 - `tabula_open_document`: open the latest or selected document checkpoint in the MCP App editor.
 - `tabula_read_me`: return workflow guidance for documents, rooms, sharing, and security boundaries.
 - `tabula_share_document`: export an App document checkpoint to an encrypted Tabula.md snapshot link. The JSON snapshot service receives only encrypted bytes; the snapshot key stays in the returned `#json` URL fragment.
+- `tabula_create_workspace`: create a local MCP workspace from zero or more inline Markdown files.
+- `tabula_import_markdown_workspace`: import Markdown files into a local MCP workspace from a filesystem path visible to the MCP server or from an inline files array.
+- `tabula_share_workspace`: export a workspace as an encrypted multi-file Tabula.md `#json` snapshot link.
+- `tabula_create_workspace_room`: create a new encrypted Tabula.md live room from a workspace, publish workspace metadata and document state, and return a `#room` URL.
 - `tabula_connect_room`: connect to a room URL as a `tabula-mcp` agent actor. Direct writes are disabled by default.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
 - `tabula_room_status`: inspect connection state, room metadata, hash, actor capabilities, pending proposals, and collaborators.
-- `tabula_read_workspace`: read decrypted workspace tree metadata received by this MCP session, including document ids, titles, hashes, and local cache status.
-- `tabula_read_workspace_document`: read decrypted Markdown for one cached workspace document.
+- `tabula_read_workspace`: read decrypted workspace tree metadata from a connected room session or a local/imported MCP workspace, including document ids, titles, hashes, paths, and cache status.
+- `tabula_read_workspace_document`: read decrypted Markdown for one cached workspace document from a room session or local/imported workspace.
 - `tabula_propose_workspace_changes`: publish multi-document `document.patch`/`document.create`/`document.rename`/`document.move`/`document.delete` changes as an encrypted `workspace.proposal.created` room event. This does not directly mutate the workspace.
 - `tabula_open_room_view`: open a connected room in the MCP App for status, outline, Markdown preview, refresh, and selection handoff in clients that support MCP Apps.
 - `tabula_set_presence`: publish cursor/selection presence to collaborators.
@@ -269,7 +273,9 @@ context, and Editor/Split/Preview modes for local Markdown drafts. It also opens
 `tabula_open_room_view` as a read-only room mode. It does not replace the
 workspace room tools: clients without MCP Apps support can keep using
 `tabula_read_workspace`, `tabula_read_workspace_document`, and
-`tabula_propose_workspace_changes` normally.
+`tabula_propose_workspace_changes` normally. Agents can also create/import a
+workspace first, share it as an encrypted `#json` link, or create a fresh live
+room with `tabula_create_workspace_room`.
 
 Local stdio/MCPB App documents are checkpointed as plaintext files in this
 machine's local application state so the MCP server can recover them across

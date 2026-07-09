@@ -20,7 +20,7 @@ const withClient = async <T>(
   callback: (client: Client) => Promise<T>,
   options: { mcpApps?: boolean } = {},
 ) => {
-  const { server, registry, documents } = createTabulaMcpServer({
+  const { server, registry, workspaces, documents } = createTabulaMcpServer({
     writeEnabled,
     documentStore: new MemoryDocumentStore(),
   });
@@ -36,6 +36,7 @@ const withClient = async <T>(
   } finally {
     await Promise.allSettled([client.close(), server.close()]);
     registry.clear();
+    workspaces.clear();
     documents.clear();
   }
 };
@@ -72,6 +73,10 @@ describe("MCP tool registration", () => {
     const connectTool = tools.tools.find((tool) => tool.name === "tabula_connect_room");
     const listSessionsTool = tools.tools.find((tool) => tool.name === "tabula_list_sessions");
     const statusTool = tools.tools.find((tool) => tool.name === "tabula_room_status");
+    const createWorkspaceTool = tools.tools.find((tool) => tool.name === "tabula_create_workspace");
+    const importWorkspaceTool = tools.tools.find((tool) => tool.name === "tabula_import_markdown_workspace");
+    const shareWorkspaceTool = tools.tools.find((tool) => tool.name === "tabula_share_workspace");
+    const createWorkspaceRoomTool = tools.tools.find((tool) => tool.name === "tabula_create_workspace_room");
     const readWorkspaceTool = tools.tools.find((tool) => tool.name === "tabula_read_workspace");
     const readWorkspaceDocumentTool = tools.tools.find((tool) => tool.name === "tabula_read_workspace_document");
     const proposeWorkspaceTool = tools.tools.find((tool) => tool.name === "tabula_propose_workspace_changes");
@@ -80,6 +85,10 @@ describe("MCP tool registration", () => {
     const disconnectTool = tools.tools.find((tool) => tool.name === "tabula_disconnect_room");
 
     expect(toolNames).toContain("tabula_read_me");
+    expect(toolNames).toContain("tabula_create_workspace");
+    expect(toolNames).toContain("tabula_import_markdown_workspace");
+    expect(toolNames).toContain("tabula_share_workspace");
+    expect(toolNames).toContain("tabula_create_workspace_room");
     expect(toolNames).toContain("tabula_read_workspace");
     expect(toolNames).toContain("tabula_read_workspace_document");
     expect(toolNames).toContain("tabula_propose_workspace_changes");
@@ -118,6 +127,31 @@ describe("MCP tool registration", () => {
         collaborators: expect.objectContaining({ type: "array" }),
         pendingProposalCount: expect.objectContaining({ type: "integer" }),
         pendingWorkspaceProposalCount: expect.objectContaining({ type: "integer" }),
+      },
+    });
+    expect(createWorkspaceTool?.inputSchema.properties).toHaveProperty("files");
+    expect(createWorkspaceTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        workspaceId: expect.objectContaining({ type: "string" }),
+        workspace: expect.objectContaining({ anyOf: expect.any(Array) }),
+        documents: expect.objectContaining({ type: "array" }),
+      },
+    });
+    expect(importWorkspaceTool?.inputSchema.properties).toHaveProperty("source");
+    expect(shareWorkspaceTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        workspaceId: expect.objectContaining({ type: "string" }),
+        share: expect.objectContaining({ type: "object" }),
+      },
+    });
+    expect(createWorkspaceRoomTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        workspaceId: expect.objectContaining({ type: "string" }),
+        roomUrl: expect.objectContaining({ type: "string" }),
+        published: expect.objectContaining({ type: "object" }),
       },
     });
     expect(readWorkspaceTool?.outputSchema).toMatchObject({
@@ -198,6 +232,102 @@ describe("MCP tool registration", () => {
       expect(result.structuredContent).toEqual({
         sessions: [],
       });
+    });
+  });
+
+  it("creates, reads, imports, and shares model-facing workspaces without MCP Apps", async () => {
+    const snapshotId = "workspace_snapshot_123";
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ id: snapshotId, data: `https://json.tabula.md/api/v2/${snapshotId}` }), {
+        status: 200,
+      }),
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await withClient(false, async (client) => {
+      const createResult = await client.callTool({
+        name: "tabula_create_workspace",
+        arguments: {
+          title: "Agent Workspace",
+          files: [
+            { path: "README.md", markdown: "# Agent Workspace\n" },
+            { path: "docs/Plan.md", title: "Plan", markdown: "# Plan\n\nShip workspace tools.\n" },
+          ],
+        },
+      });
+      const created = createResult.structuredContent as {
+        workspaceId: string;
+        workspace: { activeDocumentId: string; nodes: Array<{ id: string; type: string; title: string }> };
+        documents: Array<{ id: string; title: string; cached: boolean; path?: string }>;
+      };
+
+      expect(created.workspaceId).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(created.workspace.nodes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "folder", title: "Agent Workspace" }),
+          expect.objectContaining({ type: "folder", title: "docs" }),
+          expect.objectContaining({ type: "document", title: "README.md" }),
+          expect.objectContaining({ type: "document", title: "Plan" }),
+        ]),
+      );
+      expect(created.documents.every((document) => document.cached)).toBe(true);
+
+      const readResult = await client.callTool({
+        name: "tabula_read_workspace",
+        arguments: { workspaceId: created.workspaceId },
+      });
+      expect(readResult.structuredContent).toMatchObject({
+        workspaceId: created.workspaceId,
+        cachedDocumentCount: 2,
+        hydrationStatus: "ready",
+        stateReceived: true,
+      });
+
+      const planDocumentId = created.documents.find((document) => document.title === "Plan")?.id ?? "";
+      const documentResult = await client.callTool({
+        name: "tabula_read_workspace_document",
+        arguments: { workspaceId: created.workspaceId, documentId: planDocumentId },
+      });
+      expect(documentResult.structuredContent).toMatchObject({
+        workspaceId: created.workspaceId,
+        documentId: planDocumentId,
+        path: "docs/Plan.md",
+        markdown: "# Plan\n\nShip workspace tools.\n",
+      });
+
+      const importResult = await client.callTool({
+        name: "tabula_import_markdown_workspace",
+        arguments: {
+          title: "Inline Import",
+          source: {
+            type: "files",
+            files: [{ path: "notes/One.md", markdown: "# One\n" }],
+          },
+        },
+      });
+      expect(importResult.structuredContent).toMatchObject({
+        source: "imported",
+        cachedDocumentCount: 1,
+      });
+
+      const shareResult = await client.callTool({
+        name: "tabula_share_workspace",
+        arguments: { workspaceId: created.workspaceId },
+      });
+      const shared = shareResult.structuredContent as {
+        share: { fileCount: number; textLength: number; shareUrl: string; snapshotId: string };
+      };
+
+      expect(shared.share).toMatchObject({
+        snapshotId,
+        fileCount: 2,
+        textLength: "# Agent Workspace\n".length + "# Plan\n\nShip workspace tools.\n".length,
+      });
+      expect(shared.share.shareUrl).toMatch(new RegExp(`^https://tabula\\.md/#json=${snapshotId},`));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = Buffer.from((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body as ArrayBuffer).toString("utf8");
+      expect(body).not.toContain("Ship workspace tools");
+      expect(body).not.toContain(new URL(shared.share.shareUrl).hash.split(",")[1] ?? "");
     });
   });
 

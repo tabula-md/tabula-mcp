@@ -19,6 +19,14 @@ const createClient = (writeAccess = true) =>
     writeAccess,
   });
 
+const createWorkspacePublisherClient = () =>
+  new TabulaRoomClient({
+    parsedRoom: parseRoomShareUrl(`https://tabula.md/#room=room_123,${roomKey}`),
+    roomServerUrl: "https://rooms.tabula.md",
+    writeAccess: false,
+    actorCapabilities: ["presence", "read", "propose", "comment", "write", "create", "delete", "move"],
+  });
+
 const createWorkspaceState = async (markdown = "# Draft\n"): Promise<WorkspaceRoomState> => {
   const createdAt = "2026-07-09T00:00:00.000Z";
   return {
@@ -220,6 +228,69 @@ describe("TabulaRoomClient room state hydration", () => {
       await expect(client.getStatus()).resolves.toMatchObject({
         pendingProposalCount: 1,
         pendingWorkspaceProposalCount: 1,
+      });
+    } finally {
+      client.disconnect();
+    }
+  });
+
+  it("publishes initial workspace rooms as encrypted workspace and document room events", async () => {
+    const client = createWorkspacePublisherClient();
+    const key = await importRoomKey(roomKey);
+    const workspace = await createWorkspaceState("# Draft\n");
+    const emitted: unknown[] = [];
+    const socket = {
+      connected: true,
+      disconnect: vi.fn(),
+      emit: vi.fn((_eventName: string, envelope: unknown, acknowledge?: (ack: { ok?: boolean }) => void) => {
+        emitted.push(envelope);
+        acknowledge?.({ ok: true });
+      }),
+    };
+
+    try {
+      (client as unknown as { roomKey: CryptoKey }).roomKey = key;
+      (client as unknown as { socket: typeof socket }).socket = socket;
+
+      expect(client.actor.capabilities).toEqual(["presence", "read", "propose", "comment", "write", "create", "delete", "move"]);
+      const result = await client.publishWorkspaceSnapshot({
+        workspace,
+        documents: [
+          {
+            documentId: "doc_1",
+            title: "Draft",
+            markdown: "# Draft\n",
+            sha256: await sha256Text("# Draft\n"),
+          },
+        ],
+      });
+
+      expect(result).toEqual({
+        emittedWorkspace: true,
+        emittedDocumentCount: 1,
+      });
+      expect(emitted).toHaveLength(2);
+      expect(emitted.every((envelope) => (envelope as { kind?: string }).kind === "room-event")).toBe(true);
+
+      const decodedEvents = await Promise.all(
+        emitted.map(async (envelope) =>
+          JSON.parse(
+            new TextDecoder().decode(await decryptEnvelopeForRoom(key, envelope as Parameters<typeof decryptEnvelopeForRoom>[1])),
+          ) as { type: string; documentId?: string; update?: string },
+        ),
+      );
+      expect(decodedEvents[0]).toMatchObject({
+        type: "workspace.updated",
+      });
+      expect(decodedEvents[1]).toMatchObject({
+        type: "text.updated",
+        documentId: "doc_1",
+      });
+      expect(JSON.stringify(emitted)).not.toContain("# Draft");
+
+      await expect(client.readWorkspaceDocument({ documentId: "doc_1" })).resolves.toMatchObject({
+        markdown: "# Draft\n",
+        sha256: await sha256Text("# Draft\n"),
       });
     } finally {
       client.disconnect();

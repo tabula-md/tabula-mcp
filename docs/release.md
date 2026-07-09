@@ -115,11 +115,10 @@ installer prompts.
 Hosted release checks must keep production guardrails intact: production remote
 HTTP requires `TABULA_MCP_AUTH_TOKEN` unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1`
 is explicitly set, uses Redis/Upstash REST credentials by default, applies
-Origin/request/rate/session limits, defaults document-only hosted traffic to
-stateless HTTP, and does not expose room connection tools unless
-`TABULA_MCP_ALLOW_REMOTE_ROOM=1` is explicitly set. Public unauthenticated
-production forbids remote room tools, forbids stateful HTTP, and rejects memory
-checkpoint fallback. Production memory checkpoints are allowed only when both
+Origin/request/rate/session limits, exposes the same room/workspace tool surface
+as local stdio, and uses stateful MCP HTTP sessions for remote room/workspace
+tools. Public unauthenticated production still rejects memory checkpoint fallback.
+Production memory checkpoints are allowed only when both
 `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and `TABULA_MCP_ALLOW_MEMORY_STORE=1`
 are explicitly set.
 

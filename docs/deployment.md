@@ -58,12 +58,12 @@ Production mode is enabled by `TABULA_MCP_PRODUCTION=1`,
 `TABULA_MCP_PUBLIC_ENDPOINT=1`, or Vercel's production runtime. In production:
 
 - `/mcp` requires `Authorization: Bearer <TABULA_MCP_AUTH_TOKEN>` unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
-- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes `/mcp` public/no-auth, ignores any configured auth token, forces stateless HTTP, blocks remote room tools, and requires Redis checkpoints.
+- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes `/mcp` public/no-auth and ignores any configured auth token.
 - memory document checkpoints require explicit unsafe opt-in; configure Redis/Upstash REST for official production.
 - browser requests with an `Origin` header are rejected unless the origin is in
   `TABULA_MCP_ALLOWED_ORIGINS`.
-- document-only remote workflows run stateless HTTP by default when remote room
-  tools are disabled.
+- remote room/workspace tools require stateful MCP HTTP sessions because connected
+  room transports and workspace state live across tool calls.
 - MCP request bodies are capped by `TABULA_MCP_HTTP_MAX_REQUEST_BYTES`.
 - per-client request rate is capped by `TABULA_MCP_RATE_LIMIT_MAX` per
   `TABULA_MCP_RATE_LIMIT_WINDOW_MS`.
@@ -72,12 +72,12 @@ Production mode is enabled by `TABULA_MCP_PRODUCTION=1`,
 - request handling is bounded by `TABULA_MCP_REQUEST_TIMEOUT_MS`.
 - structured JSON request logs are controlled by `TABULA_MCP_LOG_LEVEL`.
 
-Hosted production does not expose room connection tools unless
-`TABULA_MCP_ALLOW_REMOTE_ROOM=1` is set. That opt-in is required because joining
-a room moves the room key and decrypted Markdown trust boundary to the hosted MCP
-server. If remote room tools are enabled, force stateful sessions with
-`TABULA_MCP_STATEFUL_HTTP=1` and deploy behind sticky routing, a single instance,
-or a future Durable Object session coordinator.
+Hosted production exposes the same agent workspace surface as local stdio:
+workspace creation/import from inline files, encrypted workspace export, room
+creation, and room connection. A hosted MCP server that joins a room becomes a
+trusted plaintext processor for that room key and decrypted Markdown. Deploy
+stateful sessions behind sticky routing, a single instance, or a future Durable
+Object session coordinator.
 
 ## Vercel
 
@@ -159,18 +159,14 @@ npm run check:cloudflare
 
 ## Session Boundary
 
-Production remote document workflows default to stateless HTTP while room tools
-are disabled. This matches serverless and multi-instance platforms because MCP
-transport sessions are not stored in process memory. Document continuity comes
-from Redis/Upstash checkpoints.
+Remote deployments use stateful HTTP sessions because the public tool surface
+includes room/workspace operations. Stateful mode keeps active MCP transports,
+connected room sessions, and local workspace state in runtime memory. For
+production stateful deployments, use sticky routing, a single instance, or a
+future Cloudflare Durable Object session coordinator.
 
-Stateful HTTP sessions are still available for local development and for remote
-room tools. Stateful mode keeps active MCP transports and connected room sessions
-in runtime memory. For production stateful deployments, use sticky routing, a
-single instance, or a future Cloudflare Durable Object session coordinator.
-
-Use `TABULA_MCP_STATELESS_HTTP=1` to force stateless HTTP, or
-`TABULA_MCP_STATEFUL_HTTP=1` to force stateful HTTP. Do not set both.
+`TABULA_MCP_STATELESS_HTTP=1` is rejected for remote deployments. You may set
+`TABULA_MCP_STATEFUL_HTTP=1` explicitly, but it is already the remote default.
 
 ## Validation
 

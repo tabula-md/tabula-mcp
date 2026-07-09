@@ -6,6 +6,7 @@ const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 const possiblyClearedSha256Schema = z.union([sha256Schema, z.literal("")]);
 
 const sessionIdOutputSchema = z.string().uuid();
+const workspaceIdOutputSchema = z.string().uuid();
 const roomIdOutputSchema = z.string();
 const roomHydrationStatusOutputSchema = z.enum(["waiting-for-peer-state", "ready"]);
 const roomHydrationOutputShape = {
@@ -74,6 +75,7 @@ const workspaceNodeOutputSchema = z.union([workspaceFolderNodeOutputSchema, work
 
 const workspaceDocumentSummaryOutputSchema = workspaceDocumentNodeOutputSchema.extend({
   cached: z.boolean(),
+  path: z.string().optional(),
 });
 
 const workspaceRoomStateOutputSchema = z.object({
@@ -218,7 +220,8 @@ export const listSessionsOutputShape = {
 };
 
 export const readWorkspaceOutputShape = {
-  sessionId: sessionIdOutputSchema,
+  sessionId: sessionIdOutputSchema.optional(),
+  workspaceId: workspaceIdOutputSchema.optional(),
   roomId: roomIdOutputSchema,
   workspace: workspaceRoomStateOutputSchema.nullable(),
   activeDocumentId: z.string().optional(),
@@ -226,19 +229,37 @@ export const readWorkspaceOutputShape = {
   cachedDocumentCount: z.number().int().nonnegative(),
   pendingWorkspaceProposalCount: z.number().int().nonnegative(),
   ...roomHydrationOutputShape,
+  createdAt: isoDateStringSchema.optional(),
+  updatedAt: isoDateStringSchema.optional(),
+  source: z.enum(["created", "imported"]).optional(),
+  sourceRootPath: z.string().optional(),
   note: z.string().optional(),
 };
 
 export const readWorkspaceDocumentOutputShape = {
-  sessionId: sessionIdOutputSchema,
+  sessionId: sessionIdOutputSchema.optional(),
+  workspaceId: workspaceIdOutputSchema.optional(),
   roomId: roomIdOutputSchema,
   documentId: z.string(),
+  path: z.string().optional(),
   title: z.string(),
   markdown: z.string(),
   textLength: z.number().int().nonnegative(),
   sha256: sha256Schema,
   cachedAt: isoDateStringSchema,
   ...roomHydrationOutputShape,
+};
+
+export const createWorkspaceOutputShape = readWorkspaceOutputShape;
+
+export const createWorkspaceRoomOutputShape = {
+  ...connectRoomOutputShape,
+  workspaceId: workspaceIdOutputSchema,
+  roomUrl: z.string().url(),
+  published: z.object({
+    emittedWorkspace: z.boolean(),
+    emittedDocumentCount: z.number().int().nonnegative(),
+  }),
 };
 
 export const proposeWorkspaceChangesOutputShape = {
@@ -290,6 +311,26 @@ export const shareOutputShape = {
     jsonServerUrl: z.string().url(),
     snapshotUrl: z.string().url(),
     shareUrl: z.string().url(),
+    textLength: z.number().int().nonnegative(),
+    sha256: sha256Schema,
+    encrypted: z.literal(true),
+    secret: z.literal(true),
+    keyLocation: z.literal("url-fragment"),
+    expiresAt: isoDateStringSchema.optional(),
+  }),
+};
+
+export const shareWorkspaceOutputShape = {
+  workspaceId: workspaceIdOutputSchema,
+  share: z.object({
+    title: z.string(),
+    linkKind: z.literal("json-snapshot"),
+    snapshotId: z.string(),
+    appOrigin: z.string().url(),
+    jsonServerUrl: z.string().url(),
+    snapshotUrl: z.string().url(),
+    shareUrl: z.string().url(),
+    fileCount: z.number().int().nonnegative(),
     textLength: z.number().int().nonnegative(),
     sha256: sha256Schema,
     encrypted: z.literal(true),

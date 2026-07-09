@@ -74,14 +74,17 @@ Local development links such as `http://localhost:5173/#room=...` default to
 
 Expected behavior:
 
-1. `tabula_connect_room` connects the encrypted room as a proposal-first agent.
-2. `tabula_open_room_view` opens the App room view.
-3. `tabula_read_workspace`, `tabula_read_workspace_document`, and
+1. `tabula_create_workspace` or `tabula_import_markdown_workspace` can prepare a multi-file Markdown workspace, and `tabula_create_workspace_room` can publish it as a new encrypted live room.
+2. `tabula_connect_room` connects an existing encrypted room as a proposal-first agent.
+3. `tabula_open_room_view` opens the App room view.
+4. `tabula_read_workspace`, `tabula_read_workspace_document`, and
    `tabula_propose_workspace_changes` let the agent inspect and propose
    workspace document changes when a workspace peer has published workspace
    state. A one-document room is still represented as a workspace with one
    document.
-4. The room server only receives encrypted envelopes.
+5. `tabula_share_workspace` exports a workspace as an encrypted multi-file
+   `#json` snapshot link.
+6. The room server only receives encrypted envelopes.
 
 The `#room` fragment contains the room key and is a bearer secret. Do not paste
 production room links into logs, issue trackers, or public screenshots.

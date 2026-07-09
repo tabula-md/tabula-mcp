@@ -47,6 +47,14 @@ The default workflow is proposal-first. `tabula_propose_workspace_changes`
 emits an encrypted `workspace.proposal.created` room event and does not directly
 mutate the workspace.
 
+Codex can also create the collaboration surface first:
+
+1. `tabula_create_workspace` or `tabula_import_markdown_workspace`
+2. `tabula_share_workspace` for an encrypted `#json` handoff, or
+   `tabula_create_workspace_room` for a new live `#room` link
+3. `tabula_propose_workspace_changes` for follow-up edits after collaborators
+   join the room
+
 ## Approval Behavior
 
 `tabula_connect_room` opens a live room connection and receives a URL whose
@@ -84,4 +92,3 @@ from an actor with:
   "client": "tabula-mcp"
 }
 ```
-

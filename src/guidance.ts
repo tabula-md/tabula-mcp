@@ -19,6 +19,7 @@ const securityRules = [
   "Default room sessions are proposal-first and use workspace.proposal.created events for agent edits.",
   "Use current lowercase SHA-256 hex sha256/baseSha256 values before proposing guarded workspace document patches.",
   "Encrypted share export may upload encrypted snapshot bytes to the Tabula JSON service, but not plaintext Markdown or snapshot keys.",
+  "Filesystem workspace import reads paths visible to the MCP server runtime; hosted clients should provide inline files instead of local user paths.",
 ];
 
 const avoid = [
@@ -31,13 +32,13 @@ const avoid = [
 
 const summaries: Record<TabulaReadMeTopic, string> = {
   overview:
-    "Tabula.md MCP is for Markdown-first collaboration with people and agents. Use MCP App document checkpoints for drafting, encrypted room tools for existing Tabula.md rooms, and encrypted snapshot export when a draft should become a Tabula.md handoff link.",
+    "Tabula.md MCP is for Markdown-first collaboration with people and agents. Use MCP App document checkpoints for drafting, workspace tools for multi-file Markdown projects, encrypted room tools for live collaboration, and encrypted snapshot export when a workspace should become a Tabula.md handoff link.",
   documents:
     "For a new draft, call tabula_create_document. To resume a saved checkpoint, call tabula_list_documents, then tabula_open_document. The App editor can save into the MCP document checkpoint store, recover unsaved browser drafts, send compact changes back into model context, and share the saved document as an encrypted snapshot link.",
   rooms:
-    "For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. The MCP client joins as an agent actor, can publish presence, and proposes workspace document changes through encrypted workspace.proposal.created events.",
+    "For a new live room, create or import a workspace and call tabula_create_workspace_room. For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. The MCP client joins as an agent actor, can publish presence, and proposes workspace document changes through encrypted workspace.proposal.created events.",
   sharing:
-    "To share an MCP App document, call tabula_share_document or use the App Share control. The MCP process creates a snapshot key, encrypts a Tabula JSON snapshot, uploads only encrypted bytes, and returns a #json share URL.",
+    "To share an MCP App document, call tabula_share_document or use the App Share control. To share a multi-file workspace, call tabula_share_workspace. The MCP process creates a snapshot key, encrypts a Tabula JSON snapshot, uploads only encrypted bytes, and returns a #json share URL.",
   security:
     "Tabula.md room keys live in URL fragments and must remain client-side. The MCP process may decrypt locally because the user supplied the secret, but the room server should only see encrypted envelopes.",
 };
@@ -45,6 +46,8 @@ const summaries: Record<TabulaReadMeTopic, string> = {
 const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
   overview: [
     "Use tabula_create_document for a new Markdown draft checkpoint.",
+    "Use tabula_create_workspace or tabula_import_markdown_workspace for multi-file Markdown workspaces.",
+    "Use tabula_create_workspace_room when the agent should create a new live collaboration room.",
     "Use tabula_list_documents and tabula_open_document to resume a saved checkpoint.",
     "Use tabula_connect_room for an existing Tabula.md room URL.",
     "Use tabula_read_me with topic=security before changing room links, write mode, or sharing behavior.",
@@ -55,6 +58,7 @@ const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
     "Use Save before treating the MCP checkpoint copy as current.",
   ],
   rooms: [
+    "Use tabula_create_workspace_room to create a new encrypted workspace room from an imported or inline workspace.",
     "Read room status before deciding whether a room is connected or writable.",
     "Expect room content to arrive as workspace metadata plus document state from connected peers.",
     "Use tabula_read_workspace and tabula_read_workspace_document for room content, even when there is only one document.",
@@ -62,6 +66,7 @@ const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
   ],
   sharing: [
     "Call tabula_share_document only for MCP App documents that should become encrypted snapshot links.",
+    "Call tabula_share_workspace for multi-file workspaces that should become encrypted snapshot links.",
     "Open the returned shareUrl in Tabula.md when the user wants to import or hand off the snapshot.",
     "Tell the user the returned URL is secret because #json contains the snapshot key.",
     "If upload fails, explain that no plaintext fallback was used.",
