@@ -74,11 +74,19 @@ describe("MCP tool registration", () => {
     const statusTool = tools.tools.find((tool) => tool.name === "tabula_room_status");
     const readMarkdownTool = tools.tools.find((tool) => tool.name === "tabula_read_markdown");
     const outlineTool = tools.tools.find((tool) => tool.name === "tabula_get_outline");
+    const readWorkspaceTool = tools.tools.find((tool) => tool.name === "tabula_read_workspace");
+    const readWorkspaceDocumentTool = tools.tools.find((tool) => tool.name === "tabula_read_workspace_document");
+    const proposeWorkspaceTool = tools.tools.find((tool) => tool.name === "tabula_propose_workspace_changes");
+    const proposeTool = tools.tools.find((tool) => tool.name === "tabula_propose_text_patches");
     const setPresenceTool = tools.tools.find((tool) => tool.name === "tabula_set_presence");
     const waitTool = tools.tools.find((tool) => tool.name === "tabula_wait_for_changes");
     const disconnectTool = tools.tools.find((tool) => tool.name === "tabula_disconnect_room");
 
     expect(toolNames).toContain("tabula_read_me");
+    expect(toolNames).toContain("tabula_propose_text_patches");
+    expect(toolNames).toContain("tabula_read_workspace");
+    expect(toolNames).toContain("tabula_read_workspace_document");
+    expect(toolNames).toContain("tabula_propose_workspace_changes");
     expect(toolNames).not.toContain("tabula_apply_text_patches");
     expect(connectTool?.inputSchema.properties).not.toHaveProperty("writeAccess");
     expect(connectTool?.outputSchema).toMatchObject({
@@ -86,8 +94,11 @@ describe("MCP tool registration", () => {
       properties: {
         sessionId: expect.objectContaining({ type: "string" }),
         recoveryStatus: expect.objectContaining({ const: "relay-only" }),
+        actor: expect.objectContaining({ type: "object" }),
+        capabilities: expect.objectContaining({ type: "array" }),
         hydrationStatus: expect.objectContaining({ enum: ["waiting-for-peer-state", "ready"] }),
         stateReceived: expect.objectContaining({ type: "boolean" }),
+        pendingProposalCount: expect.objectContaining({ type: "integer" }),
         note: expect.objectContaining({ type: "string" }),
       },
     });
@@ -101,9 +112,13 @@ describe("MCP tool registration", () => {
       type: "object",
       properties: {
         roomServerUrl: expect.objectContaining({ type: "string" }),
+        actor: expect.objectContaining({ type: "object" }),
+        capabilities: expect.objectContaining({ type: "array" }),
         hydrationStatus: expect.objectContaining({ enum: ["waiting-for-peer-state", "ready"] }),
         stateReceived: expect.objectContaining({ type: "boolean" }),
         collaborators: expect.objectContaining({ type: "array" }),
+        pendingProposalCount: expect.objectContaining({ type: "integer" }),
+        pendingWorkspaceProposalCount: expect.objectContaining({ type: "integer" }),
       },
     });
     expect(readMarkdownTool?.outputSchema).toMatchObject({
@@ -119,6 +134,38 @@ describe("MCP tool registration", () => {
       type: "object",
       properties: {
         outline: expect.objectContaining({ type: "array" }),
+      },
+    });
+    expect(readWorkspaceTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        workspace: expect.objectContaining({ anyOf: expect.any(Array) }),
+        documents: expect.objectContaining({ type: "array" }),
+        cachedDocumentCount: expect.objectContaining({ type: "integer" }),
+      },
+    });
+    expect(readWorkspaceDocumentTool?.inputSchema.properties).toHaveProperty("documentId");
+    expect(readWorkspaceDocumentTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        documentId: expect.objectContaining({ type: "string" }),
+        markdown: expect.objectContaining({ type: "string" }),
+        sha256: expect.objectContaining({ type: "string" }),
+      },
+    });
+    expect(proposeWorkspaceTool?.inputSchema.properties).toHaveProperty("changes");
+    expect(proposeWorkspaceTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        emitted: expect.objectContaining({ type: "boolean" }),
+        proposal: expect.objectContaining({ type: "object" }),
+      },
+    });
+    expect(proposeTool?.outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        emitted: expect.objectContaining({ type: "boolean" }),
+        proposal: expect.objectContaining({ type: "object" }),
       },
     });
     expect(setPresenceTool?.outputSchema).toMatchObject({
@@ -148,8 +195,10 @@ describe("MCP tool registration", () => {
 
   it("exposes the patch tool only when server-level write mode is enabled", async () => {
     const tools = await listTools(true);
+    const proposeTool = tools.tools.find((tool) => tool.name === "tabula_propose_text_patches");
     const patchTool = tools.tools.find((tool) => tool.name === "tabula_apply_text_patches");
 
+    expect(proposeTool).toBeDefined();
     expect(patchTool).toBeDefined();
     expect(patchTool?.annotations).toMatchObject({
       readOnlyHint: false,

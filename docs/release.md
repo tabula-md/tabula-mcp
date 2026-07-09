@@ -88,13 +88,13 @@ The staged bundle and unpacked `.mcpb` artifact must include:
 The manifest must not contain installer `user_config`.
 The manifest must point `icon` and a `512x512` `icons` entry at
 `assets/icon.png`.
-The manifest must list all default model-facing tools exposed by the read-only
-MCPB server, including document, sharing, room status, presence, wait, and
-disconnect tools. It must not list App-only helper tools or the write-only
-`tabula_apply_text_patches` tool. `check:mcpb` starts the bundled read-only
-server from the staged and unpacked bundle layouts and compares the actual
-model-facing tool list against the manifest so future tool registration drift is
-caught automatically.
+The manifest must list all default model-facing tools exposed by the
+proposal-first MCPB server, including document, sharing, room status, proposal,
+presence, wait, and disconnect tools. It must not list App-only helper tools or
+the direct-write-only `tabula_apply_text_patches` tool. `check:mcpb` starts the
+bundled default server from the staged and unpacked bundle layouts and compares
+the actual model-facing tool list against the manifest so future tool
+registration drift is caught automatically.
 The packed artifact must not include packaging-only lockfiles.
 
 The packed artifact must also start successfully over stdio from its unpacked
@@ -108,8 +108,9 @@ The packed artifact smoke also covers the zero-config document flow without
 tests pass the JSON snapshot service URL as a tool argument, matching the
 no-installer-settings MCPB model.
 
-The default MCPB must be read-only for room writes. Write-enabled testing uses
-manual stdio configuration, not installer prompts.
+The default MCPB must be proposal-first for room edits and must not expose
+direct room writes. Write-enabled testing uses manual stdio configuration, not
+installer prompts.
 
 Hosted release checks must keep production guardrails intact: production remote
 HTTP requires `TABULA_MCP_AUTH_TOKEN` unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1`

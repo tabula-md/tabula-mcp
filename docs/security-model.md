@@ -148,8 +148,9 @@ Only send it to intended collaborators or agents.
 
 ## Room Write Policy
 
-Room write access is a server startup decision. The default MCPB and default
-stdio server are read-only for rooms.
+Direct room write access is a server startup decision. The default MCPB and
+default stdio server are proposal-first for rooms: they can send encrypted patch
+proposals, but they do not expose direct write tools.
 
 Hosted production remote servers do not expose room connection tools by default
 because a remote MCP server that joins a room becomes a trusted plaintext
@@ -167,11 +168,17 @@ Write mode requires one of:
 `--read-only` forces read-only mode even if another setting enables writes.
 
 When write mode is disabled, `tabula_apply_text_patches` is not exposed to the
-model. An agent cannot grant itself write access by changing tool arguments.
+model. An agent cannot grant itself direct write access by changing tool
+arguments. It can still use `tabula_propose_workspace_changes` to send an
+encrypted `workspace.proposal.created` event for collaborators to review, or
+`tabula_propose_text_patches` for legacy single-document `patch.proposed`
+events.
 
-When write mode is enabled, room edits must use guarded text patches with the
-latest `baseSha256`. This prevents blind full-document overwrites when another
-collaborator has changed the room.
+Patch proposals and direct room edits must use guarded text patches with the
+latest `baseSha256`. The value is lowercase SHA-256 hex and maps to Tabula.md's
+room collaboration hash contract. Workspace proposals use the same hash guard
+inside each `document.patch` change. This prevents blind full-document
+overwrites when another collaborator has changed the room.
 
 ## Release Blockers
 
@@ -187,5 +194,5 @@ Treat these as release blockers:
 - public unauthenticated production exposes remote room tools
 - production HTTP allows wildcard browser origins by default
 - docs imply that remote MCP checkpoints are encrypted Tabula JSON snapshots
-- `tabula_apply_text_patches` is exposed in default read-only mode
+- `tabula_apply_text_patches` is exposed in default proposal-first mode
 - docs or tool descriptions imply that `#room` or `#json` links are safe to publish

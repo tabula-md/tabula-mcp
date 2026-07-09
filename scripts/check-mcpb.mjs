@@ -34,6 +34,7 @@ const requiredFiles = [
   "server/server/web.js",
   "server/server/register-room-tools.js",
   "server/server/write-access.js",
+  "server/room-events.js",
   "server/share.js",
   "server/guidance.js",
   "server/output-schemas.js",
@@ -55,8 +56,12 @@ const requiredTools = [
   "tabula_list_sessions",
   "tabula_read_markdown",
   "tabula_get_outline",
+  "tabula_read_workspace",
+  "tabula_read_workspace_document",
+  "tabula_propose_workspace_changes",
   "tabula_room_status",
   "tabula_open_room_view",
+  "tabula_propose_text_patches",
   "tabula_set_presence",
   "tabula_wait_for_changes",
   "tabula_disconnect_room",
@@ -206,7 +211,7 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   assertMatchingToolNames(
     manifest.tools.map((tool) => tool.name).sort(),
     modelFacingTools,
-    `MCPB ${label} manifest tools must match the bundled read-only server's model-facing tools`,
+    `MCPB ${label} manifest tools must match the bundled proposal-first server's model-facing tools`,
   );
 
   const appHtml = await readFile(path.join(bundleDir, "server", "document-app.html"), "utf8");

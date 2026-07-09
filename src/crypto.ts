@@ -63,5 +63,5 @@ export const decryptEnvelopeForRoom = async (roomKey: CryptoKey, envelope: Encry
 export const sha256Text = async (text: string) => {
   const bytes = new TextEncoder().encode(text);
   const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return encodeBase64Url(digest);
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 };

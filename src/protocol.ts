@@ -1,4 +1,4 @@
-export type EnvelopeKind = "yjs-update" | "presence" | "state-init" | "snapshot";
+export type EnvelopeKind = "yjs-update" | "presence" | "state-init" | "snapshot" | "room-event";
 
 export type EncryptedEnvelope = {
   v: 1;
@@ -29,7 +29,7 @@ const ROOM_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 const ROOM_KEY_BYTES = 32;
 const LOCAL_ROOM_SERVER_PORT = 3002;
 const TABULA_MD_ROOM_SERVER_URL = "https://rooms.tabula.md";
-const ENVELOPE_KINDS = ["yjs-update", "presence", "state-init", "snapshot"] as const;
+const ENVELOPE_KINDS = ["yjs-update", "presence", "state-init", "snapshot", "room-event"] as const;
 const ENVELOPE_FIELDS = new Set(["v", "roomId", "kind", "version", "iv", "ciphertext", "createdAt"]);
 const FORBIDDEN_PLAINTEXT_FIELDS = new Set(["roomKey", "key", "plaintext", "markdown", "text", "content"]);
 const AES_GCM_IV_BYTES = 12;

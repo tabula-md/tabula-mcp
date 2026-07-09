@@ -84,6 +84,7 @@ src/
   crypto.ts
   share.ts
   guidance.ts
+  room-events.ts
 api/
   mcp.ts
   health.ts
@@ -109,8 +110,8 @@ Responsibilities:
 - `src/app/tools.ts`: model-facing App tools and App-only state tools
 - `src/documents/*`: document domain and local/remote checkpoint stores
 - `src/share.ts`: encrypted JSON snapshot export
-- `src/room-client.ts`, `src/protocol.ts`, `src/crypto.ts`: room transport,
-  protocol parsing, and encryption primitives
+- `src/room-client.ts`, `src/protocol.ts`, `src/crypto.ts`, `src/room-events.ts`:
+  room transport, protocol parsing, encryption primitives, and agent actor/event contracts
 - `api/mcp.ts`, `api/health.ts`, `api/ready.ts`: Vercel deployment entrypoints
 - `workers/tabula-mcp-worker.ts`: Cloudflare Workers deployment entrypoint
 
@@ -164,6 +165,10 @@ Model-facing tools:
 - `tabula_read_markdown`
 - `tabula_get_outline`
 - `tabula_open_room_view`
+- `tabula_read_workspace`
+- `tabula_read_workspace_document`
+- `tabula_propose_workspace_changes`
+- `tabula_propose_text_patches`
 - `tabula_set_presence`
 - `tabula_wait_for_changes`
 - `tabula_disconnect_room`

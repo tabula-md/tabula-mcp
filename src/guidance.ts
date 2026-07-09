@@ -16,8 +16,8 @@ const securityRules = [
   "Treat any Tabula.md snapshot URL with a #json fragment as a bearer secret because the fragment contains the snapshot key.",
   "Never send room keys or plaintext Markdown to the Tabula Room server.",
   "Hosted Tabula MCP document checkpoints may temporarily store plaintext Markdown for agent editing; use encrypted share export for handoff links.",
-  "Default room sessions are read-only; room writes require server-level opt-in with TABULA_MCP_ENABLE_WRITE=1 or --enable-write.",
-  "Use current sha256/baseSha256 values before applying guarded room patches.",
+  "Default room sessions are proposal-first; direct room writes require server-level opt-in with TABULA_MCP_ENABLE_WRITE=1 or --enable-write.",
+  "Use current lowercase SHA-256 hex sha256/baseSha256 values before proposing or applying guarded room patches.",
   "Encrypted share export may upload encrypted snapshot bytes to the Tabula JSON service, but not plaintext Markdown or snapshot keys.",
 ];
 
@@ -26,7 +26,7 @@ const avoid = [
   "Do not claim an MCP App document checkpoint is durable after the MCP process exits unless the configured checkpoint store is durable or the document has been exported.",
   "Do not treat App draft recovery as encrypted room storage; it is plaintext local browser storage.",
   "Do not treat MCP document checkpoints as Tabula JSON snapshots; checkpoints are working state, while #json links are encrypted handoff artifacts.",
-  "Do not call read-only room views write-capable unless the server was explicitly started in write mode.",
+  "Do not call direct room writes available unless the server was explicitly started in write mode.",
 ];
 
 const summaries: Record<TabulaReadMeTopic, string> = {
@@ -35,7 +35,7 @@ const summaries: Record<TabulaReadMeTopic, string> = {
   documents:
     "For a new draft, call tabula_create_document. To resume a saved checkpoint, call tabula_list_documents, then tabula_open_document. The App editor can save into the MCP document checkpoint store, recover unsaved browser drafts, send compact changes back into model context, and share the saved document as an encrypted snapshot link.",
   rooms:
-    "For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. Open tabula_open_room_view for a read-only App view, or use read_markdown/get_outline/wait_for_changes for text workflows.",
+    "For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. The MCP client joins as an agent actor, can publish presence, can propose text patches by default, and can directly edit only when write mode is enabled.",
   sharing:
     "To share an MCP App document, call tabula_share_document or use the App Share control. The MCP process creates a snapshot key, encrypts a Tabula JSON snapshot, uploads only encrypted bytes, and returns a #json share URL.",
   security:
@@ -58,6 +58,9 @@ const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
     "Read room status before deciding whether a room is connected or writable.",
     "Expect room content to arrive through live encrypted room updates or state-init from connected peers.",
     "Use tabula_get_outline for structure before large edits.",
+    "Use tabula_read_workspace and tabula_read_workspace_document when the room is a multi-document workspace.",
+    "Use tabula_propose_workspace_changes for reviewable multi-document agent edits.",
+    "Use tabula_propose_text_patches only for legacy single-document patch proposals.",
     "Use tabula_apply_text_patches only when the server exposes it and a current baseSha256 is available.",
   ],
   sharing: [
@@ -70,7 +73,7 @@ const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
     "Keep #room/#json links and their fragment keys out of logs and issue text.",
     "Use remote Tabula MCP only when the MCP service is allowed to hold temporary plaintext checkpoints for agent editing.",
     "Prefer encrypted snapshot export over plaintext upload.",
-    "Ask before enabling room writes or changing persistence boundaries.",
+    "Ask before enabling direct room writes or changing persistence boundaries.",
   ],
 };
 
