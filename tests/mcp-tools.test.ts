@@ -215,6 +215,20 @@ describe("MCP tool registration", () => {
     });
   });
 
+  it("returns structured content from model-facing JSON room tools", async () => {
+    await withClient(false, async (client) => {
+      const result = await client.callTool({
+        name: "tabula_list_sessions",
+        arguments: {},
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual({
+        sessions: [],
+      });
+    });
+  });
+
   it("returns model guidance through tabula_read_me without requiring MCP Apps", async () => {
     await withClient(false, async (client) => {
       const tools = await client.listTools();
