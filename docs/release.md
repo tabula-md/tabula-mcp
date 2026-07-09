@@ -195,4 +195,5 @@ PR descriptions should include:
 - security boundary impact
 - automated validation commands and results
 - manual Claude Desktop check status, if performed
+- manual Codex CLI check status, if performed
 - residual risk, especially around host support or room server availability

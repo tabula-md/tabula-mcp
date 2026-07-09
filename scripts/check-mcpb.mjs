@@ -39,6 +39,7 @@ const requiredFiles = [
   "server/guidance.js",
   "server/output-schemas.js",
   "README.md",
+  "docs/codex-cli.md",
   "docs/claude-desktop.md",
   "docs/security-model.md",
   "docs/mcp-app-architecture.md",

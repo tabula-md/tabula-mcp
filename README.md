@@ -22,6 +22,7 @@ official hosted Tabula MCP endpoint.
 
 ## Documentation
 
+- [Codex CLI](docs/codex-cli.md): local stdio setup, approval behavior, and room workflow checks.
 - [Claude Desktop](docs/claude-desktop.md): MCPB build, install, and manual smoke test.
 - [Deployment](docs/deployment.md): Vercel and Cloudflare hosted MCP targets.
 - [Security Model](docs/security-model.md): local trust boundary, room keys, share/export, and write policy.
