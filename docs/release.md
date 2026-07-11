@@ -89,8 +89,8 @@ The manifest must not contain installer `user_config`.
 The manifest must point `icon` and a `512x512` `icons` entry at
 `assets/icon.png`.
 The manifest must list all default model-facing tools exposed by the
-proposal-first MCPB server, including document, sharing, workspace room status,
-workspace proposal, presence, wait, and disconnect tools. It must not list
+MCPB server, including document, sharing, workspace room status,
+workspace apply, presence, wait, and disconnect tools. It must not list
 App-only helper tools or legacy single-document room patch tools. `check:mcpb`
 starts the bundled default server from the staged and unpacked bundle layouts
 and compares the actual model-facing tool list against the manifest so future
@@ -108,9 +108,9 @@ The packed artifact smoke also covers the zero-config document flow without
 tests pass the JSON snapshot service URL as a tool argument, matching the
 no-installer-settings MCPB model.
 
-The default MCPB must be proposal-first for room edits and must not expose
-direct room writes. Write-enabled testing uses manual stdio configuration, not
-installer prompts.
+The default MCPB must expose the same workspace room collaboration surface as
+the stdio server without installer prompts for room URLs, keys, tokens, or
+write-mode settings.
 
 Hosted release checks must keep production guardrails intact: production remote
 HTTP requires `TABULA_MCP_AUTH_TOKEN` unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1`

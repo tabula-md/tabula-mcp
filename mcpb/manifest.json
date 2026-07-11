@@ -60,7 +60,7 @@
     },
     {
       "name": "tabula_import_markdown_workspace",
-      "description": "Import Markdown files into a local Tabula workspace."
+      "description": "Import Markdown files into a local Tabula workspace from inline files or an allowed local root."
     },
     {
       "name": "tabula_share_workspace",
@@ -68,11 +68,11 @@
     },
     {
       "name": "tabula_create_workspace_room",
-      "description": "Create a new encrypted Tabula.md live workspace room from a local workspace."
+      "description": "Create a new encrypted Tabula.md live workspace room from a local workspace and save an encrypted checkpoint when Firebase is configured."
     },
     {
       "name": "tabula_connect_room",
-      "description": "Connect Claude Desktop to an encrypted Tabula.md room invite URL."
+      "description": "Connect Claude Desktop to an encrypted Tabula.md room invite URL and load encrypted checkpoint recovery when Firebase is configured."
     },
     {
       "name": "tabula_list_sessions",
@@ -87,8 +87,12 @@
       "description": "Read cached Markdown for one document in a connected Tabula workspace room."
     },
     {
-      "name": "tabula_propose_workspace_changes",
-      "description": "Propose multi-document workspace changes as an encrypted reviewable room event."
+      "name": "tabula_read_workspace_context",
+      "description": "Read filtered, bounded Markdown excerpts from cached workspace documents for agent planning."
+    },
+    {
+      "name": "tabula_apply_workspace_changes",
+      "description": "Apply hash-guarded workspace document changes as encrypted direct collaboration events."
     },
     {
       "name": "tabula_room_status",
@@ -104,7 +108,7 @@
     },
     {
       "name": "tabula_wait_for_changes",
-      "description": "Wait for a connected room's Markdown hash or encrypted room events to change and return the latest Markdown."
+      "description": "Wait for active document hash changes or encrypted workspace room events and return document hash summaries."
     },
     {
       "name": "tabula_disconnect_room",

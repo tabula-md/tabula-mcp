@@ -1,4 +1,6 @@
-export type EnvelopeKind = "yjs-update" | "presence" | "state-init" | "snapshot" | "room-event";
+import { assertProductionEgressAllowed, normalizeServiceUrl } from "./egress-policy.js";
+
+export type EnvelopeKind = "snapshot" | "room-event";
 
 export type EncryptedEnvelope = {
   v: 1;
@@ -29,7 +31,8 @@ const ROOM_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 const ROOM_KEY_BYTES = 32;
 const LOCAL_ROOM_SERVER_PORT = 3002;
 const TABULA_MD_ROOM_SERVER_URL = "https://rooms.tabula.md";
-const ENVELOPE_KINDS = ["yjs-update", "presence", "state-init", "snapshot", "room-event"] as const;
+const ROOM_SERVER_ALLOWLIST_ENV = "TABULA_MCP_ALLOWED_ROOM_SERVER_URLS";
+const ENVELOPE_KINDS = ["snapshot", "room-event"] as const;
 const ENVELOPE_FIELDS = new Set(["v", "roomId", "kind", "version", "iv", "ciphertext", "createdAt"]);
 const FORBIDDEN_PLAINTEXT_FIELDS = new Set(["roomKey", "key", "plaintext", "markdown", "text", "content"]);
 const AES_GCM_IV_BYTES = 12;
@@ -118,18 +121,32 @@ export const resolveRoomServerUrl = ({
 }) => {
   const configuredUrl = roomServerUrl?.trim() || env.TABULA_ROOM_URL?.trim() || env.VITE_TABULA_ROOM_URL?.trim();
   if (configuredUrl) {
-    return trimTrailingSlash(configuredUrl);
+    return assertProductionEgressAllowed({
+      allowedUrlsEnvName: ROOM_SERVER_ALLOWLIST_ENV,
+      defaultAllowedUrls: [TABULA_MD_ROOM_SERVER_URL],
+      env,
+      serviceName: "Tabula Room server",
+      trustedUrlEnvNames: ["TABULA_ROOM_URL", "VITE_TABULA_ROOM_URL"],
+      url: configuredUrl,
+    });
   }
 
   const appUrl = new URL(appOrigin);
   if (isLocalHost(appUrl.hostname)) {
     const protocol = appUrl.protocol === "https:" ? "https:" : "http:";
-    return `${protocol}//${appUrl.hostname}:${LOCAL_ROOM_SERVER_PORT}`;
+    return assertProductionEgressAllowed({
+      allowedUrlsEnvName: ROOM_SERVER_ALLOWLIST_ENV,
+      defaultAllowedUrls: [TABULA_MD_ROOM_SERVER_URL],
+      env,
+      serviceName: "Tabula Room server",
+      trustedUrlEnvNames: ["TABULA_ROOM_URL", "VITE_TABULA_ROOM_URL"],
+      url: `${protocol}//${appUrl.hostname}:${LOCAL_ROOM_SERVER_PORT}`,
+    });
   }
 
   const officialHostedRoomServerUrl = resolveOfficialHostedRoomServerUrl(appUrl.hostname);
   if (officialHostedRoomServerUrl) {
-    return officialHostedRoomServerUrl;
+    return normalizeServiceUrl(officialHostedRoomServerUrl, "Tabula Room server");
   }
 
   throw new TabulaMcpError(

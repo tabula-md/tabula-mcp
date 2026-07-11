@@ -1,5 +1,6 @@
 import { randomBytes, webcrypto } from "node:crypto";
 import * as Y from "yjs";
+import { assertProductionEgressAllowed, normalizeServiceUrl } from "./egress-policy.js";
 import {
   encryptBytesForRoom,
   importRoomKey,
@@ -16,6 +17,7 @@ import {
 const defaultTabulaAppOrigin = "https://tabula.md";
 const defaultTabulaJsonServerUrl = "https://json.tabula.md";
 const localJsonServerPort = 3004;
+const jsonServerAllowlistEnv = "TABULA_MCP_ALLOWED_JSON_SERVER_URLS";
 const roomIdBytes = 16;
 const roomKeyBytes = 32;
 const jsonShareKeyBytes = 32;
@@ -170,18 +172,32 @@ export const resolveJsonShareServerUrl = ({
 }) => {
   const configuredUrl = jsonServerUrl?.trim() || env.TABULA_JSON_URL?.trim() || env.VITE_TABULA_JSON_URL?.trim();
   if (configuredUrl) {
-    return trimTrailingSlash(configuredUrl);
+    return assertProductionEgressAllowed({
+      allowedUrlsEnvName: jsonServerAllowlistEnv,
+      defaultAllowedUrls: [defaultTabulaJsonServerUrl],
+      env,
+      serviceName: "Tabula JSON snapshot service",
+      trustedUrlEnvNames: ["TABULA_JSON_URL", "VITE_TABULA_JSON_URL"],
+      url: configuredUrl,
+    });
   }
 
   const appUrl = new URL(appOrigin);
   if (isLocalHost(appUrl.hostname)) {
     const protocol = appUrl.protocol === "https:" ? "https:" : "http:";
-    return `${protocol}//${appUrl.hostname}:${localJsonServerPort}`;
+    return assertProductionEgressAllowed({
+      allowedUrlsEnvName: jsonServerAllowlistEnv,
+      defaultAllowedUrls: [defaultTabulaJsonServerUrl],
+      env,
+      serviceName: "Tabula JSON snapshot service",
+      trustedUrlEnvNames: ["TABULA_JSON_URL", "VITE_TABULA_JSON_URL"],
+      url: `${protocol}//${appUrl.hostname}:${localJsonServerPort}`,
+    });
   }
 
   const hostedJsonServerUrl = resolveOfficialHostedJsonServerUrl(appUrl.hostname);
   if (hostedJsonServerUrl) {
-    return hostedJsonServerUrl;
+    return normalizeServiceUrl(hostedJsonServerUrl, "Tabula JSON snapshot service");
   }
 
   throw new TabulaMcpError(

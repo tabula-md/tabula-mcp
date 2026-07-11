@@ -169,10 +169,32 @@ Model-facing tools:
 - `tabula_open_room_view`
 - `tabula_read_workspace`
 - `tabula_read_workspace_document`
-- `tabula_propose_workspace_changes`
+- `tabula_read_workspace_context`
+- `tabula_apply_workspace_changes`
 - `tabula_set_presence`
 - `tabula_wait_for_changes`
 - `tabula_disconnect_room`
+
+Workspace context remains tool-first for MCP client compatibility. Read-only
+MCP resources mirror workspace data in clients that support them:
+`tabula://workspace/{workspaceId}`,
+`tabula://workspace/{workspaceId}/document/{documentId}`,
+`tabula://room/{sessionId}/workspace`, and
+`tabula://room/{sessionId}/document/{documentId}`. Tool outputs include
+`resourceUri` handles when available, but agents must be able to create, import,
+inspect, filter, share, and apply hash-guarded changes through tools alone.
+`tabula_read_workspace_context` is the bounded context tool: use
+`documentIds`, `pathGlobs`, `query`, and `changedSince` instead of reading every
+document in full. Local filesystem imports are limited to MCP roots or
+`TABULA_MCP_ALLOWED_IMPORT_ROOTS`; hosted clients should pass inline
+`source.files`. Resource URIs never include `#room` keys or encrypted share
+secrets.
+
+Tool results are context-budgeted. Exact objects are returned in
+`structuredContent`, while `content` uses concise text plus `resource_link`
+entries for larger results. Do not add large output schemas or full JSON text
+duplication back to model-facing tools without raising the context budget and
+updating `scripts/measure-mcp-context.mjs`.
 
 App-only tools:
 
@@ -219,6 +241,13 @@ credentials are configured. This mirrors the Excalidraw MCP pattern: the MCP
 server keeps plaintext checkpoints for iterative agent editing, while
 `tabula_share_document` exports the final handoff through the encrypted
 `tabula-json` snapshot flow.
+
+Live room checkpoints are a separate room-collaboration persistence path. When
+Firebase is configured, `tabula_create_workspace_room` and `tabula_connect_room`
+use the same encrypted `WorkspaceRoomCheckpoint` contract as `tabula-md`.
+Firestore stores encrypted room recovery bytes under `roomCheckpoints/{roomId}`;
+the room key remains in the `#room` fragment and is used only inside the MCP
+client process.
 
 ## Dev Harness
 

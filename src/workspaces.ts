@@ -61,7 +61,6 @@ export type ReadWorkspaceResult = {
   activeDocumentId?: string;
   documents: Array<WorkspaceDocumentNode & { cached: true; path?: string }>;
   cachedDocumentCount: number;
-  pendingWorkspaceProposalCount: 0;
   hydrationStatus: "ready";
   stateReceived: true;
   createdAt: string;
@@ -388,9 +387,8 @@ export const readStoredWorkspace = (workspace: StoredWorkspace): ReadWorkspaceRe
         ...node,
         cached: true as const,
         path: documentsById.get(node.id)?.path,
-      })),
+    })),
     cachedDocumentCount: workspace.documents.length,
-    pendingWorkspaceProposalCount: 0,
     hydrationStatus: "ready",
     stateReceived: true,
     createdAt: workspace.createdAt,

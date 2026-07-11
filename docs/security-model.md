@@ -4,7 +4,8 @@ Tabula.md MCP can run as a local stdio/MCPB server or as a remote Streamable
 HTTP MCP endpoint. In both modes, MCP document checkpoints are agent working
 state and may contain plaintext Markdown. This is separate from Tabula.md core
 services: `tabula-room` remains an encrypted relay, and `tabula-json` remains an
-encrypted snapshot blob store.
+encrypted snapshot blob store. Live room persistence, when enabled, uses
+Firebase Firestore as an encrypted workspace room checkpoint store.
 
 ## Trust Boundary
 
@@ -24,6 +25,7 @@ Untrusted or remote boundary:
 
 - Tabula Room server
 - Tabula JSON snapshot service
+- Firebase Firestore room checkpoint store
 - network intermediaries
 - issue trackers, logs, public transcripts, screenshots, and telemetry
 
@@ -52,6 +54,48 @@ The Tabula Room server must not receive:
 
 The app origin and room server URL are separate. The app URL is the human-facing
 Tabula.md link. The room server URL is the encrypted envelope transport.
+
+## Live Room Checkpoints
+
+Live room checkpoints are different from MCP document checkpoints and Export to
+link snapshots.
+
+When `TABULA_MCP_FIREBASE_CONFIG`, `TABULA_FIREBASE_CONFIG`, or
+`VITE_TABULA_FIREBASE_CONFIG` is configured, `tabula-mcp` reads and writes the
+same `WorkspaceRoomCheckpoint` shape as `tabula-md`:
+
+```txt
+schema: tabula.workspace-room-checkpoint
+workspace: WorkspaceRoomState
+documents: WorkspaceProposalDocument[]
+```
+
+Before Firestore sees the payload, the MCP process encrypts it locally with the
+room key from the `#room` fragment and room-bound AES-GCM additional data. The
+Firestore document path is public-room-id scoped:
+
+```txt
+roomCheckpoints/{roomId}
+```
+
+Firestore receives:
+
+- format version
+- checkpoint version
+- encrypted checkpoint bytes
+- update timestamp
+
+Firestore must not receive:
+
+- room keys
+- plaintext Markdown
+- decrypted workspace events
+
+`tabula_create_workspace_room` saves this encrypted checkpoint after publishing
+initial workspace room events when Firebase is configured.
+`tabula_connect_room` attempts to load and decrypt it before joining the live
+relay. The structured tool output includes `checkpointStatus` so agents can tell
+whether recovery was `loaded`, `saved`, `missing`, `disabled`, or `failed`.
 
 ## Snapshot Links
 
@@ -107,13 +151,15 @@ Production/public HTTP controls:
 - Production remote mode requires Redis/Upstash REST credentials by default.
 - Production memory checkpoints require explicit unsafe opt-in with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and `TABULA_MCP_ALLOW_MEMORY_STORE=1`.
 - Production browser requests with an `Origin` header are rejected unless the origin is in `TABULA_MCP_ALLOWED_ORIGINS`.
+- Production room/json egress defaults to official Tabula services. Add trusted self-hosted targets with `TABULA_MCP_ALLOWED_ROOM_SERVER_URLS` and `TABULA_MCP_ALLOWED_JSON_SERVER_URLS`, or set `TABULA_MCP_ALLOW_ANY_EGRESS=1` only for a trusted self-hosted deployment.
 - `TABULA_MCP_RATE_LIMIT_MAX` / `TABULA_MCP_RATE_LIMIT_WINDOW_MS` throttle per-client MCP requests.
 - `TABULA_MCP_MAX_ACTIVE_SESSIONS` / `TABULA_MCP_SESSION_IDLE_TTL_MS` bound in-memory MCP transport sessions.
 - `TABULA_MCP_HTTP_MAX_REQUEST_BYTES` limits MCP request bodies.
 - `TABULA_MCP_REQUEST_TIMEOUT_MS` limits individual request handling.
 - `TABULA_MCP_LOG_LEVEL` enables structured JSON request logs.
 - Remote room/workspace tools require stateful MCP HTTP sessions; `TABULA_MCP_STATELESS_HTTP=1` is rejected for remote deployments.
-- `TABULA_MCP_STATEFUL_HTTP=1` can force stateful HTTP sessions explicitly and should only be used with sticky routing, a single instance, or a session coordinator.
+- Cloudflare Workers route MCP sessions through `TabulaMcpSessionDurableObject`; other platforms need sticky routing, a single instance, or an external session coordinator.
+- `TABULA_MCP_STATEFUL_HTTP=1` can force stateful HTTP sessions explicitly.
 
 The Document App also stores unsaved plaintext drafts in the local MCP App
 host's browser storage. Draft recovery is scoped by document id, size-limited,
@@ -126,6 +172,8 @@ Implications:
 - local browser drafts may persist after closing or reopening the App host
 - memory-only mode loses saved MCP session documents when the MCP server exits
 - remote Redis/KV checkpoints persist until TTL or explicit deletion
+- Firebase room checkpoints persist encrypted live room recovery state according
+  to the configured Firestore rules and retention policy
 - users should share/export when they want an encrypted Tabula.md snapshot link
 
 ## Encrypted Share
@@ -146,33 +194,27 @@ Only send it to intended collaborators or agents.
 
 ## Room Write Policy
 
-Direct room write access is a server startup decision. The default MCPB and
-default stdio server are proposal-first for rooms: they can send encrypted
-workspace proposals, but they do not expose direct write tools.
+Tabula MCP joins a live room as a `tabula-mcp` agent actor and uses the same
+room collaboration contract as Tabula.md. Document text changes are encrypted
+`text.updated` room events containing document-scoped Yjs update bytes. Folder
+and document tree changes are encrypted `workspace.updated` room events
+containing the latest workspace state.
 
 Hosted production remote servers expose room/workspace tools as part of the
 agent-facing Tabula client surface. A remote MCP server that joins a room becomes
 a trusted plaintext processor for the room key and decrypted Markdown. Remote
-room/workspace tools require stateful HTTP sessions; deploy them with sticky
-routing, a single instance, or a future session coordinator.
+room/workspace tools require stateful HTTP sessions. The Cloudflare Worker uses
+Durable Object session affinity; Vercel or other deployments need sticky
+routing, a single instance, or an external session coordinator.
 
-Write mode requires one of:
+The model-facing room surface uses `tabula_apply_workspace_changes`. Legacy
+single-document `patch.proposed` tools and workspace proposal events are not
+exposed.
 
-- `TABULA_MCP_ENABLE_WRITE=1`
-- `--enable-write`
-
-`--read-only` forces read-only mode even if another setting enables writes.
-
-The model-facing room surface uses the workspace contract. An agent cannot
-grant itself direct write access by changing tool arguments. It uses
-`tabula_propose_workspace_changes` to send encrypted
-`workspace.proposal.created` events for collaborators to review. Legacy
-single-document `patch.proposed` tools are not exposed.
-
-Workspace proposals must use guarded text patches with the latest `baseSha256`
-inside each `document.patch` change. The value is lowercase SHA-256 hex and maps
-to Tabula.md's room collaboration hash contract. This prevents blind
-full-document overwrites when another collaborator has changed the room.
+Workspace `document.patch` inputs must use guarded text patches with the latest
+`baseSha256`. The value is lowercase SHA-256 hex and maps to Tabula.md's room
+collaboration hash contract. This prevents blind full-document overwrites when
+another collaborator has changed the room.
 
 ## Release Blockers
 
@@ -187,6 +229,8 @@ Treat these as release blockers:
 - official hosted production uses `TABULA_MCP_ALLOW_MEMORY_STORE=1`
 - public unauthenticated production runs without request/rate/session guardrails
 - production HTTP allows wildcard browser origins by default
-- docs imply that remote MCP checkpoints are encrypted Tabula JSON snapshots
-- legacy single-document room patch tools are exposed in default proposal-first mode
+- production remote mode accepts arbitrary room/json service URLs without an egress allowlist
+- docs imply that MCP document checkpoints, Firebase live room checkpoints, and
+  Tabula JSON export snapshots are the same storage path
+- legacy single-document room patch tools or workspace proposal events are exposed as model-facing room tools
 - docs or tool descriptions imply that `#room` or `#json` links are safe to publish

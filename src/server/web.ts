@@ -46,6 +46,7 @@ export type TabulaMcpWebHandlerOptions = {
   rateLimitWindowMs?: number;
   requestTimeoutMs?: number;
   sessionIdleTtlMs?: number;
+  sessionIdGenerator?: () => string;
   statelessHttp?: boolean;
   writeEnabled?: boolean;
 };
@@ -248,6 +249,7 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
       allowRoomTools: policy.allowRemoteRoomConnections,
       forceDocumentAppTools: policy.statelessHttp,
       writeEnabled: options.writeEnabled,
+      env,
     });
 
   const createStatefulSession = async () => {
@@ -255,7 +257,7 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
     const instance = createServerInstance();
 
     transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      sessionIdGenerator: options.sessionIdGenerator ?? (() => randomUUID()),
       onsessioninitialized: (newSessionId) => {
         const now = Date.now();
         sessions.set(newSessionId, { createdAt: now, instance, lastSeenAt: now, transport });

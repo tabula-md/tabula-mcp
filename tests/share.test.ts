@@ -245,6 +245,27 @@ describe("Tabula document sharing", () => {
     );
   });
 
+  it("blocks unallowlisted custom JSON snapshot egress in production", () => {
+    expect(() =>
+      resolveJsonShareServerUrl({
+        appOrigin: "https://tabula.md",
+        jsonServerUrl: "https://json.example.com/",
+        env: { TABULA_MCP_PRODUCTION: "1" },
+      }),
+    ).toThrow(/does not allow Tabula JSON snapshot service egress/);
+
+    expect(
+      resolveJsonShareServerUrl({
+        appOrigin: "https://tabula.md",
+        jsonServerUrl: "https://json.example.com/",
+        env: {
+          TABULA_MCP_PRODUCTION: "1",
+          TABULA_MCP_ALLOWED_JSON_SERVER_URLS: "https://json.example.com",
+        },
+      }),
+    ).toBe("https://json.example.com");
+  });
+
   it("returns clear errors when encrypted upload fails", async () => {
     await expect(
       shareMarkdownDocument({
