@@ -40,20 +40,36 @@ Codex can join an encrypted Tabula room as an agent actor:
 1. `tabula_connect_room`
 2. `tabula_wait_for_changes`
 3. `tabula_read_workspace`
-4. `tabula_read_workspace_document`
-5. `tabula_propose_workspace_changes`
+4. `tabula_read_workspace_context` for bounded planning context. Use
+   `documentIds`, `pathGlobs`, `query`, and `changedSince` to avoid loading
+   unrelated documents, or use
+   `tabula_read_workspace_document` when exact full text is needed
+5. `tabula_apply_workspace_changes`
 
-The default workflow is proposal-first. `tabula_propose_workspace_changes`
-emits an encrypted `workspace.proposal.created` room event and does not directly
-mutate the workspace.
+`tabula_read_workspace` defaults to summary metadata. Pass `detail: "tree"`
+only when folder/node structure is needed.
+
+If the client surface supports MCP resources, the read tools also return
+`tabula://...` `resourceUri` handles for read-only workspace metadata and
+Markdown. Codex workflows should still work through tools alone.
+
+The workflow is direct collaboration. `tabula_apply_workspace_changes` emits
+encrypted document-scoped `text.updated` Yjs updates and `workspace.updated`
+tree state, matching the Tabula.md room contract.
 
 Codex can also create the collaboration surface first:
 
 1. `tabula_create_workspace` or `tabula_import_markdown_workspace`
 2. `tabula_share_workspace` for an encrypted `#json` handoff, or
    `tabula_create_workspace_room` for a new live `#room` link
-3. `tabula_propose_workspace_changes` for follow-up edits after collaborators
+3. Check the returned `checkpointStatus`; Firebase-configured sessions should
+   report `saved`, while local relay-only sessions report `disabled`
+4. `tabula_apply_workspace_changes` for follow-up edits after collaborators
    join the room
+
+`tabula_import_markdown_workspace` can always use `source.files`. `source.type:
+local-path` is limited to MCP client roots when the client supports roots, or to
+directories explicitly listed in `TABULA_MCP_ALLOWED_IMPORT_ROOTS`.
 
 ## Approval Behavior
 
@@ -62,6 +78,8 @@ Codex can also create the collaboration surface first:
 before calling it, especially in non-interactive runs. That is intentional: room
 URLs are bearer secrets and the MCP process becomes a trusted plaintext room
 participant after connecting.
+When Firebase room checkpoints are configured, `tabula_connect_room` first tries
+to load encrypted room recovery state and reports that in `checkpointStatus`.
 
 For unattended local test automation only, Codex CLI can be run with:
 
@@ -80,10 +98,10 @@ relay, joined a simulated Tabula peer, and asked a real `codex exec` agent to:
 1. connect to the room with `tabula_connect_room`
 2. wait for encrypted workspace state
 3. read workspace metadata and one workspace document
-4. submit `tabula_propose_workspace_changes`
+4. submit `tabula_apply_workspace_changes`
 
-The simulated peer received and decrypted a `workspace.proposal.created` event
-from an actor with:
+The simulated peer received and decrypted `text.updated` and `workspace.updated`
+events from an actor with:
 
 ```json
 {

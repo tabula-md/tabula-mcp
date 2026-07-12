@@ -36,26 +36,27 @@ describe("room encryption", () => {
     expect(restoredDoc.getText("markdown").toString()).toBe("# Shared\n\nHello from Tabula MCP");
   });
 
-  it("authenticates room envelope metadata and supports state-init", async () => {
+  it("authenticates room-event envelope metadata and rejects legacy room kinds", async () => {
     const key = await importRoomKey(roomKey);
-    const envelope = await encryptBytesForRoom(key, "room_123", "state-init", 2, new TextEncoder().encode("state"));
+    const event = new TextEncoder().encode(JSON.stringify({ type: "workspace.updated" }));
+    const envelope = await encryptBytesForRoom(key, "room_123", "room-event", 2, event);
 
-    await expect(decryptEnvelopeForRoom(key, envelope)).resolves.toEqual(new TextEncoder().encode("state"));
+    await expect(decryptEnvelopeForRoom(key, envelope)).resolves.toEqual(event);
     await expect(
       decryptEnvelopeForRoom(key, {
         ...envelope,
-        kind: "yjs-update",
+        kind: "state-init",
       }),
     ).rejects.toThrow();
   });
 
-  it("round-trips encrypted workspace room events without exposing proposal plaintext in the envelope", async () => {
+  it("round-trips encrypted workspace room events without exposing event plaintext in the envelope", async () => {
     const key = await importRoomKey(roomKey);
     const event = new TextEncoder().encode(
       JSON.stringify({
         v: 1,
         id: "event_123",
-        type: "workspace.proposal.created",
+        type: "workspace.updated",
         roomId: "room_123",
         actorId: "agent_123",
         createdAt: "2026-06-18T00:00:00.000Z",
@@ -69,7 +70,7 @@ describe("room encryption", () => {
       kind: "room-event",
       version: 3,
     });
-    expect(JSON.stringify(envelope)).not.toContain("workspace.proposal.created");
+    expect(JSON.stringify(envelope)).not.toContain("workspace.updated");
     await expect(decryptEnvelopeForRoom(key, envelope)).resolves.toEqual(event);
   });
 

@@ -15,13 +15,22 @@ const roomHydrationOutputShape = {
   lastStateReceivedAt: isoDateStringSchema.optional(),
 };
 
+const roomCheckpointStatusOutputSchema = z.object({
+  enabled: z.boolean(),
+  store: z.enum(["firebase-firestore", "none"]),
+  status: z.enum(["disabled", "missing", "loaded", "saved", "failed"]),
+  checkpointVersion: z.number().int().nonnegative().optional(),
+  updatedAt: isoDateStringSchema.optional(),
+  error: z.string().optional(),
+});
+
 const liveSelectionOutputSchema = z.object({
   documentId: z.string().optional(),
   from: z.number().int().nonnegative(),
   to: z.number().int().nonnegative(),
 });
 
-const roomCapabilityOutputSchema = z.enum(["presence", "read", "propose", "comment", "write", "create", "delete", "move"]);
+const roomCapabilityOutputSchema = z.enum(["presence", "read", "comment", "write", "create", "delete", "move"]);
 
 const roomActorOutputSchema = z.object({
   id: z.string(),
@@ -76,6 +85,16 @@ const workspaceNodeOutputSchema = z.union([workspaceFolderNodeOutputSchema, work
 const workspaceDocumentSummaryOutputSchema = workspaceDocumentNodeOutputSchema.extend({
   cached: z.boolean(),
   path: z.string().optional(),
+  resourceUri: z.string().optional(),
+});
+
+const workspaceDocumentHashOutputSchema = z.object({
+  documentId: z.string(),
+  title: z.string(),
+  sha256: sha256Schema,
+  textLength: z.number().int().nonnegative(),
+  cached: z.boolean(),
+  resourceUri: z.string().optional(),
 });
 
 const workspaceRoomStateOutputSchema = z.object({
@@ -85,6 +104,17 @@ const workspaceRoomStateOutputSchema = z.object({
   rootId: z.string(),
   nodes: z.array(workspaceNodeOutputSchema),
   activeDocumentId: z.string().optional(),
+});
+
+const workspaceSummaryOutputSchema = z.object({
+  roomId: roomIdOutputSchema.optional(),
+  mode: z.string().optional(),
+  version: z.number().optional(),
+  rootId: z.string().optional(),
+  activeDocumentId: z.string().optional(),
+  nodeCount: z.number().int().nonnegative(),
+  folderCount: z.number().int().nonnegative(),
+  documentCount: z.number().int().nonnegative(),
 });
 
 const workspaceChangeOutputSchema = z.discriminatedUnion("type", [
@@ -116,18 +146,6 @@ const workspaceChangeOutputSchema = z.discriminatedUnion("type", [
     baseSha256: sha256Schema.optional(),
   }),
 ]);
-
-const workspaceProposalOutputSchema = z.object({
-  id: z.string(),
-  roomId: roomIdOutputSchema,
-  actorId: z.string(),
-  actor: roomActorOutputSchema,
-  title: z.string().optional(),
-  description: z.string().optional(),
-  createdAt: isoDateStringSchema,
-  status: z.literal("pending"),
-  changes: z.array(workspaceChangeOutputSchema),
-});
 
 const roomEventOutputSchema = z
   .object({
@@ -199,19 +217,18 @@ export const roomStatusOutputShape = {
   ...roomHydrationOutputShape,
   peerCount: z.number().int().nonnegative(),
   collaborators: z.array(collaboratorOutputSchema),
-  pendingProposalCount: z.number().int().nonnegative(),
-  pendingWorkspaceProposalCount: z.number().int().nonnegative().optional(),
   workspaceMode: z.boolean().optional(),
   activeDocumentId: z.string().optional(),
   workspaceVersion: z.number().optional(),
   lastRoomEventAt: isoDateStringSchema.optional(),
+  checkpointStatus: roomCheckpointStatusOutputSchema,
   metadata: z.unknown().nullable(),
   lastError: z.string().optional(),
 };
 
 export const connectRoomOutputShape = {
   ...roomStatusOutputShape,
-  recoveryStatus: z.literal("relay-only"),
+  recoveryStatus: z.enum(["checkpoint-loaded", "checkpoint-missing", "checkpoint-disabled", "checkpoint-failed"]),
   note: z.string(),
 };
 
@@ -224,10 +241,12 @@ export const readWorkspaceOutputShape = {
   workspaceId: workspaceIdOutputSchema.optional(),
   roomId: roomIdOutputSchema,
   workspace: workspaceRoomStateOutputSchema.nullable(),
+  workspaceSummary: workspaceSummaryOutputSchema.optional(),
+  omittedWorkspaceNodeCount: z.number().int().nonnegative().optional(),
+  resourceUri: z.string().optional(),
   activeDocumentId: z.string().optional(),
   documents: z.array(workspaceDocumentSummaryOutputSchema),
   cachedDocumentCount: z.number().int().nonnegative(),
-  pendingWorkspaceProposalCount: z.number().int().nonnegative(),
   ...roomHydrationOutputShape,
   createdAt: isoDateStringSchema.optional(),
   updatedAt: isoDateStringSchema.optional(),
@@ -246,8 +265,43 @@ export const readWorkspaceDocumentOutputShape = {
   markdown: z.string(),
   textLength: z.number().int().nonnegative(),
   sha256: sha256Schema,
+  resourceUri: z.string().optional(),
   cachedAt: isoDateStringSchema,
   ...roomHydrationOutputShape,
+};
+
+export const readWorkspaceContextOutputShape = {
+  sessionId: sessionIdOutputSchema.optional(),
+  workspaceId: workspaceIdOutputSchema.optional(),
+  roomId: roomIdOutputSchema,
+  resourceUri: z.string().optional(),
+  documents: z.array(
+    z.object({
+      documentId: z.string(),
+      path: z.string().optional(),
+      title: z.string(),
+      sha256: sha256Schema,
+      textLength: z.number().int().nonnegative(),
+      includedChars: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+      selectionReasons: z.array(z.string()),
+      resourceUri: z.string().optional(),
+      markdownExcerpt: z.string(),
+    }),
+  ),
+  skippedDocuments: z.array(
+    z.object({
+      documentId: z.string(),
+      reason: z.string(),
+    }),
+  ),
+  totalIncludedChars: z.number().int().nonnegative(),
+  truncatedDocumentCount: z.number().int().nonnegative(),
+  matchedDocumentCount: z.number().int().nonnegative(),
+  totalBudgetChars: z.number().int().nonnegative().optional(),
+  budgetExhausted: z.boolean().optional(),
+  ...roomHydrationOutputShape,
+  note: z.string().optional(),
 };
 
 export const createWorkspaceOutputShape = readWorkspaceOutputShape;
@@ -259,15 +313,20 @@ export const createWorkspaceRoomOutputShape = {
   published: z.object({
     emittedWorkspace: z.boolean(),
     emittedDocumentCount: z.number().int().nonnegative(),
+    checkpointStatus: roomCheckpointStatusOutputSchema,
   }),
 };
 
-export const proposeWorkspaceChangesOutputShape = {
+export const applyWorkspaceChangesOutputShape = {
   sessionId: sessionIdOutputSchema,
   roomId: roomIdOutputSchema,
-  emitted: z.boolean(),
-  proposal: workspaceProposalOutputSchema,
-  note: z.string().optional(),
+  applied: z.boolean(),
+  changes: z.array(workspaceChangeOutputSchema),
+  changedDocumentIds: z.array(z.string()),
+  emittedWorkspaceUpdateCount: z.number().int().nonnegative(),
+  emittedTextUpdateCount: z.number().int().nonnegative(),
+  workspace: workspaceRoomStateOutputSchema.nullable(),
+  documents: z.array(workspaceDocumentHashOutputSchema),
 };
 
 export const setPresenceOutputShape = {
@@ -280,8 +339,15 @@ export const waitForChangesOutputShape = {
   changed: z.boolean(),
   markdown: z.string(),
   sha256: possiblyClearedSha256Schema,
+  activeDocumentId: z.string().optional(),
+  workspace: workspaceRoomStateOutputSchema.nullable().optional(),
+  documents: z.array(workspaceDocumentHashOutputSchema),
+  changedDocumentIds: z.array(z.string()),
+  checkpointStatus: roomCheckpointStatusOutputSchema,
   ...roomHydrationOutputShape,
   roomEvents: z.array(roomEventOutputSchema).optional(),
+  markdownIncluded: z.boolean().optional(),
+  note: z.string().optional(),
 };
 
 export const disconnectRoomOutputShape = {

@@ -62,7 +62,7 @@ const requiredTools = [
   "tabula_list_sessions",
   "tabula_read_workspace",
   "tabula_read_workspace_document",
-  "tabula_propose_workspace_changes",
+  "tabula_apply_workspace_changes",
   "tabula_room_status",
   "tabula_open_room_view",
   "tabula_set_presence",
@@ -217,7 +217,7 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   assertMatchingToolNames(
     manifest.tools.map((tool) => tool.name).sort(),
     modelFacingTools,
-    `MCPB ${label} manifest tools must match the bundled proposal-first server's model-facing tools`,
+    `MCPB ${label} manifest tools must match the bundled direct-collaboration server's model-facing tools`,
   );
 
   const appHtml = await readFile(path.join(bundleDir, "server", "document-app.html"), "utf8");

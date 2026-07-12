@@ -52,6 +52,7 @@
     "check:vercel": "node -e \"JSON.parse(require('node:fs').readFileSync('vercel.json','utf8'))\" && npm run build && node --import tsx scripts/smoke-vercel-entrypoint.mjs",
     "check:cloudflare": "npx wrangler deploy --dry-run --outdir /tmp/tabula-mcp-wrangler-dry-run",
     "check:deploy-targets": "npm run check:vercel && npm run check:cloudflare",
+    "check:context-budget": "npm run build && node scripts/measure-mcp-context.mjs --check",
     "check:mcpb": "node scripts/check-mcpb.mjs",
     "check:pack": "node scripts/check-npm-pack.mjs",
     "build:mcpb": "npm run build && node scripts/build-mcpb.mjs",
@@ -63,9 +64,11 @@
     "test": "npm run build:app && vitest run",
     "test:app": "npm run build:app && node scripts/smoke-mcp-app.mjs && npm run test:app:flow",
     "test:app:flow": "node scripts/smoke-mcp-app-flow.mjs",
+    "test:e2e:local-collab": "npm run build && node scripts/e2e-local-collab.mjs",
     "test:stdio": "npm run build && node scripts/smoke-stdio-server.mjs",
     "release:pack": "node scripts/pack-release.mjs",
-    "release:verify": "npm run typecheck && npm test && npm run test:app && npm run test:stdio && npm run check:deploy-targets && npm run release:pack && npm run check:exports && npm run check:pack && npm audit --json && git diff --check",
+    "release:verify": "npm run typecheck && npm test && npm run test:app && npm run test:stdio && npm run check:context-budget && npm run check:deploy-targets && npm run release:pack && npm run check:exports && npm run check:pack && npm audit --json && git diff --check",
+    "measure:mcp-context": "npm run build && node scripts/measure-mcp-context.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

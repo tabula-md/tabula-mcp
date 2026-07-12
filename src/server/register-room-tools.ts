@@ -1,25 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { assertLocalImportRootAllowed } from "../import-roots.js";
 import { jsonContent, errorContent } from "../json.js";
-import {
-  connectRoomOutputShape,
-  createWorkspaceOutputShape,
-  createWorkspaceRoomOutputShape,
-  disconnectRoomOutputShape,
-  listSessionsOutputShape,
-  proposeWorkspaceChangesOutputShape,
-  readWorkspaceDocumentOutputShape,
-  readWorkspaceOutputShape,
-  roomStatusOutputShape,
-  setPresenceOutputShape,
-  shareWorkspaceOutputShape,
-  waitForChangesOutputShape,
-} from "../output-schemas.js";
 import { parseRoomShareUrl, resolveRoomServerUrl } from "../protocol.js";
 import type { SessionRegistry } from "../registry.js";
+import type { RuntimeEnvironment } from "../env.js";
+import { createFirebaseRoomCheckpointStore } from "../room-checkpoints.js";
 import { TabulaRoomClient } from "../room-client.js";
 import type { RoomCapability } from "../room-events.js";
 import { createRoomShareUrl, generateRoomId, generateRoomKey, shareMarkdownWorkspace } from "../share.js";
+import { addWorkspaceDocumentResourceUri, addWorkspaceResourceUris } from "../workspace-resources.js";
 import {
   readStoredWorkspace,
   readStoredWorkspaceDocument,
@@ -41,6 +31,11 @@ const optionalWorkspaceOrSessionSchema = {
   ...optionalWorkspaceSchema,
 };
 
+const workspaceDetailSchema = z
+  .enum(["summary", "tree"])
+  .default("summary")
+  .describe("Use summary by default; pass tree only when folder/node structure is needed.");
+
 const sha256HexSchema = z
   .string()
   .regex(/^[a-f0-9]{64}$/)
@@ -55,7 +50,6 @@ const workspaceFileInputSchema = z.object({
 const workspacePublisherCapabilities = [
   "presence",
   "read",
-  "propose",
   "comment",
   "write",
   "create",
@@ -99,6 +93,8 @@ const workspaceChangeInputSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+type WorkspaceDetail = z.infer<typeof workspaceDetailSchema>;
+
 const runTool = async (handler: () => Promise<unknown>) => {
   try {
     return jsonContent(await handler());
@@ -106,6 +102,78 @@ const runTool = async (handler: () => Promise<unknown>) => {
     return errorContent(error);
   }
 };
+
+const compactWorkspaceResult = <T extends { workspace?: unknown; activeDocumentId?: string; documents?: unknown[]; note?: string }>(
+  value: T,
+  detail: WorkspaceDetail,
+) => {
+  if (detail === "tree" || !value.workspace || typeof value.workspace !== "object") {
+    return value;
+  }
+
+  const workspace = value.workspace as {
+    roomId?: string;
+    mode?: string;
+    version?: number;
+    rootId?: string;
+    activeDocumentId?: string;
+    nodes?: Array<{ type?: string }>;
+  };
+  const nodes = Array.isArray(workspace.nodes) ? workspace.nodes : [];
+  const documentCount = nodes.filter((node) => node.type === "document").length;
+  const folderCount = nodes.filter((node) => node.type === "folder").length;
+
+  return {
+    ...value,
+    workspace: null,
+    workspaceSummary: {
+      roomId: workspace.roomId,
+      mode: workspace.mode,
+      version: workspace.version,
+      rootId: workspace.rootId,
+      activeDocumentId: workspace.activeDocumentId ?? value.activeDocumentId,
+      nodeCount: nodes.length,
+      folderCount,
+      documentCount,
+    },
+    omittedWorkspaceNodeCount: nodes.length,
+    note: value.note ?? 'Workspace tree omitted to keep context small. Call tabula_read_workspace with detail="tree" if needed.',
+  };
+};
+
+const excerptMarkdown = (markdown: string, maxChars: number) => {
+  const limit = Math.max(0, maxChars);
+  if (markdown.length <= limit) {
+    return {
+      markdownExcerpt: markdown,
+      includedChars: markdown.length,
+      truncated: false,
+    };
+  }
+
+  return {
+    markdownExcerpt: markdown.slice(0, limit),
+    includedChars: limit,
+    truncated: true,
+  };
+};
+
+const globToRegExp = (glob: string) => {
+  const escaped = glob
+    .trim()
+    .replaceAll("\\", "/")
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replaceAll("**", "\0")
+    .replaceAll("*", "[^/]*")
+    .replaceAll("?", "[^/]")
+    .replaceAll("\0", ".*");
+  return new RegExp(`^${escaped}$`, "i");
+};
+
+const matchesPathGlob = (value: string | undefined, patterns: readonly RegExp[]) =>
+  Boolean(value && patterns.some((pattern) => pattern.test(value.replaceAll("\\", "/"))));
+
+const normalizeQuery = (query: string | undefined) => query?.trim().toLowerCase() || "";
 
 const readWorkspaceFromSelector = async (
   registry: SessionRegistry,
@@ -141,11 +209,155 @@ const readWorkspaceDocumentFromSelector = async (
   return registry.get().readWorkspaceDocument({ documentId });
 };
 
+const readWorkspaceContextFromSelector = async (
+  registry: SessionRegistry,
+  workspaces: WorkspaceRegistry,
+  {
+    sessionId,
+    workspaceId,
+    documentIds,
+    pathGlobs,
+    query,
+    changedSince,
+    maxDocuments,
+    maxCharsPerDocument,
+    maxTotalChars,
+  }: {
+    sessionId?: string;
+    workspaceId?: string;
+    documentIds?: string[];
+    pathGlobs?: string[];
+    query?: string;
+    changedSince?: Record<string, string>;
+    maxDocuments: number;
+    maxCharsPerDocument: number;
+    maxTotalChars: number;
+  },
+) => {
+  const workspace = await readWorkspaceFromSelector(registry, workspaces, { sessionId, workspaceId });
+  const requestedIds = documentIds?.length ? new Set(documentIds) : null;
+  const pathMatchers = (pathGlobs ?? []).map(globToRegExp);
+  const normalizedQuery = normalizeQuery(query);
+  const documents = [];
+  const skippedDocuments: Array<{ documentId: string; reason: string }> = [];
+  let totalIncludedChars = 0;
+  let budgetExhausted = false;
+
+  for (const documentId of requestedIds ?? []) {
+    if (!workspace.documents.some((document) => document.id === documentId)) {
+      skippedDocuments.push({ documentId, reason: "document-not-found" });
+    }
+  }
+
+  for (const summary of workspace.documents) {
+    if (documents.length >= maxDocuments) {
+      break;
+    }
+    if (totalIncludedChars >= maxTotalChars) {
+      budgetExhausted = true;
+      break;
+    }
+
+    const documentId = summary.id;
+    const pathValue = "path" in summary ? summary.path : undefined;
+    if (requestedIds && !requestedIds.has(documentId)) {
+      continue;
+    }
+    if (pathMatchers.length > 0 && !matchesPathGlob(pathValue, pathMatchers) && !matchesPathGlob(summary.title, pathMatchers)) {
+      continue;
+    }
+    if (changedSince && changedSince[documentId] === summary.sha256) {
+      continue;
+    }
+    if (!summary.cached) {
+      skippedDocuments.push({ documentId, reason: "document-not-cached" });
+      continue;
+    }
+
+    try {
+      const document = await readWorkspaceDocumentFromSelector(registry, workspaces, { sessionId, workspaceId, documentId });
+      const metadataHaystack = `${"path" in document && document.path ? document.path : ""}\n${document.title}`.toLowerCase();
+      const queryMatchedMetadata = normalizedQuery ? metadataHaystack.includes(normalizedQuery) : false;
+      const queryMatchedMarkdown = normalizedQuery ? document.markdown.toLowerCase().includes(normalizedQuery) : false;
+      if (normalizedQuery && !queryMatchedMetadata && !queryMatchedMarkdown) {
+        continue;
+      }
+
+      const selectionReasons: string[] = [];
+      if (requestedIds?.has(documentId)) {
+        selectionReasons.push("document-id");
+      }
+      if (pathMatchers.length > 0) {
+        selectionReasons.push("path-glob");
+      }
+      if (changedSince && changedSince[documentId] !== summary.sha256) {
+        selectionReasons.push("changed-since");
+      }
+      if (queryMatchedMetadata) {
+        selectionReasons.push("query-metadata");
+      } else if (queryMatchedMarkdown) {
+        selectionReasons.push("query-markdown");
+      }
+      if (selectionReasons.length === 0) {
+        selectionReasons.push("default");
+      }
+
+      const remainingChars = Math.max(0, maxTotalChars - totalIncludedChars);
+      if (remainingChars === 0) {
+        budgetExhausted = true;
+        break;
+      }
+      const excerpt = excerptMarkdown(document.markdown, Math.min(maxCharsPerDocument, remainingChars));
+      totalIncludedChars += excerpt.includedChars;
+      if (excerpt.truncated || totalIncludedChars >= maxTotalChars) {
+        budgetExhausted = totalIncludedChars >= maxTotalChars;
+      }
+
+      documents.push({
+        documentId: document.documentId,
+        ...("path" in document && document.path ? { path: document.path } : {}),
+        title: document.title,
+        sha256: document.sha256,
+        textLength: document.textLength,
+        selectionReasons,
+        ...excerpt,
+      });
+    } catch (error) {
+      skippedDocuments.push({
+        documentId,
+        reason: error instanceof Error ? error.message : "document-read-failed",
+      });
+    }
+  }
+
+  return {
+    ...("sessionId" in workspace ? { sessionId: workspace.sessionId } : {}),
+    ...("workspaceId" in workspace ? { workspaceId: workspace.workspaceId } : {}),
+    roomId: workspace.roomId,
+    documents,
+    skippedDocuments,
+    totalIncludedChars,
+    truncatedDocumentCount: documents.filter((document) => document.truncated).length,
+    matchedDocumentCount: documents.length,
+    totalBudgetChars: maxTotalChars,
+    budgetExhausted,
+    hydrationStatus: workspace.hydrationStatus,
+    stateReceived: workspace.stateReceived,
+    ...("lastStateReceivedAt" in workspace && workspace.lastStateReceivedAt
+      ? { lastStateReceivedAt: workspace.lastStateReceivedAt }
+      : {}),
+    note:
+      skippedDocuments.length > 0
+        ? "Some workspace documents were not included. Use tabula_read_workspace_document for exact full text when needed."
+        : "This is a bounded context excerpt. Use tabula_read_workspace_document for exact full text when needed.",
+  };
+};
+
 export const registerRoomTools = (
   server: McpServer,
   registry: SessionRegistry,
   workspaces: WorkspaceRegistry,
-  { writeEnabled }: { writeEnabled: boolean },
+  { env, writeEnabled }: { env?: RuntimeEnvironment; writeEnabled: boolean },
 ) => {
   server.registerTool(
     "tabula_create_workspace",
@@ -155,8 +367,8 @@ export const registerRoomTools = (
       inputSchema: {
         title: z.string().min(1).max(120).optional().describe("Optional workspace title."),
         files: z.array(workspaceFileInputSchema).optional().describe("Optional initial Markdown files."),
+        detail: workspaceDetailSchema,
       },
-      outputSchema: createWorkspaceOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -164,8 +376,15 @@ export const registerRoomTools = (
         openWorldHint: false,
       },
     },
-    async ({ title, files }) =>
-      runTool(async () => readStoredWorkspace(await workspaces.create({ title, files: files ?? [] }))),
+    async ({ title, files, detail }) =>
+      runTool(async () => {
+        const workspace = compactWorkspaceResult(
+          addWorkspaceResourceUris(readStoredWorkspace(await workspaces.create({ title, files: files ?? [] }))),
+          detail,
+        );
+        server.sendResourceListChanged();
+        return workspace;
+      }),
   );
 
   server.registerTool(
@@ -175,6 +394,7 @@ export const registerRoomTools = (
         "Import Markdown into a local Tabula workspace from either this MCP server's filesystem or an inline files array. Filesystem paths are resolved where the MCP server is running.",
       inputSchema: {
         title: z.string().min(1).max(120).optional().describe("Optional workspace title."),
+        detail: workspaceDetailSchema,
         source: z.discriminatedUnion("type", [
           z.object({
             type: z.literal("local-path"),
@@ -191,7 +411,6 @@ export const registerRoomTools = (
           }),
         ]),
       },
-      outputSchema: createWorkspaceOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -199,20 +418,37 @@ export const registerRoomTools = (
         openWorldHint: true,
       },
     },
-    async ({ title, source }) =>
+    async ({ title, detail, source }) =>
       runTool(async () => {
         if (source.type === "local-path") {
-          return readStoredWorkspace(
-            await workspaces.importMarkdown({
-              title,
-              rootPath: source.rootPath,
-              maxFiles: source.maxFiles,
-              excludeDirectories: source.excludeDirectories,
-            }),
+          const importRoot = await assertLocalImportRootAllowed({
+            env,
+            rootPath: source.rootPath,
+            server,
+          });
+          const workspace = compactWorkspaceResult(
+            addWorkspaceResourceUris(
+              readStoredWorkspace(
+                await workspaces.importMarkdown({
+                  title,
+                  rootPath: importRoot.rootPath,
+                  maxFiles: source.maxFiles,
+                  excludeDirectories: source.excludeDirectories,
+                }),
+              ),
+            ),
+            detail,
           );
+          server.sendResourceListChanged();
+          return workspace;
         }
 
-        return readStoredWorkspace(await workspaces.create({ title, files: source.files, source: "imported" }));
+        const workspace = compactWorkspaceResult(
+          addWorkspaceResourceUris(readStoredWorkspace(await workspaces.create({ title, files: source.files, source: "imported" }))),
+          detail,
+        );
+        server.sendResourceListChanged();
+        return workspace;
       }),
   );
 
@@ -234,7 +470,6 @@ export const registerRoomTools = (
           .optional()
           .describe("Tabula JSON snapshot service URL. Defaults from appOrigin or TABULA_JSON_URL."),
       },
-      outputSchema: shareWorkspaceOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -278,7 +513,6 @@ export const registerRoomTools = (
           .optional()
           .describe("Presence color as a hex value."),
       },
-      outputSchema: createWorkspaceRoomOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -307,6 +541,7 @@ export const registerRoomTools = (
           identityName,
           identityColor,
           actorCapabilities: workspacePublisherCapabilities,
+          roomCheckpointStore: createFirebaseRoomCheckpointStore({ env }),
         });
         let recoveryStatus: Awaited<ReturnType<TabulaRoomClient["connect"]>>;
         let published: Awaited<ReturnType<TabulaRoomClient["publishWorkspaceSnapshot"]>>;
@@ -321,6 +556,7 @@ export const registerRoomTools = (
           throw error;
         }
         registry.add(client);
+        server.sendResourceListChanged();
         const status = await client.getStatus();
 
         return {
@@ -330,7 +566,7 @@ export const registerRoomTools = (
           recoveryStatus,
           published,
           note:
-            "Created a Tabula workspace room and published encrypted workspace.updated plus document-scoped text.updated room events. Continue with proposal-first workspace tools for edits.",
+            "Created a Tabula workspace room, published encrypted workspace.updated plus document-scoped text.updated room events, and saved an encrypted live room checkpoint when Firebase is configured. Continue with hash-guarded direct workspace edit tools for follow-up edits.",
         };
       }),
   );
@@ -354,7 +590,6 @@ export const registerRoomTools = (
           .optional()
           .describe("Presence color as a hex value."),
       },
-      outputSchema: connectRoomOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -375,21 +610,23 @@ export const registerRoomTools = (
           writeAccess: writeEnabled,
           identityName,
           identityColor,
+          roomCheckpointStore: createFirebaseRoomCheckpointStore({ env }),
         });
         const recoveryStatus = await client.connect();
         registry.add(client);
+        server.sendResourceListChanged();
         const status = await client.getStatus();
         const hydrationNote =
           status.hydrationStatus === "ready"
             ? "Room state has been received."
-            : "Room content is relay-only and may remain empty until a live peer sends state-init/yjs-update.";
+            : status.checkpointStatus.status === "missing" || status.checkpointStatus.status === "disabled"
+              ? "No encrypted room checkpoint was loaded, so content may remain empty until a live peer sends workspace state."
+              : "Room content may remain empty until a live peer sends workspace state.";
 
         return {
           ...status,
           recoveryStatus,
-          note: writeEnabled
-            ? `Connected with server-level write capability. ${hydrationNote} Use tabula_read_workspace, tabula_read_workspace_document, and tabula_propose_workspace_changes for reviewable agent edits.`
-            : `Connected as a proposal-first agent. ${hydrationNote} Use tabula_read_workspace, tabula_read_workspace_document, and tabula_propose_workspace_changes for reviewable edits.`,
+          note: `Connected as a Tabula agent actor. ${hydrationNote} Use tabula_read_workspace, tabula_read_workspace_document, and tabula_apply_workspace_changes for hash-guarded direct edits.`,
         };
       }),
   );
@@ -399,7 +636,6 @@ export const registerRoomTools = (
     {
       description: "List Tabula room sessions currently connected in this MCP process.",
       inputSchema: {},
-      outputSchema: listSessionsOutputShape,
       annotations: {
         readOnlyHint: true,
       },
@@ -415,7 +651,6 @@ export const registerRoomTools = (
     {
       description: "Return connection, metadata, collaborator, hash, and write-access state for a connected Tabula room.",
       inputSchema: optionalSessionSchema,
-      outputSchema: roomStatusOutputShape,
       annotations: {
         readOnlyHint: true,
       },
@@ -428,14 +663,19 @@ export const registerRoomTools = (
     {
       description:
         "Read decrypted Tabula workspace tree metadata from a connected room session or a local/imported MCP workspace.",
-      inputSchema: optionalWorkspaceOrSessionSchema,
-      outputSchema: readWorkspaceOutputShape,
+      inputSchema: {
+        ...optionalWorkspaceOrSessionSchema,
+        detail: workspaceDetailSchema,
+      },
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
       },
     },
-    async ({ sessionId, workspaceId }) => runTool(async () => readWorkspaceFromSelector(registry, workspaces, { sessionId, workspaceId })),
+    async ({ sessionId, workspaceId, detail }) =>
+      runTool(async () =>
+        compactWorkspaceResult(addWorkspaceResourceUris(await readWorkspaceFromSelector(registry, workspaces, { sessionId, workspaceId })), detail),
+      ),
   );
 
   server.registerTool(
@@ -447,31 +687,84 @@ export const registerRoomTools = (
         ...optionalWorkspaceOrSessionSchema,
         documentId: z.string().min(1).describe("Workspace document id from tabula_read_workspace."),
       },
-      outputSchema: readWorkspaceDocumentOutputShape,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
       },
     },
     async ({ sessionId, workspaceId, documentId }) =>
-      runTool(async () => readWorkspaceDocumentFromSelector(registry, workspaces, { sessionId, workspaceId, documentId })),
+      runTool(async () =>
+        addWorkspaceDocumentResourceUri(
+          await readWorkspaceDocumentFromSelector(registry, workspaces, { sessionId, workspaceId, documentId }),
+        ),
+      ),
   );
 
   server.registerTool(
-    "tabula_propose_workspace_changes",
+    "tabula_read_workspace_context",
     {
       description:
-        "Propose one or more workspace document changes as an encrypted workspace.proposal.created room-event. This can patch, create, rename, move, or delete documents and does not directly mutate the room.",
+        "Read a bounded Markdown context bundle from a connected room session or local/imported workspace. This is for agent planning; use tabula_read_workspace_document for exact full text.",
+      inputSchema: {
+        ...optionalWorkspaceOrSessionSchema,
+        documentIds: z
+          .array(z.string().min(1))
+          .optional()
+          .describe("Optional document ids from tabula_read_workspace. Defaults to the first cached workspace documents."),
+        pathGlobs: z
+          .array(z.string().min(1))
+          .max(20)
+          .optional()
+          .describe("Optional workspace path/title glob filters, for example docs/**/*.md or README.md."),
+        query: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Optional case-insensitive search across document paths, titles, and cached Markdown."),
+        changedSince: z
+          .record(z.string().min(1), sha256HexSchema)
+          .optional()
+          .describe("Optional map of documentId to previous sha256; unchanged documents are skipped."),
+        maxDocuments: z.number().int().min(1).max(50).default(5),
+        maxCharsPerDocument: z.number().int().min(200).max(20_000).default(1_200),
+        maxTotalChars: z.number().int().min(200).max(50_000).default(5_000),
+      },
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+      },
+    },
+    async ({ sessionId, workspaceId, documentIds, pathGlobs, query, changedSince, maxDocuments, maxCharsPerDocument, maxTotalChars }) =>
+      runTool(async () =>
+        addWorkspaceResourceUris(
+          await readWorkspaceContextFromSelector(registry, workspaces, {
+            sessionId,
+            workspaceId,
+            documentIds,
+            pathGlobs,
+            query,
+            changedSince,
+            maxDocuments,
+            maxCharsPerDocument,
+            maxTotalChars,
+          }),
+        ),
+      ),
+  );
+
+  server.registerTool(
+    "tabula_apply_workspace_changes",
+    {
+      description:
+        "Apply one or more workspace document changes to a connected Tabula room as direct encrypted workspace.updated and text.updated room events.",
       inputSchema: {
         ...optionalSessionSchema,
-        title: z.string().min(1).max(120).optional().describe("Short human-readable proposal title."),
-        description: z.string().min(1).max(2000).optional().describe("Optional rationale or summary for collaborators."),
         changes: z
           .array(workspaceChangeInputSchema)
           .min(1)
-          .describe("Workspace changes to submit together in one proposal."),
+          .describe("Workspace changes to apply together. document.patch requires the latest baseSha256."),
       },
-      outputSchema: proposeWorkspaceChangesOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -479,8 +772,8 @@ export const registerRoomTools = (
         openWorldHint: true,
       },
     },
-    async ({ sessionId, title, description, changes }) =>
-      runTool(async () => registry.get(sessionId).proposeWorkspaceChanges({ title, description, changes })),
+    async ({ sessionId, changes }) =>
+      runTool(async () => registry.get(sessionId).applyWorkspaceChanges({ changes })),
   );
 
   server.registerTool(
@@ -498,7 +791,6 @@ export const registerRoomTools = (
           })
           .optional(),
       },
-      outputSchema: setPresenceOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -514,20 +806,34 @@ export const registerRoomTools = (
     "tabula_wait_for_changes",
     {
       description:
-        "Wait for a connected room's Markdown hash to differ from sinceSha256 or for an encrypted room event such as a patch proposal, then return the latest Markdown.",
+        "Wait for a connected room's active document hash to differ from sinceSha256 or for an encrypted workspace room event, then return workspace document hash summaries and recent room events.",
       inputSchema: {
         ...optionalSessionSchema,
         sinceSha256: z.string().min(1).optional(),
         timeoutMs: z.number().int().min(0).max(30_000).default(15_000),
+        includeMarkdown: z.boolean().default(false).describe("Include legacy active-document Markdown in the result."),
       },
-      outputSchema: waitForChangesOutputShape,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
       },
     },
-    async ({ sessionId, sinceSha256, timeoutMs }) =>
-      runTool(async () => registry.get(sessionId).waitForChange(sinceSha256, timeoutMs)),
+    async ({ sessionId, sinceSha256, timeoutMs, includeMarkdown }) =>
+      runTool(async () => {
+        const result = await registry.get(sessionId).waitForChange(sinceSha256, timeoutMs);
+        if (includeMarkdown) {
+          return {
+            ...result,
+            markdownIncluded: true,
+          };
+        }
+        return {
+          ...result,
+          markdown: "",
+          markdownIncluded: false,
+          note: "Markdown omitted by default. Call tabula_read_workspace_document for exact document text, or pass includeMarkdown=true for legacy active-document Markdown.",
+        };
+      }),
   );
 
   server.registerTool(
@@ -535,7 +841,6 @@ export const registerRoomTools = (
     {
       description: "Disconnect one connected Tabula room session.",
       inputSchema: optionalSessionSchema,
-      outputSchema: disconnectRoomOutputShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -544,8 +849,10 @@ export const registerRoomTools = (
       },
     },
     async ({ sessionId }) =>
-      runTool(async () => ({
-        disconnectedSessionId: registry.remove(sessionId),
-      })),
+      runTool(async () => {
+        const disconnectedSessionId = registry.remove(sessionId);
+        server.sendResourceListChanged();
+        return { disconnectedSessionId };
+      }),
   );
 };

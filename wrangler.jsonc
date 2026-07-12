@@ -11,6 +11,20 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TABULA_MCP_SESSIONS",
+        "class_name": "TabulaMcpSessionDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["TabulaMcpSessionDurableObject"]
+    }
+  ],
   "vars": {
     "TABULA_MCP_DEPLOYMENT_MODE": "remote",
     "TABULA_MCP_PRODUCTION": "1",

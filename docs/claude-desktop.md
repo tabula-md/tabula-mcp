@@ -74,42 +74,42 @@ Local development links such as `http://localhost:5173/#room=...` default to
 
 Expected behavior:
 
-1. `tabula_create_workspace` or `tabula_import_markdown_workspace` can prepare a multi-file Markdown workspace, and `tabula_create_workspace_room` can publish it as a new encrypted live room.
-2. `tabula_connect_room` connects an existing encrypted room as a proposal-first agent.
-3. `tabula_open_room_view` opens the App room view.
-4. `tabula_read_workspace`, `tabula_read_workspace_document`, and
-   `tabula_propose_workspace_changes` let the agent inspect and propose
-   workspace document changes when a workspace peer has published workspace
-   state. A one-document room is still represented as a workspace with one
-   document.
-5. `tabula_share_workspace` exports a workspace as an encrypted multi-file
+1. `tabula_create_workspace` or `tabula_import_markdown_workspace` can prepare a multi-file Markdown workspace, and `tabula_create_workspace_room` can publish it as a new encrypted live room. Inline `source.files` import is zero-config; local folder import requires MCP roots or `TABULA_MCP_ALLOWED_IMPORT_ROOTS`.
+2. If `VITE_TABULA_FIREBASE_CONFIG`, `TABULA_FIREBASE_CONFIG`, or
+   `TABULA_MCP_FIREBASE_CONFIG` is set, the created room is also saved as an
+   encrypted live room checkpoint for later recovery.
+3. `tabula_connect_room` connects an existing encrypted room as a
+   `tabula-mcp` agent actor and reports whether checkpoint recovery was loaded,
+   missing, disabled, or failed.
+4. `tabula_open_room_view` opens the App room view.
+5. `tabula_read_workspace`, `tabula_read_workspace_context`,
+   `tabula_read_workspace_document`, and `tabula_apply_workspace_changes` let
+   the agent inspect bounded context with document, path, query, and changed-since filters, read exact full text when needed, and
+   apply hash-guarded workspace document changes when room state is available.
+   A one-document room is still represented as a workspace with one document.
+6. `tabula_share_workspace` exports a workspace as an encrypted multi-file
    `#json` snapshot link.
-6. The room server only receives encrypted envelopes.
+7. The room server only receives encrypted envelopes.
+
+Some Claude surfaces are tool-first and may not expose MCP resources to the
+model. That is fine: the tools are complete. If a client does expose resources,
+Tabula returns `tabula://...` `resourceUri` handles as read-only mirrors of the
+same workspace metadata and Markdown.
+
+Workspace reads are compact by default. Use `tabula_read_workspace_context`
+before reading full documents, and pass `detail: "tree"` to
+`tabula_read_workspace` only when the folder/node tree matters.
 
 The `#room` fragment contains the room key and is a bearer secret. Do not paste
 production room links into logs, issue trackers, or public screenshots.
 
-## Write-Enabled Development
+## Room Editing
 
-The MCPB is intentionally proposal-first for room edits. Manual write-capable
-stdio sessions are trusted development sessions; the model-facing room surface
-still uses workspace proposals:
-
-```json
-{
-  "mcpServers": {
-    "tabula": {
-      "command": "node",
-      "args": ["/absolute/path/to/tabula-mcp/dist/index.js"],
-      "env": {
-        "TABULA_MCP_ENABLE_WRITE": "1"
-      }
-    }
-  }
-}
-```
-
-`--read-only` overrides `--enable-write` and `TABULA_MCP_ENABLE_WRITE=1`.
+Claude edits live rooms through `tabula_apply_workspace_changes`. Document text
+changes become encrypted `text.updated` room events, and folder/document tree
+changes become encrypted `workspace.updated` room events. `document.patch`
+inputs must use the latest `baseSha256` from `tabula_read_workspace_document`
+or `tabula_room_status`.
 
 ## Manual Smoke Check
 

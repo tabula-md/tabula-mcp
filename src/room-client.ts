@@ -16,9 +16,19 @@ import {
   TabulaMcpError,
 } from "./protocol.js";
 import {
+  createFirebaseRoomCheckpointStore,
+  createWorkspaceRoomCheckpoint,
+  decryptWorkspaceRoomCheckpoint,
+  encryptWorkspaceRoomCheckpoint,
+  failedCheckpointStatus,
+  type RoomCheckpointStore,
+  type RoomCheckpointStoreStatus,
+  type WorkspaceRoomCheckpoint,
+  type WorkspaceRoomCheckpointDocument,
+} from "./room-checkpoints.js";
+import {
   createAgentActor,
   createRoomEventId,
-  createWorkspaceProposalId,
   decodeRoomEvent,
   encodeRoomEvent,
   isRoomActor,
@@ -31,7 +41,6 @@ import {
   type WorkspaceDocumentNode,
   type WorkspaceFolderNode,
   type WorkspaceNode,
-  type WorkspaceProposal,
   type WorkspaceRoomState,
 } from "./room-events.js";
 import {
@@ -42,7 +51,7 @@ import {
 } from "./text.js";
 
 export type ConnectionStatus = "connecting" | "connected" | "offline" | "closed";
-export type RoomRecoveryStatus = "relay-only";
+export type RoomRecoveryStatus = "checkpoint-loaded" | "checkpoint-missing" | "checkpoint-disabled" | "checkpoint-failed";
 export type RoomHydrationStatus = "waiting-for-peer-state" | "ready";
 
 export type LiveSelection = {
@@ -68,6 +77,7 @@ export type RoomClientOptions = {
   identityName?: string;
   identityColor?: string;
   actorCapabilities?: readonly RoomCapability[];
+  roomCheckpointStore?: RoomCheckpointStore;
 };
 
 type Waiter = {
@@ -80,6 +90,17 @@ type WaitResult = {
   changed: boolean;
   markdown: string;
   sha256: string;
+  activeDocumentId?: string;
+  workspace?: WorkspaceRoomState | null;
+  documents: Array<{
+    documentId: string;
+    title: string;
+    sha256: string;
+    textLength: number;
+    cached: boolean;
+  }>;
+  changedDocumentIds: string[];
+  checkpointStatus: RoomCheckpointStoreStatus;
   hydrationStatus: RoomHydrationStatus;
   stateReceived: boolean;
   lastStateReceivedAt?: string;
@@ -99,6 +120,7 @@ export type WorkspaceSnapshotDocument = {
   documentId: string;
   title: string;
   markdown: string;
+  parentId?: string | null;
   sha256?: string;
 };
 
@@ -119,8 +141,7 @@ type PeersPayload = {
 };
 
 const REMOTE_ORIGIN = "tabula-room-remote";
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
+const LOCAL_DIRECT_ORIGIN = "tabula-mcp-direct-edit";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -140,27 +161,6 @@ const isPeersPayload = (value: unknown, roomId: string): value is PeersPayload =
 const isPeerJoinedPayload = (value: unknown, roomId: string): value is { roomId: string; clientId: string } =>
   isRecord(value) && value.roomId === roomId && typeof value.clientId === "string";
 
-const decodePresence = (bytes: Uint8Array): Collaborator | null => {
-  try {
-    const decoded = JSON.parse(textDecoder.decode(bytes)) as Partial<Collaborator>;
-    if (!decoded.id || !decoded.name || !decoded.color) {
-      return null;
-    }
-
-    return {
-      id: decoded.id,
-      name: decoded.name,
-      color: decoded.color,
-      lastSeen: typeof decoded.lastSeen === "number" ? decoded.lastSeen : Date.now(),
-      fileTitle: decoded.fileTitle,
-      selection: decoded.selection,
-      actor: isRoomActor(decoded.actor) ? decoded.actor : undefined,
-    };
-  } catch {
-    return null;
-  }
-};
-
 export class TabulaRoomClient {
   readonly sessionId = randomUUID();
   readonly roomId: string;
@@ -171,10 +171,10 @@ export class TabulaRoomClient {
   readonly identity: Collaborator;
 
   private readonly roomKeyValue: string;
+  private readonly roomCheckpointStore: RoomCheckpointStore;
   private readonly doc = new Y.Doc();
   private readonly text: Y.Text;
   private readonly collaborators = new Map<string, Collaborator>();
-  private readonly pendingWorkspaceProposals = new Map<string, WorkspaceProposal>();
   private readonly workspaceDocuments = new Map<string, WorkspaceDocumentCache>();
   private readonly workspaceYDocs = new Map<string, WorkspaceYDocState>();
   private readonly recentRoomEvents: RoomEvent[] = [];
@@ -189,8 +189,17 @@ export class TabulaRoomClient {
   private hasReceivedState = false;
   private hasReceivedLegacyTextState = false;
   private lastStateReceivedAtValue = "";
+  private roomCheckpointStatusValue: RoomCheckpointStoreStatus;
 
-  constructor({ parsedRoom, roomServerUrl, writeAccess, identityName, identityColor, actorCapabilities }: RoomClientOptions) {
+  constructor({
+    parsedRoom,
+    roomServerUrl,
+    writeAccess,
+    identityName,
+    identityColor,
+    actorCapabilities,
+    roomCheckpointStore = createFirebaseRoomCheckpointStore(),
+  }: RoomClientOptions) {
     const actorId = `tabula-mcp-${randomUUID()}`;
     const actorColor = identityColor?.trim() || "#2563eb";
     const actorName = identityName?.trim() || "Tabula Agent";
@@ -199,15 +208,16 @@ export class TabulaRoomClient {
     this.shareUrl = parsedRoom.shareUrl;
     this.roomKeyValue = parsedRoom.roomKey;
     this.roomServerUrl = roomServerUrl;
-    this.writeAccess = writeAccess;
+    this.roomCheckpointStore = roomCheckpointStore;
+    this.roomCheckpointStatusValue = roomCheckpointStore.initialStatus();
     this.text = this.doc.getText("markdown");
     this.actor = createAgentActor({
       id: actorId,
       name: actorName,
       color: actorColor,
-      writeAccess,
       capabilities: actorCapabilities,
     });
+    this.writeAccess = this.actor.capabilities.includes("write");
     this.identity = {
       id: actorId,
       name: actorName,
@@ -223,11 +233,6 @@ export class TabulaRoomClient {
       }
 
       this.notifyChange();
-      if (!this.writeAccess) {
-        return;
-      }
-
-      void this.emitEnvelope("yjs-update", update);
     });
   }
 
@@ -254,16 +259,13 @@ export class TabulaRoomClient {
   async connect() {
     this.statusValue = "connecting";
     this.roomKey = await importRoomKey(this.roomKeyValue);
+    const recoveryStatus = await this.loadWorkspaceRoomCheckpoint();
     await this.connectSocket();
     this.statusValue = "connected";
     await this.publishActorJoined();
     await this.publishPresence();
 
-    if (this.writeAccess) {
-      await this.emitEnvelope("yjs-update", Y.encodeStateAsUpdate(this.doc));
-    }
-
-    return "relay-only" satisfies RoomRecoveryStatus;
+    return recoveryStatus;
   }
 
   async getStatus() {
@@ -291,12 +293,11 @@ export class TabulaRoomClient {
         lastSeen,
         actor,
       })),
-      pendingProposalCount: this.pendingWorkspaceProposals.size,
-      pendingWorkspaceProposalCount: this.pendingWorkspaceProposals.size,
       workspaceMode: Boolean(this.workspaceStateValue),
       activeDocumentId: this.workspaceStateValue?.activeDocumentId,
       workspaceVersion: this.workspaceStateValue?.version,
       lastRoomEventAt: this.recentRoomEvents.at(-1)?.createdAt,
+      checkpointStatus: this.roomCheckpointStatusValue,
       metadata,
       lastError: this.lastErrorValue || undefined,
     };
@@ -340,7 +341,6 @@ export class TabulaRoomClient {
       activeDocumentId: this.workspaceStateValue?.activeDocumentId,
       documents,
       cachedDocumentCount: this.workspaceDocuments.size,
-      pendingWorkspaceProposalCount: this.pendingWorkspaceProposals.size,
       ...this.roomStateReadiness(),
       note: this.workspaceStateValue
         ? undefined
@@ -393,19 +393,7 @@ export class TabulaRoomClient {
     this.workspaceStateValue = workspace;
     this.pruneWorkspaceDocumentCaches();
 
-    const createdAt = new Date().toISOString();
-    const workspaceEvent: RoomEvent = {
-      id: createRoomEventId(),
-      type: "workspace.updated",
-      roomId: this.roomId,
-      actorId: this.actor.id,
-      workspace,
-      createdAt,
-    };
-    const emittedWorkspace = await this.publishRoomEvent(workspaceEvent);
-    if (emittedWorkspace) {
-      this.recordRoomEvent(workspaceEvent);
-    }
+    await this.publishWorkspaceUpdatedEvent(workspace);
 
     let emittedDocumentCount = 0;
     for (const document of documents) {
@@ -416,88 +404,106 @@ export class TabulaRoomClient {
 
       const documentSha256 = document.sha256 ?? (await sha256Text(document.markdown));
       await this.cacheWorkspaceDocumentMarkdown(document.documentId, document.markdown, documentSha256);
-      const ydoc = new Y.Doc();
-      try {
-        ydoc.getText("markdown").insert(0, document.markdown);
-        const documentEvent: RoomEvent = {
-          id: createRoomEventId(),
-          type: "text.updated",
-          roomId: this.roomId,
-          actorId: this.actor.id,
-          documentId: document.documentId,
-          sha256: documentSha256,
-          update: encodeBase64Url(Y.encodeStateAsUpdate(ydoc)),
-          createdAt: new Date().toISOString(),
-        };
-        const emittedDocument = await this.publishRoomEvent(documentEvent);
-        if (emittedDocument) {
-          emittedDocumentCount += 1;
-          this.recordRoomEvent(documentEvent);
-        }
-      } finally {
-        ydoc.destroy();
-      }
+      const workspaceDoc = this.getWorkspaceYDoc(document.documentId);
+      this.replaceYTextSilently(workspaceDoc, document.markdown);
+      await this.publishTextUpdatedEvent({
+        documentId: document.documentId,
+        sha256: documentSha256,
+        update: Y.encodeStateAsUpdate(workspaceDoc.doc),
+      });
+      emittedDocumentCount += 1;
     }
 
     this.markReceivedState();
+    const checkpointStatus = await this.saveWorkspaceRoomCheckpoint({ workspace, documents });
     return {
-      emittedWorkspace,
+      emittedWorkspace: true,
       emittedDocumentCount,
+      checkpointStatus,
     };
   }
 
-  async proposeWorkspaceChanges({
-    title,
-    description,
-    changes,
-  }: {
-    title?: string;
-    description?: string;
-    changes: readonly WorkspaceChange[];
-  }) {
+  async applyWorkspaceChanges({ changes }: { changes: readonly WorkspaceChange[] }) {
     if (!this.workspaceStateValue) {
       throw new TabulaMcpError(
-        "Workspace state has not been received yet. Wait for a Tabula.md workspace peer to publish workspace.updated before proposing workspace changes.",
+        "Workspace state has not been received yet. Wait for a Tabula.md workspace peer to publish workspace.updated before applying workspace changes.",
       );
     }
     if (!changes.length) {
       throw new TabulaMcpError("At least one workspace change is required.");
     }
 
-    const normalizedChanges = await Promise.all(changes.map((change) => this.normalizeWorkspaceChange(change)));
-    const createdAt = new Date().toISOString();
-    const proposal: WorkspaceProposal = {
-      id: createWorkspaceProposalId(),
-      roomId: this.roomId,
-      actorId: this.actor.id,
-      actor: this.actor,
-      title: title?.trim() || undefined,
-      description: description?.trim() || undefined,
-      createdAt,
-      status: "pending",
-      changes: normalizedChanges,
-    };
-    const event: RoomEvent = {
-      id: createRoomEventId(),
-      type: "workspace.proposal.created",
-      roomId: this.roomId,
-      actorId: this.actor.id,
-      proposal,
-      createdAt,
-    };
-    const emitted = await this.publishRoomEvent(event);
-    if (emitted) {
-      this.recordRoomEvent(event);
+    const appliedChanges: WorkspaceChange[] = [];
+    const changedDocumentIds = new Set<string>();
+    let emittedWorkspaceUpdateCount = 0;
+    let emittedTextUpdateCount = 0;
+
+    for (const inputChange of changes) {
+      const change = await this.normalizeWorkspaceChange(inputChange);
+      appliedChanges.push(change);
+
+      if (change.type === "document.patch") {
+        this.assertCapability("write", "patch workspace documents");
+        const emitted = await this.applyDocumentPatchChange(change);
+        if (emitted) {
+          emittedTextUpdateCount += 1;
+          changedDocumentIds.add(change.documentId);
+        }
+        continue;
+      }
+
+      if (change.type === "document.create") {
+        this.assertCapability("create", "create workspace documents");
+        const documentId = await this.applyDocumentCreateChange(change);
+        emittedWorkspaceUpdateCount += 1;
+        emittedTextUpdateCount += 1;
+        changedDocumentIds.add(documentId);
+        continue;
+      }
+
+      if (change.type === "document.rename") {
+        this.assertCapability("write", "rename workspace documents");
+        await this.applyWorkspaceMetadataChange((workspace, now) => ({
+          ...workspace,
+          nodes: workspace.nodes.map((node) =>
+            node.id === change.documentId ? { ...node, title: change.title, updatedAt: now } : node,
+          ),
+        }));
+        emittedWorkspaceUpdateCount += 1;
+        changedDocumentIds.add(change.documentId);
+        continue;
+      }
+
+      if (change.type === "document.move") {
+        this.assertCapability("move", "move workspace documents");
+        await this.applyWorkspaceMetadataChange((workspace, now) => ({
+          ...workspace,
+          nodes: workspace.nodes.map((node) =>
+            node.id === change.documentId ? { ...node, parentId: change.parentId, updatedAt: now } : node,
+          ),
+        }));
+        emittedWorkspaceUpdateCount += 1;
+        changedDocumentIds.add(change.documentId);
+        continue;
+      }
+
+      this.assertCapability("delete", "delete workspace documents");
+      await this.applyDocumentDeleteChange(change);
+      emittedWorkspaceUpdateCount += 1;
+      changedDocumentIds.add(change.documentId);
     }
 
+    this.notifyChange();
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
-      emitted,
-      proposal,
-      note: emitted
-        ? undefined
-        : "The workspace proposal was prepared locally but was not acknowledged by the room relay. Check the room connection and server support for room-event envelopes.",
+      applied: true,
+      changes: appliedChanges,
+      changedDocumentIds: [...changedDocumentIds],
+      emittedWorkspaceUpdateCount,
+      emittedTextUpdateCount,
+      workspace: this.workspaceStateValue,
+      documents: this.workspaceWaitSnapshot().documents,
     };
   }
 
@@ -529,6 +535,8 @@ export class TabulaRoomClient {
         changed: true,
         markdown: currentMarkdown,
         sha256: currentSha256,
+        changedDocumentIds: this.activeChangedDocumentIds(),
+        ...this.workspaceWaitSnapshot(),
         ...this.roomStateReadiness(),
       };
     }
@@ -540,6 +548,8 @@ export class TabulaRoomClient {
           changed: false,
           markdown: this.markdown,
           sha256: currentSha256,
+          changedDocumentIds: [],
+          ...this.workspaceWaitSnapshot(),
           ...this.roomStateReadiness(),
         });
       }, Math.max(0, Math.min(timeoutMs, 30_000)));
@@ -573,6 +583,8 @@ export class TabulaRoomClient {
           changed: false,
           markdown: this.markdown,
           sha256: "",
+          changedDocumentIds: [],
+          ...this.workspaceWaitSnapshot(),
           ...this.roomStateReadiness(),
         });
     }
@@ -677,39 +689,129 @@ export class TabulaRoomClient {
     return response.json() as Promise<unknown>;
   }
 
+  private async loadWorkspaceRoomCheckpoint(): Promise<RoomRecoveryStatus> {
+    if (!this.roomCheckpointStore.enabled) {
+      this.roomCheckpointStatusValue = this.roomCheckpointStore.initialStatus();
+      return "checkpoint-disabled";
+    }
+
+    try {
+      const loaded = await this.roomCheckpointStore.loadEncryptedCheckpoint(this.roomId);
+      if (!loaded) {
+        this.roomCheckpointStatusValue = this.roomCheckpointStore.initialStatus();
+        return "checkpoint-missing";
+      }
+
+      const checkpoint = await decryptWorkspaceRoomCheckpoint({
+        encryptedCheckpoint: loaded.encryptedCheckpoint,
+        roomId: this.roomId,
+        roomKey: this.roomKeyValue,
+      });
+      await this.applyWorkspaceRoomCheckpoint(checkpoint);
+      this.roomCheckpointStatusValue = loaded.status;
+      return "checkpoint-loaded";
+    } catch (error) {
+      const initialStatus = this.roomCheckpointStore.initialStatus();
+      this.roomCheckpointStatusValue = failedCheckpointStatus(initialStatus.store, error);
+      this.lastErrorValue = this.roomCheckpointStatusValue.error ?? "Room checkpoint could not be loaded.";
+      return "checkpoint-failed";
+    }
+  }
+
+  private async saveWorkspaceRoomCheckpoint({
+    workspace,
+    documents,
+  }: {
+    workspace: WorkspaceRoomState;
+    documents: readonly WorkspaceSnapshotDocument[];
+  }) {
+    if (!this.roomCheckpointStore.enabled) {
+      this.roomCheckpointStatusValue = this.roomCheckpointStore.initialStatus();
+      return this.roomCheckpointStatusValue;
+    }
+
+    try {
+      const checkpoint = await createWorkspaceRoomCheckpoint({
+        roomId: this.roomId,
+        workspace,
+        documents: this.createCheckpointDocuments(workspace, documents),
+      });
+      const encryptedCheckpoint = await encryptWorkspaceRoomCheckpoint({
+        checkpoint,
+        roomKey: this.roomKeyValue,
+      });
+      this.roomCheckpointStatusValue = await this.roomCheckpointStore.saveEncryptedCheckpoint(this.roomId, encryptedCheckpoint);
+      return this.roomCheckpointStatusValue;
+    } catch (error) {
+      const initialStatus = this.roomCheckpointStore.initialStatus();
+      this.roomCheckpointStatusValue = failedCheckpointStatus(initialStatus.store, error);
+      this.lastErrorValue = this.roomCheckpointStatusValue.error ?? "Room checkpoint could not be saved.";
+      return this.roomCheckpointStatusValue;
+    }
+  }
+
+  private createCheckpointDocuments(
+    workspace: WorkspaceRoomState,
+    documents: readonly WorkspaceSnapshotDocument[],
+  ): WorkspaceRoomCheckpointDocument[] {
+    const documentsById = new Map(documents.map((document) => [document.documentId, document]));
+    return workspace.nodes
+      .filter((node): node is WorkspaceDocumentNode => node.type === "document")
+      .map((node) => {
+        const document = documentsById.get(node.id);
+        if (!document) {
+          throw new TabulaMcpError(`Workspace checkpoint is missing document ${node.id}.`);
+        }
+
+        return {
+          id: node.id,
+          title: document.title || node.title,
+          markdown: document.markdown,
+          parentId: document.parentId ?? node.parentId ?? null,
+        };
+      });
+  }
+
+  private async applyWorkspaceRoomCheckpoint(checkpoint: WorkspaceRoomCheckpoint) {
+    this.workspaceStateValue = checkpoint.workspace;
+    this.workspaceDocuments.clear();
+    for (const workspaceDoc of this.workspaceYDocs.values()) {
+      workspaceDoc.doc.destroy();
+    }
+    this.workspaceYDocs.clear();
+
+    for (const document of checkpoint.documents) {
+      const workspaceDoc = this.getWorkspaceYDoc(document.id);
+      workspaceDoc.doc.transact(() => {
+        workspaceDoc.text.delete(0, workspaceDoc.text.length);
+        workspaceDoc.text.insert(0, document.markdown);
+      }, REMOTE_ORIGIN);
+      await this.cacheWorkspaceDocumentMarkdown(document.id, document.markdown);
+    }
+
+    const activeDocument = checkpoint.documents.find((document) => document.id === checkpoint.workspace.activeDocumentId);
+    if (activeDocument) {
+      this.doc.transact(() => {
+        this.text.delete(0, this.text.length);
+        this.text.insert(0, activeDocument.markdown);
+      }, REMOTE_ORIGIN);
+      this.hasReceivedLegacyTextState = true;
+    }
+
+    this.markReceivedState(checkpoint.updatedAt);
+  }
+
   private async applyIncomingEnvelope(value: unknown) {
     if (!this.roomKey) {
       return;
     }
 
     try {
-      const envelope = assertEncryptedEnvelope(value, this.roomId);
+      const envelope = assertEncryptedEnvelope(value, this.roomId, "room-event");
       const plaintext = await decryptEnvelopeForRoom(this.roomKey, envelope);
-      if (envelope.kind === "yjs-update" || envelope.kind === "state-init") {
-        const previousMarkdown = this.markdown;
-        Y.applyUpdate(this.doc, plaintext, REMOTE_ORIGIN);
-        this.hasReceivedLegacyTextState = true;
-        this.markReceivedState();
-        await this.syncActiveWorkspaceDocument();
-        if (this.markdown !== previousMarkdown) {
-          this.notifyChange();
-        }
-        return;
-      }
-
-      if (envelope.kind === "presence") {
-        const collaborator = decodePresence(plaintext);
-        if (collaborator && collaborator.id !== this.identity.id) {
-          this.collaborators.set(collaborator.id, collaborator);
-        }
-        return;
-      }
-
-      if (envelope.kind === "room-event") {
-        const event = decodeRoomEvent(plaintext);
-        if (event) {
-          this.recordRoomEvent(event);
-        }
+      const event = decodeRoomEvent(plaintext);
+      if (event) {
+        await this.recordRoomEvent(event);
       }
     } catch (error) {
       this.lastErrorValue = error instanceof Error ? error.message : "Incoming room message could not be processed.";
@@ -760,8 +862,6 @@ export class TabulaRoomClient {
 
   private async publishPresence() {
     this.identity.lastSeen = Date.now();
-    const payload = textEncoder.encode(JSON.stringify({ ...this.identity, roomId: this.roomId }));
-    await this.emitEnvelope("presence", payload, { volatile: true });
     await this.publishRoomEvent(
       {
         id: createRoomEventId(),
@@ -784,17 +884,40 @@ export class TabulaRoomClient {
   }
 
   private async emitCurrentState() {
-    await this.emitEnvelope("state-init", Y.encodeStateAsUpdate(this.doc));
-  }
+    if (!this.workspaceStateValue) {
+      return;
+    }
 
-  private async publishRoomEvent(event: RoomEvent, options: { volatile?: boolean } = {}) {
-    return this.emitEnvelope("room-event", encodeRoomEvent(event), {
-      volatile: options.volatile,
-      suppressErrors: true,
+    const documents = this.workspaceStateValue.nodes
+      .filter((node): node is WorkspaceDocumentNode => node.type === "document")
+      .flatMap((node) => {
+        const cached = this.workspaceDocuments.get(node.id);
+        return cached
+          ? [
+              {
+                documentId: node.id,
+                title: node.title,
+                markdown: cached.markdown,
+                parentId: node.parentId,
+                sha256: cached.sha256,
+              },
+            ]
+          : [];
+      });
+    await this.publishWorkspaceSnapshot({
+      workspace: this.workspaceStateValue,
+      documents,
     });
   }
 
-  private recordRoomEvent(event: RoomEvent) {
+  private async publishRoomEvent(event: RoomEvent, options: { suppressErrors?: boolean; volatile?: boolean } = {}) {
+    return this.emitEnvelope("room-event", encodeRoomEvent(event), {
+      volatile: options.volatile,
+      suppressErrors: options.suppressErrors ?? true,
+    });
+  }
+
+  private async recordRoomEvent(event: RoomEvent) {
     this.recentRoomEvents.push(event);
     if (this.recentRoomEvents.length > 50) {
       this.recentRoomEvents.splice(0, this.recentRoomEvents.length - 50);
@@ -829,27 +952,15 @@ export class TabulaRoomClient {
       });
     }
     if (event.type === "text.updated") {
-      void this.applyTextUpdatedEvent(event);
+      await this.applyTextUpdatedEvent(event);
     }
     if (event.type === "workspace.updated") {
+      if (!hasRoomDocumentNodes(event.workspace)) {
+        return;
+      }
       this.workspaceStateValue = event.workspace;
       this.pruneWorkspaceDocumentCaches();
-      void this.syncActiveWorkspaceDocument();
-    }
-    if (
-      event.type === "document.created" ||
-      event.type === "document.deleted" ||
-      event.type === "document.renamed" ||
-      event.type === "document.moved" ||
-      event.type === "document.updated"
-    ) {
-      this.applyWorkspaceMetadataEvent(event);
-    }
-    if (event.type === "workspace.proposal.created") {
-      this.pendingWorkspaceProposals.set(event.proposal.id, event.proposal);
-    }
-    if (event.type === "workspace.proposal.accepted" || event.type === "workspace.proposal.rejected") {
-      this.pendingWorkspaceProposals.delete(event.proposalId);
+      await this.syncActiveWorkspaceDocument();
     }
 
     this.notifyRoomEvent(event);
@@ -940,6 +1051,239 @@ export class TabulaRoomClient {
     };
   }
 
+  private assertCapability(capability: RoomCapability, action: string) {
+    if (!this.actor.capabilities.includes(capability)) {
+      throw new TabulaMcpError(`This Tabula MCP actor cannot ${action}; missing ${capability} capability.`);
+    }
+  }
+
+  private async applyDocumentPatchChange(change: Extract<WorkspaceChange, { type: "document.patch" }>) {
+    const document = this.requireWorkspaceDocumentNode(change.documentId);
+    const cached = this.workspaceDocuments.get(document.id);
+    if (!cached) {
+      throw new TabulaMcpError(
+        `Workspace document ${document.id} has not been read by this MCP session yet. Call tabula_read_workspace_document before applying patches for it.`,
+      );
+    }
+
+    const currentSha256 = await sha256Text(cached.markdown);
+    if (change.baseSha256 !== currentSha256) {
+      throw new TabulaMcpError(`Base hash for workspace document ${document.id} does not match the current cached text.`);
+    }
+
+    const patches = normalizeTextPatches(change.patches);
+    const nextMarkdown = applyTextPatchesToString(cached.markdown, patches);
+    if (nextMarkdown === null) {
+      throw new TabulaMcpError(`Patches for workspace document ${document.id} are overlapping or outside the current Markdown text.`);
+    }
+    if (nextMarkdown === cached.markdown) {
+      return false;
+    }
+
+    const workspaceDoc = this.getWorkspaceYDoc(document.id);
+    this.replaceYTextSilently(workspaceDoc, cached.markdown);
+    const update = this.applyTextPatchesToWorkspaceYDoc(workspaceDoc, patches);
+    const nextSha256 = await sha256Text(nextMarkdown);
+    await this.cacheWorkspaceDocumentMarkdown(document.id, nextMarkdown, nextSha256);
+    this.updateWorkspaceDocumentCacheMetadata(document.id, nextSha256, nextMarkdown.length);
+    await this.publishTextUpdatedEvent({
+      baseSha256: currentSha256,
+      documentId: document.id,
+      sha256: nextSha256,
+      update,
+    });
+    return true;
+  }
+
+  private async applyDocumentCreateChange(change: Extract<WorkspaceChange, { type: "document.create" }>) {
+    const now = new Date().toISOString();
+    const documentId = `doc_${randomUUID()}`;
+    const sha256 = await sha256Text(change.markdown);
+    const documentNode: WorkspaceDocumentNode = {
+      id: documentId,
+      type: "document",
+      parentId: change.parentId,
+      title: change.title,
+      sha256,
+      textLength: change.markdown.length,
+      order: this.nextWorkspaceNodeOrder(),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.applyWorkspaceMetadataChange((workspace) => ({
+      ...workspace,
+      activeDocumentId: workspace.activeDocumentId ?? documentId,
+      nodes: [...workspace.nodes, documentNode],
+    }));
+    await this.cacheWorkspaceDocumentMarkdown(documentId, change.markdown, sha256);
+    const workspaceDoc = this.getWorkspaceYDoc(documentId);
+    this.replaceYTextSilently(workspaceDoc, change.markdown);
+    await this.publishTextUpdatedEvent({
+      documentId,
+      sha256,
+      update: Y.encodeStateAsUpdate(workspaceDoc.doc),
+    });
+    return documentId;
+  }
+
+  private async applyDocumentDeleteChange(change: Extract<WorkspaceChange, { type: "document.delete" }>) {
+    const cached = this.workspaceDocuments.get(change.documentId);
+    if (change.baseSha256 && cached) {
+      const currentSha256 = await sha256Text(cached.markdown);
+      if (change.baseSha256 !== currentSha256) {
+        throw new TabulaMcpError(`Base hash for workspace document ${change.documentId} does not match the current cached text.`);
+      }
+    }
+
+    this.workspaceDocuments.delete(change.documentId);
+    this.workspaceYDocs.get(change.documentId)?.doc.destroy();
+    this.workspaceYDocs.delete(change.documentId);
+    await this.applyWorkspaceMetadataChange((workspace) => {
+      const nodes = workspace.nodes.filter((node) => node.id !== change.documentId && node.parentId !== change.documentId);
+      const activeDocumentId =
+        workspace.activeDocumentId === change.documentId
+          ? nodes.find((node): node is WorkspaceDocumentNode => node.type === "document")?.id
+          : workspace.activeDocumentId;
+      return {
+        ...workspace,
+        activeDocumentId,
+        nodes,
+      };
+    });
+  }
+
+  private async applyWorkspaceMetadataChange(
+    updateWorkspace: (workspace: WorkspaceRoomState, now: string) => WorkspaceRoomState,
+  ) {
+    if (!this.workspaceStateValue) {
+      throw new TabulaMcpError("Workspace state has not been received yet.");
+    }
+
+    const now = new Date().toISOString();
+    this.workspaceStateValue = {
+      ...updateWorkspace(this.workspaceStateValue, now),
+      version: this.workspaceStateValue.version + 1,
+    };
+    await this.publishWorkspaceUpdatedEvent(this.workspaceStateValue);
+  }
+
+  private nextWorkspaceNodeOrder() {
+    return Math.max(-1, ...(this.workspaceStateValue?.nodes.map((node) => node.order ?? 0) ?? [])) + 1;
+  }
+
+  private updateWorkspaceDocumentCacheMetadata(documentId: string, sha256: string, textLength: number) {
+    if (!this.workspaceStateValue) {
+      return;
+    }
+    const now = new Date().toISOString();
+    this.workspaceStateValue = {
+      ...this.workspaceStateValue,
+      nodes: this.workspaceStateValue.nodes.map((node) =>
+        node.id === documentId && node.type === "document"
+          ? {
+              ...node,
+              sha256,
+              textLength,
+              updatedAt: now,
+            }
+          : node,
+      ),
+    };
+  }
+
+  private replaceYTextSilently(workspaceDoc: WorkspaceYDocState, markdown: string) {
+    if (workspaceDoc.text.toString() === markdown) {
+      return;
+    }
+    workspaceDoc.doc.transact(() => {
+      workspaceDoc.text.delete(0, workspaceDoc.text.length);
+      if (markdown) {
+        workspaceDoc.text.insert(0, markdown);
+      }
+    }, REMOTE_ORIGIN);
+  }
+
+  private applyTextPatchesToWorkspaceYDoc(workspaceDoc: WorkspaceYDocState, patches: readonly TextPatch[]) {
+    let update: Uint8Array | null = null;
+    const onUpdate = (nextUpdate: Uint8Array, origin: unknown) => {
+      if (origin === LOCAL_DIRECT_ORIGIN) {
+        update = nextUpdate;
+      }
+    };
+    workspaceDoc.doc.on("update", onUpdate);
+    try {
+      workspaceDoc.doc.transact(() => {
+        for (const patch of [...patches].sort((first, second) => second.from - first.from || second.to - first.to)) {
+          if (patch.to > patch.from) {
+            workspaceDoc.text.delete(patch.from, patch.to - patch.from);
+          }
+          if (patch.insert) {
+            workspaceDoc.text.insert(patch.from, patch.insert);
+          }
+        }
+      }, LOCAL_DIRECT_ORIGIN);
+    } finally {
+      workspaceDoc.doc.off("update", onUpdate);
+    }
+
+    if (!update) {
+      throw new TabulaMcpError("Workspace text patch did not produce a Yjs update.");
+    }
+    return update;
+  }
+
+  private async publishWorkspaceUpdatedEvent(workspace: WorkspaceRoomState) {
+    const event: RoomEvent = {
+      id: createRoomEventId(),
+      type: "workspace.updated",
+      roomId: this.roomId,
+      actorId: this.actor.id,
+      actor: this.actor,
+      workspace,
+      createdAt: new Date().toISOString(),
+    };
+    const emitted = await this.publishRoomEvent(event, { suppressErrors: false });
+    if (!emitted) {
+      throw new TabulaMcpError(
+        `Tabula room server did not acknowledge workspace.updated room-event envelopes${this.lastErrorValue ? `: ${this.lastErrorValue}` : "."} Deploy tabula-room with room-event support or pass a compatible roomServerUrl.`,
+      );
+    }
+    await this.recordRoomEvent(event);
+  }
+
+  private async publishTextUpdatedEvent({
+    baseSha256,
+    documentId,
+    sha256,
+    update,
+  }: {
+    baseSha256?: string;
+    documentId: string;
+    sha256: string;
+    update: Uint8Array;
+  }) {
+    const event: RoomEvent = {
+      id: createRoomEventId(),
+      type: "text.updated",
+      roomId: this.roomId,
+      actorId: this.actor.id,
+      actor: this.actor,
+      documentId,
+      ...(baseSha256 ? { baseSha256 } : {}),
+      sha256,
+      update: encodeBase64Url(update),
+      createdAt: new Date().toISOString(),
+    };
+    const emitted = await this.publishRoomEvent(event, { suppressErrors: false });
+    if (!emitted) {
+      throw new TabulaMcpError(
+        `Tabula room server did not acknowledge text.updated room-event envelopes${this.lastErrorValue ? `: ${this.lastErrorValue}` : "."} Deploy tabula-room with room-event support or pass a compatible roomServerUrl.`,
+      );
+    }
+    await this.recordRoomEvent(event);
+  }
+
   private async applyTextUpdatedEvent(event: Extract<RoomEvent, { type: "text.updated" }>) {
     if (event.actorId === this.actor.id) {
       return;
@@ -965,75 +1309,6 @@ export class TabulaRoomClient {
       }
     } catch (error) {
       this.lastErrorValue = error instanceof Error ? error.message : "Room text update could not be applied.";
-    }
-  }
-
-  private applyWorkspaceMetadataEvent(
-    event: Extract<
-      RoomEvent,
-      { type: "document.created" | "document.deleted" | "document.renamed" | "document.moved" | "document.updated" }
-    >,
-  ) {
-    if (!this.workspaceStateValue) {
-      return;
-    }
-
-    const nodes = [...this.workspaceStateValue.nodes];
-    if (event.type === "document.created") {
-      const index = nodes.findIndex((node) => node.id === event.document.id);
-      if (index >= 0) {
-        nodes[index] = event.document;
-      } else {
-        nodes.push(event.document);
-      }
-      this.workspaceStateValue = {
-        ...this.workspaceStateValue,
-        nodes,
-      };
-      return;
-    }
-    if (event.type === "document.deleted") {
-      this.workspaceDocuments.delete(event.documentId);
-      this.workspaceYDocs.get(event.documentId)?.doc.destroy();
-      this.workspaceYDocs.delete(event.documentId);
-      this.workspaceStateValue = {
-        ...this.workspaceStateValue,
-        nodes: nodes.filter((node) => node.id !== event.documentId && node.parentId !== event.documentId),
-      };
-      return;
-    }
-    if (event.type === "document.renamed") {
-      this.workspaceStateValue = {
-        ...this.workspaceStateValue,
-        nodes: nodes.map((node) =>
-          node.id === event.documentId ? { ...node, title: event.title, updatedAt: event.createdAt } : node,
-        ),
-      };
-      return;
-    }
-    if (event.type === "document.moved") {
-      this.workspaceStateValue = {
-        ...this.workspaceStateValue,
-        nodes: nodes.map((node) =>
-          node.id === event.documentId ? { ...node, parentId: event.parentId, updatedAt: event.createdAt } : node,
-        ),
-      };
-      return;
-    }
-    if (event.type === "document.updated") {
-      this.workspaceStateValue = {
-        ...this.workspaceStateValue,
-        nodes: nodes.map((node) =>
-          node.id === event.documentId && node.type === "document"
-            ? {
-                ...node,
-                sha256: event.sha256,
-                textLength: this.workspaceDocuments.get(event.documentId)?.textLength ?? node.textLength,
-                updatedAt: event.createdAt,
-              }
-            : node,
-        ),
-      };
     }
   }
 
@@ -1128,9 +1403,9 @@ export class TabulaRoomClient {
     };
   }
 
-  private markReceivedState() {
+  private markReceivedState(receivedAt = new Date().toISOString()) {
     this.hasReceivedState = true;
-    this.lastStateReceivedAtValue = new Date().toISOString();
+    this.lastStateReceivedAtValue = receivedAt;
   }
 
   private notifyChange() {
@@ -1149,6 +1424,8 @@ export class TabulaRoomClient {
           changed: true,
           markdown: this.markdown,
           sha256,
+          changedDocumentIds: this.activeChangedDocumentIds(),
+          ...this.workspaceWaitSnapshot(),
           ...this.roomStateReadiness(),
         });
       }
@@ -1168,11 +1445,41 @@ export class TabulaRoomClient {
           changed: Boolean(waiter.sinceSha256 && waiter.sinceSha256 !== sha256),
           markdown: this.markdown,
           sha256,
+          changedDocumentIds: changedDocumentIdsFromRoomEvent(event),
+          ...this.workspaceWaitSnapshot(),
           roomEvents: [event],
           ...this.roomStateReadiness(),
         });
       }
     });
+  }
+
+  private activeChangedDocumentIds() {
+    return this.workspaceStateValue?.activeDocumentId ? [this.workspaceStateValue.activeDocumentId] : [];
+  }
+
+  private workspaceWaitSnapshot() {
+    const workspace = this.workspaceStateValue;
+    const documents =
+      workspace?.nodes
+        .filter((node): node is WorkspaceDocumentNode => node.type === "document")
+        .map((node) => {
+          const cached = this.workspaceDocuments.get(node.id);
+          return {
+            documentId: node.id,
+            title: node.title,
+            sha256: cached?.sha256 ?? node.sha256,
+            textLength: cached?.textLength ?? node.textLength,
+            cached: Boolean(cached),
+          };
+        }) ?? [];
+
+    return {
+      activeDocumentId: workspace?.activeDocumentId,
+      workspace: workspace ?? null,
+      documents,
+      checkpointStatus: this.roomCheckpointStatusValue,
+    };
   }
 }
 
@@ -1185,3 +1492,18 @@ const isLiveSelection = (value: unknown): value is LiveSelection =>
   Number.isInteger(value.to) &&
   value.from >= 0 &&
   value.to >= value.from;
+
+const changedDocumentIdsFromRoomEvent = (event: RoomEvent) => {
+  if (event.type === "text.updated") {
+    return [event.documentId];
+  }
+  if (event.type === "workspace.updated") {
+    return event.workspace.nodes
+      .filter((node): node is WorkspaceDocumentNode => node.type === "document")
+      .map((node) => node.id);
+  }
+  return [];
+};
+
+const hasRoomDocumentNodes = (workspace: WorkspaceRoomState) =>
+  workspace.nodes.some((node) => node.type === "document" && node.id !== `live-${workspace.roomId}`);

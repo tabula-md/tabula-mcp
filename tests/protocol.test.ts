@@ -54,6 +54,27 @@ describe("room protocol helpers", () => {
     ).toBe("https://rooms.example.com");
   });
 
+  it("blocks unallowlisted custom room server egress in production", () => {
+    expect(() =>
+      resolveRoomServerUrl({
+        appOrigin: "https://tabula.md",
+        roomServerUrl: "https://rooms.example.com/",
+        env: { TABULA_MCP_PRODUCTION: "1" },
+      }),
+    ).toThrow(/does not allow Tabula Room server egress/);
+
+    expect(
+      resolveRoomServerUrl({
+        appOrigin: "https://tabula.md",
+        roomServerUrl: "https://rooms.example.com/",
+        env: {
+          TABULA_MCP_PRODUCTION: "1",
+          TABULA_MCP_ALLOWED_ROOM_SERVER_URLS: "https://rooms.example.com",
+        },
+      }),
+    ).toBe("https://rooms.example.com");
+  });
+
   it("requires configuration for self-hosted app links", () => {
     expect(() => resolveRoomServerUrl({ appOrigin: "https://tabula.example.com", env: {} })).toThrow(
       /self-hosted Tabula links/,
@@ -64,7 +85,7 @@ describe("room protocol helpers", () => {
     const envelope = {
       v: 1,
       roomId: "room_123",
-      kind: "state-init",
+      kind: "room-event",
       version: 1,
       iv: encodeBase64Url(new Uint8Array(12).fill(1)),
       ciphertext: encodeBase64Url(new Uint8Array([1, 2, 3])),
@@ -72,6 +93,15 @@ describe("room protocol helpers", () => {
     } as const;
 
     expect(assertEncryptedEnvelope(envelope, "room_123")).toEqual(envelope);
+    expect(() =>
+      assertEncryptedEnvelope(
+        {
+          ...envelope,
+          kind: "state-init",
+        },
+        "room_123",
+      ),
+    ).toThrow(/not valid/);
     expect(() =>
       assertEncryptedEnvelope(
         {
