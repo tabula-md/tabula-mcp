@@ -106,8 +106,8 @@ production room links into logs, issue trackers, or public screenshots.
 ## Room Editing
 
 Claude edits live rooms through `tabula_apply_workspace_changes`. Document text
-changes become encrypted `text.updated` room events, and folder/document tree
-changes become encrypted `workspace.updated` room events. `document.patch`
+and folder-tree changes are committed atomically to the shared workspace Y.Doc
+and synchronized through encrypted RoomWire v2 packets. `document.patch`
 inputs must use the latest `baseSha256` from `tabula_read_workspace_document`
 or `tabula_room_status`.
 

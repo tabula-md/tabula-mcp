@@ -53,9 +53,9 @@ If the client surface supports MCP resources, the read tools also return
 `tabula://...` `resourceUri` handles for read-only workspace metadata and
 Markdown. Codex workflows should still work through tools alone.
 
-The workflow is direct collaboration. `tabula_apply_workspace_changes` emits
-encrypted document-scoped `text.updated` Yjs updates and `workspace.updated`
-tree state, matching the Tabula.md room contract.
+The workflow is direct collaboration. `tabula_apply_workspace_changes`
+validates the requested changes and commits one transaction to the same
+workspace Y.Doc used by Tabula.md.
 
 Codex can also create the collaboration surface first:
 
@@ -100,8 +100,8 @@ relay, joined a simulated Tabula peer, and asked a real `codex exec` agent to:
 3. read workspace metadata and one workspace document
 4. submit `tabula_apply_workspace_changes`
 
-The simulated peer received and decrypted `text.updated` and `workspace.updated`
-events from an actor with:
+The simulated peer received RoomWire v2 sync and Awareness packets from an
+actor with:
 
 ```json
 {

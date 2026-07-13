@@ -9,7 +9,7 @@ import type {
   WorkspaceFolderNode,
   WorkspaceNode,
   WorkspaceRoomState,
-} from "./room-events.js";
+} from "./workspace-contract.js";
 
 export type WorkspaceSourceKind = "created" | "imported";
 

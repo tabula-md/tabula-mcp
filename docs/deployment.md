@@ -50,8 +50,9 @@ still goes through `tabula-json` as encrypted `#json` snapshot links.
 Live room recovery is a separate encrypted checkpoint path: configure
 `TABULA_MCP_FIREBASE_CONFIG`, `TABULA_FIREBASE_CONFIG`, or
 `VITE_TABULA_FIREBASE_CONFIG` with the Firebase Web SDK config used by
-Tabula.md. The MCP server encrypts `WorkspaceRoomCheckpoint` bytes locally with
-the `#room` key before writing to Firestore `roomCheckpoints/{roomId}`.
+Tabula.md. The MCP server encrypts the complete workspace Y.Doc update locally
+with the `#room` key, writes the ciphertext blob to Firebase Storage, and uses
+Firestore only for the generation pointer.
 Local filesystem workspace import is disabled unless the MCP client provides
 filesystem roots or the operator sets `TABULA_MCP_ALLOWED_IMPORT_ROOTS` to
 comma- or newline-separated directories. Hosted clients should import with
@@ -73,10 +74,10 @@ Production mode is enabled by `TABULA_MCP_PRODUCTION=1`,
 - memory document checkpoints require explicit unsafe opt-in; configure Redis/Upstash REST for official production.
 - browser requests with an `Origin` header are rejected unless the origin is in
   `TABULA_MCP_ALLOWED_ORIGINS`.
-- production egress for room/json/Firestore services is restricted to official Tabula
+- production egress for room and JSON services is restricted to official Tabula
   services plus `TABULA_MCP_ALLOWED_ROOM_SERVER_URLS` and
-  `TABULA_MCP_ALLOWED_JSON_SERVER_URLS`; trusted non-default Firestore REST
-  endpoints must be listed in `TABULA_MCP_ALLOWED_FIRESTORE_URLS`.
+  `TABULA_MCP_ALLOWED_JSON_SERVER_URLS`. Firebase endpoints come from the
+  operator-supplied Web SDK configuration.
 - remote room/workspace tools require stateful MCP HTTP sessions because connected
   room transports and workspace state live across tool calls. Cloudflare uses a
   Durable Object session binding for this affinity; Vercel requires sticky

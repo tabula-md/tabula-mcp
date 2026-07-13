@@ -62,8 +62,9 @@ export TABULA_ROOM_URL=https://rooms.example.com
 ```
 
 For durable live room recovery, configure the same Firebase Web SDK config used
-by Tabula.md. The room checkpoint payload is encrypted locally with the `#room`
-key before Firestore sees it:
+by Tabula.md. The complete Y.Doc update is encrypted locally with the `#room`
+key before Firebase Storage receives it; Firestore stores only the opaque blob
+pointer and generation:
 
 ```sh
 export VITE_TABULA_FIREBASE_CONFIG='{"apiKey":"...","projectId":"..."}'
@@ -103,11 +104,10 @@ https://tabula.md/#room=<roomId>,<roomKey>
 The `#room` fragment contains the room key and is a secret. Anyone or any agent
 with that URL can decrypt the room. Treat room links like bearer tokens.
 
-Agents edit rooms through the same workspace collaboration events that
-Tabula.md uses. A Tabula room is a workspace room; a one-document room is
-represented as a workspace with one document. Agents use
-`tabula_apply_workspace_changes` to publish encrypted `workspace.updated` tree
-state and document-scoped `text.updated` Yjs updates. `document.patch` inputs
+Agents edit the same workspace Y.Doc that Tabula.md uses. A Tabula room is a
+workspace room; a one-document room is represented as a workspace with one
+document. Agents use `tabula_apply_workspace_changes` to apply one atomic Yjs
+transaction across the workspace tree and document texts. `document.patch` inputs
 must include the latest lowercase SHA-256 hex `baseSha256` returned by the read
 tools.
 
@@ -206,8 +206,7 @@ Production/public endpoint controls:
 - `TABULA_MCP_HTTP_MAX_REQUEST_BYTES` limits MCP request body size.
 - `TABULA_MCP_REQUEST_TIMEOUT_MS` bounds individual MCP request handling.
 - `TABULA_MCP_ALLOWED_ROOM_SERVER_URLS` and `TABULA_MCP_ALLOWED_JSON_SERVER_URLS` allow additional production egress targets for trusted self-hosted Tabula services.
-- `TABULA_MCP_FIREBASE_CONFIG`, `TABULA_FIREBASE_CONFIG`, or `VITE_TABULA_FIREBASE_CONFIG` enables encrypted live room checkpoint load/save through Firestore.
-- `TABULA_MCP_ALLOWED_FIRESTORE_URLS` allows a trusted non-default Firestore REST endpoint in production.
+- `TABULA_MCP_FIREBASE_CONFIG`, `TABULA_FIREBASE_CONFIG`, or `VITE_TABULA_FIREBASE_CONFIG` enables encrypted live room checkpoint blobs in Firebase Storage with generation pointers in Firestore.
 - `TABULA_MCP_ALLOWED_IMPORT_ROOTS` allows comma- or newline-separated local directories for `tabula_import_markdown_workspace` when the MCP client does not provide MCP filesystem roots. Prefer MCP roots where supported; use `source.files` in hosted clients.
 - `TABULA_MCP_ALLOW_ANY_EGRESS=1` disables production egress allowlists for a trusted self-hosted deployment.
 - `TABULA_MCP_LOG_LEVEL=silent|error|warn|info|debug` controls structured JSON request logs.
@@ -251,14 +250,14 @@ small ESM surface for tests and local embedding:
 - `tabula_create_workspace_room`: create a new encrypted Tabula.md live room from a workspace, publish workspace metadata and document state, save an encrypted live room checkpoint when Firebase is configured, and return a `#room` URL.
 - `tabula_connect_room`: connect to a room URL as a `tabula-mcp` agent actor and load the encrypted live room checkpoint when Firebase is configured.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
-- `tabula_room_status`: inspect connection state, room metadata, hash, actor capabilities, recent room events, and collaborators.
+- `tabula_room_status`: inspect connection state, room metadata, hash, actor capabilities, and collaborators.
 - `tabula_read_workspace`: read decrypted workspace tree metadata from a connected room session or a local/imported MCP workspace, including document ids, titles, hashes, paths, and cache status.
 - `tabula_read_workspace_document`: read decrypted Markdown for one cached workspace document from a room session or local/imported workspace.
 - `tabula_read_workspace_context`: read bounded Markdown excerpts from selected, searched, path-filtered, or changed cached workspace documents for agent planning without loading every document in full.
-- `tabula_apply_workspace_changes`: apply multi-document `document.patch`/`document.create`/`document.rename`/`document.move`/`document.delete` inputs to a connected room by emitting encrypted `text.updated` and `workspace.updated` room events.
+- `tabula_apply_workspace_changes`: apply multi-document `document.patch`/`document.create`/`document.rename`/`document.move`/`document.delete` inputs atomically to the connected workspace CRDT.
 - `tabula_open_room_view`: open a connected room in the MCP App for status, outline, Markdown preview, refresh, and selection handoff in clients that support MCP Apps.
 - `tabula_set_presence`: publish cursor/selection presence to collaborators.
-- `tabula_wait_for_changes`: wait until the active document hash changes or a workspace room event arrives, returning document hash summaries and recent events.
+- `tabula_wait_for_changes`: wait until the active document hash or workspace CRDT changes, returning document hash summaries.
 - `tabula_disconnect_room`: close a session.
 
 ## Resources
@@ -295,8 +294,8 @@ Default workspace reads are summary-first. `tabula_create_workspace`,
 workspace node tree unless `detail: "tree"` is passed. Use
 `tabula_read_workspace_context` for bounded excerpts and
 `tabula_read_workspace_document` only when exact full Markdown is needed.
-`tabula_wait_for_changes` omits legacy active-document Markdown by default; pass
-`includeMarkdown: true` only for compatibility.
+`tabula_wait_for_changes` omits active-document Markdown by default; pass
+`includeMarkdown: true` only when the caller needs it.
 
 Current release budget checks:
 
@@ -447,8 +446,8 @@ a fresh environment, run `npx playwright install chromium`.
 Room editing uses one model: direct workspace collaboration through
 `tabula_apply_workspace_changes`. The tool can bundle multiple `document.patch`,
 `document.create`, `document.rename`, `document.move`, and `document.delete`
-inputs in one call. The MCP client then emits encrypted `text.updated` events
-for document text and encrypted `workspace.updated` events for tree metadata. A
+inputs in one call. The MCP client validates the full change set against a
+temporary workspace Y.Doc, then applies one Yjs update to the live room. A
 one-document room is still represented as a workspace with one document.
 
 Patch inputs must use the latest `baseSha256` returned by

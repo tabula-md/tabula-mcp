@@ -34,7 +34,7 @@ const requiredFiles = [
   "server/server/web.js",
   "server/server/register-room-tools.js",
   "server/server/write-access.js",
-  "server/room-events.js",
+  "server/workspace-contract.js",
   "server/share.js",
   "server/workspaces.js",
   "server/guidance.js",
