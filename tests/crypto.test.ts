@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { encodeRoomWirePacket } from "@tabula-md/tabula/collaboration";
 import { describe, expect, it } from "vitest";
 import {
   decryptEnvelopeForRoom,
@@ -38,7 +39,11 @@ describe("room encryption", () => {
 
   it("authenticates room-event envelope metadata and rejects legacy room kinds", async () => {
     const key = await importRoomKey(roomKey);
-    const event = new TextEncoder().encode(JSON.stringify({ type: "workspace.updated" }));
+    const event = encodeRoomWirePacket({
+      type: "sync.message",
+      senderId: "agent_123",
+      payload: new Uint8Array([1, 2, 3]),
+    });
     const envelope = await encryptBytesForRoom(key, "room_123", "room-event", 2, event);
 
     await expect(decryptEnvelopeForRoom(key, envelope)).resolves.toEqual(event);
@@ -50,18 +55,13 @@ describe("room encryption", () => {
     ).rejects.toThrow();
   });
 
-  it("round-trips encrypted workspace room events without exposing event plaintext in the envelope", async () => {
+  it("round-trips encrypted RoomWire packets without exposing sync payloads in the envelope", async () => {
     const key = await importRoomKey(roomKey);
-    const event = new TextEncoder().encode(
-      JSON.stringify({
-        v: 1,
-        id: "event_123",
-        type: "workspace.updated",
-        roomId: "room_123",
-        actorId: "agent_123",
-        createdAt: "2026-06-18T00:00:00.000Z",
-      }),
-    );
+    const event = encodeRoomWirePacket({
+      type: "awareness.updated",
+      senderId: "agent_123",
+      payload: new TextEncoder().encode("private-awareness"),
+    });
     const envelope = await encryptBytesForRoom(key, "room_123", "room-event", 3, event);
 
     expect(envelope).toMatchObject({
@@ -70,7 +70,7 @@ describe("room encryption", () => {
       kind: "room-event",
       version: 3,
     });
-    expect(JSON.stringify(envelope)).not.toContain("workspace.updated");
+    expect(JSON.stringify(envelope)).not.toContain("private-awareness");
     await expect(decryptEnvelopeForRoom(key, envelope)).resolves.toEqual(event);
   });
 

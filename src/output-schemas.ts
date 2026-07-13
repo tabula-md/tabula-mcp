@@ -17,7 +17,7 @@ const roomHydrationOutputShape = {
 
 const roomCheckpointStatusOutputSchema = z.object({
   enabled: z.boolean(),
-  store: z.enum(["firebase-firestore", "none"]),
+  store: z.enum(["firebase-storage", "none"]),
   status: z.enum(["disabled", "missing", "loaded", "saved", "failed"]),
   checkpointVersion: z.number().int().nonnegative().optional(),
   updatedAt: isoDateStringSchema.optional(),
@@ -30,7 +30,7 @@ const liveSelectionOutputSchema = z.object({
   to: z.number().int().nonnegative(),
 });
 
-const roomCapabilityOutputSchema = z.enum(["presence", "read", "comment", "write", "create", "delete", "move"]);
+const roomCapabilityOutputSchema = z.enum(["presence", "read", "write"]);
 
 const roomActorOutputSchema = z.object({
   id: z.string(),
@@ -147,17 +147,6 @@ const workspaceChangeOutputSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const roomEventOutputSchema = z
-  .object({
-    id: z.string(),
-    type: z.string(),
-    roomId: roomIdOutputSchema,
-    actorId: z.string(),
-    actor: roomActorOutputSchema.optional(),
-    createdAt: isoDateStringSchema,
-  })
-  .passthrough();
-
 export const markdownHeadingOutputSchema = z.object({
   depth: z.number().int().min(1).max(6),
   text: z.string(),
@@ -220,7 +209,6 @@ export const roomStatusOutputShape = {
   workspaceMode: z.boolean().optional(),
   activeDocumentId: z.string().optional(),
   workspaceVersion: z.number().optional(),
-  lastRoomEventAt: isoDateStringSchema.optional(),
   checkpointStatus: roomCheckpointStatusOutputSchema,
   metadata: z.unknown().nullable(),
   lastError: z.string().optional(),
@@ -323,8 +311,6 @@ export const applyWorkspaceChangesOutputShape = {
   applied: z.boolean(),
   changes: z.array(workspaceChangeOutputSchema),
   changedDocumentIds: z.array(z.string()),
-  emittedWorkspaceUpdateCount: z.number().int().nonnegative(),
-  emittedTextUpdateCount: z.number().int().nonnegative(),
   workspace: workspaceRoomStateOutputSchema.nullable(),
   documents: z.array(workspaceDocumentHashOutputSchema),
 };
@@ -345,7 +331,6 @@ export const waitForChangesOutputShape = {
   changedDocumentIds: z.array(z.string()),
   checkpointStatus: roomCheckpointStatusOutputSchema,
   ...roomHydrationOutputShape,
-  roomEvents: z.array(roomEventOutputSchema).optional(),
   markdownIncluded: z.boolean().optional(),
   note: z.string().optional(),
 };

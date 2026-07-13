@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { once } from "node:events";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -149,6 +149,23 @@ const waitForHttp = async (url, { timeoutMs = 30_000, label = url } = {}) => {
   throw new Error(`Timed out waiting for ${label}: ${lastError}`);
 };
 
+const waitForTcp = async (port, { timeoutMs = 60_000, label = String(port) } = {}) => {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const connected = await new Promise((resolve) => {
+      const socket = createConnection({ host: "127.0.0.1", port });
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once("error", () => resolve(false));
+    });
+    if (connected) return;
+    await wait(250);
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+};
+
 const textFromTool = (result) =>
   result.content?.find((item) => item.type === "text")?.text ?? "";
 
@@ -173,7 +190,7 @@ const callTool = async (client, name, args = {}) => {
   return result.structuredContent;
 };
 
-const withMcpClient = async ({ serverEntrypoint, roomUrl }, callback) => {
+const withMcpClient = async ({ serverEntrypoint, roomUrl, firebaseConfig }, callback) => {
   const client = new Client({ name: "tabula-mcp-local-e2e", version: "0.0.0" });
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -183,6 +200,10 @@ const withMcpClient = async ({ serverEntrypoint, roomUrl }, callback) => {
       ...process.env,
       TABULA_ROOM_URL: roomUrl,
       TABULA_MCP_ALLOW_ANY_EGRESS: "1",
+      TABULA_MCP_FIREBASE_CONFIG: firebaseConfig,
+      TABULA_MCP_FIREBASE_EMULATOR_HOST: "127.0.0.1",
+      TABULA_MCP_FIRESTORE_EMULATOR_PORT: "8080",
+      TABULA_MCP_FIREBASE_STORAGE_EMULATOR_PORT: "9199",
     },
     stderr: "pipe",
   });
@@ -241,7 +262,15 @@ const run = async () => {
   const appOrigin = `http://127.0.0.1:${appPort}`;
   let roomServer;
   let appServer;
+  let firebaseServer;
   let browser;
+  const firebaseConfig = JSON.stringify({
+    apiKey: "tabula-local",
+    authDomain: "tabula-local.firebaseapp.com",
+    projectId: "tabula-local",
+    storageBucket: "tabula-local.appspot.com",
+    appId: "tabula-local",
+  });
 
   try {
     roomServer = spawnLogged({
@@ -257,6 +286,16 @@ const run = async () => {
     });
     await waitForHttp(`${roomUrl}/health`, { label: "tabula-room /health" });
 
+    firebaseServer = spawnLogged({
+      command: "npm",
+      args: ["run", "dev:firebase"],
+      cwd: options.tabulaMdRepoDir,
+      env: {},
+      label: "firebase-emulators",
+    });
+    await waitForTcp(8080, { label: "Firestore emulator" });
+    await waitForTcp(9199, { label: "Firebase Storage emulator" });
+
     appServer = spawnLogged({
       command: "npm",
       args: ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(appPort)],
@@ -264,7 +303,10 @@ const run = async () => {
       env: {
         VITE_TABULA_ROOM_URL: roomUrl,
         VITE_TABULA_JSON_URL: "http://127.0.0.1:9",
-        VITE_TABULA_FIREBASE_CONFIG: "",
+        VITE_TABULA_FIREBASE_CONFIG: firebaseConfig,
+        VITE_TABULA_FIREBASE_EMULATOR_HOST: "127.0.0.1",
+        VITE_TABULA_FIRESTORE_EMULATOR_PORT: "8080",
+        VITE_TABULA_FIREBASE_STORAGE_EMULATOR_PORT: "9199",
       },
       label: "tabula-md",
     });
@@ -273,8 +315,11 @@ const run = async () => {
     browser = await chromium.launch({ headless: !options.headed });
     const context = await browser.newContext();
     const page = await context.newPage();
+    const pageDiagnostics = [];
+    page.on("console", (message) => pageDiagnostics.push(`[console:${message.type()}] ${message.text()}`));
+    page.on("pageerror", (error) => pageDiagnostics.push(`[pageerror] ${error.message}`));
 
-    await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl }, async (client) => {
+    await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, firebaseConfig }, async (client) => {
       const tools = await client.listTools();
       const toolNames = tools.tools.map((tool) => tool.name);
       for (const toolName of [
@@ -309,9 +354,25 @@ const run = async () => {
         identityColor: "#2563eb",
       });
       assert.match(room.roomUrl, new RegExp(`^${appOrigin.replaceAll(".", "\\.")}/#room=`));
+      const roomStatusBeforeBrowser = await callTool(client, "tabula_room_status", {
+        sessionId: room.sessionId,
+      });
 
       await page.goto(room.roomUrl);
-      const browserInitialText = await waitForEditorText(page, "Initial from MCP.");
+      let browserInitialText;
+      try {
+        browserInitialText = await waitForEditorText(page, "Initial from MCP.");
+      } catch (error) {
+        const body = await page.locator("body").innerText().catch(() => "[body unavailable]");
+        const roomState = JSON.stringify({
+          status: roomStatusBeforeBrowser.status,
+          socketConnected: roomStatusBeforeBrowser.socketConnected,
+          peerCount: roomStatusBeforeBrowser.peerCount,
+          hydrationStatus: roomStatusBeforeBrowser.hydrationStatus,
+          lastError: roomStatusBeforeBrowser.lastError,
+        });
+        throw new Error(`${error.message}\nMCP room state: ${roomState}\nBrowser body:\n${body}\nBrowser diagnostics:\n${pageDiagnostics.join("\n")}\nRoom server stdout:\n${roomServer.stdout.join("")}\nRoom server stderr:\n${roomServer.stderr.join("")}`);
+      }
       assert(browserInitialText.includes("# MCP Local E2E"), "browser should receive MCP-created workspace text");
 
       const workspace = await callTool(client, "tabula_read_workspace", {
@@ -358,15 +419,21 @@ const run = async () => {
         ],
       });
       assert.equal(applied.applied, true);
-      assert.equal(applied.emittedTextUpdateCount, 2);
-      assert.equal(applied.emittedWorkspaceUpdateCount, 1);
+      assert.equal(applied.changedDocumentIds.length, 2);
 
       const browserAfterMcpText = await waitForEditorText(page, "Edited by tabula-mcp local E2E.");
       assert(browserAfterMcpText.includes("Initial from MCP."), "MCP patch should preserve existing browser text");
       const tabsAfterMcp = await tabTitles(page);
       assert(
-        tabsAfterMcp.some((tab) => tab.title.includes("Agent Notes.md")),
-        `browser should show MCP-created Agent Notes.md tab. Tabs: ${JSON.stringify(tabsAfterMcp)}`,
+        !tabsAfterMcp.some((tab) => tab.title.includes("Agent Notes.md")),
+        "a remote document creation must not disrupt the human's open tabs",
+      );
+      await page.getByRole("button", { name: "Open Project Context" }).click();
+      await page.getByRole("button", { name: "Files" }).click();
+      await page.locator(".right-file-tree").getByText("Agent Notes", { exact: false }).waitFor();
+      assert(
+        await page.locator(".right-file-tree").innerText().then((text) => text.includes("Agent Notes")),
+        "browser files panel should show the MCP-created Agent Notes document",
       );
 
       const beforeHumanEdit = await callTool(client, "tabula_read_workspace_document", {
@@ -420,6 +487,7 @@ const run = async () => {
   } finally {
     await browser?.close();
     await stopProcess(appServer);
+    await stopProcess(firebaseServer);
     await stopProcess(roomServer);
   }
 };

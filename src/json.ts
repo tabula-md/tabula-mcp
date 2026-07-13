@@ -20,7 +20,6 @@ const summarizeObject = (value: Record<string, unknown>) => {
   const resourceUri = stringValue(value.resourceUri);
   const documents = Array.isArray(value.documents) ? value.documents : undefined;
   const sessions = Array.isArray(value.sessions) ? value.sessions : undefined;
-  const roomEvents = Array.isArray(value.roomEvents) ? value.roomEvents : undefined;
 
   if (workspaceId) {
     parts.push(`workspaceId=${workspaceId}`);
@@ -39,9 +38,6 @@ const summarizeObject = (value: Record<string, unknown>) => {
   }
   if (sessions) {
     parts.push(`sessions=${sessions.length}`);
-  }
-  if (roomEvents) {
-    parts.push(`roomEvents=${roomEvents.length}`);
   }
   if (resourceUri) {
     parts.push(`resourceUri=${resourceUri}`);

@@ -5,7 +5,8 @@ HTTP MCP endpoint. In both modes, MCP document checkpoints are agent working
 state and may contain plaintext Markdown. This is separate from Tabula.md core
 services: `tabula-room` remains an encrypted relay, and `tabula-json` remains an
 encrypted snapshot blob store. Live room persistence, when enabled, uses
-Firebase Firestore as an encrypted workspace room checkpoint store.
+Firebase Storage for encrypted Yjs checkpoint blobs and Firestore for opaque
+generation pointers.
 
 ## Trust Boundary
 
@@ -25,7 +26,7 @@ Untrusted or remote boundary:
 
 - Tabula Room server
 - Tabula JSON snapshot service
-- Firebase Firestore room checkpoint store
+- Firebase Storage and Firestore room checkpoint stores
 - network intermediaries
 - issue trackers, logs, public transcripts, screenshots, and telemetry
 
@@ -62,37 +63,38 @@ link snapshots.
 
 When `TABULA_MCP_FIREBASE_CONFIG`, `TABULA_FIREBASE_CONFIG`, or
 `VITE_TABULA_FIREBASE_CONFIG` is configured, `tabula-mcp` reads and writes the
-same `WorkspaceRoomCheckpoint` shape as `tabula-md`:
+same encrypted Y.Doc update format as `tabula-md`:
 
 ```txt
-schema: tabula.workspace-room-checkpoint
-workspace: WorkspaceRoomState
-documents: WorkspaceProposalDocument[]
+kind: workspace-room-crdt
+schemaVersion: 2
+payload: Y.encodeStateAsUpdate(workspaceDoc)
 ```
 
-Before Firestore sees the payload, the MCP process encrypts it locally with the
-room key from the `#room` fragment and room-bound AES-GCM additional data. The
-Firestore document path is public-room-id scoped:
+Before Firebase sees the payload, the MCP process encrypts it locally with the
+room key from the `#room` fragment and room-bound AES-GCM additional data.
+Storage receives the encrypted blob at an opaque generation path:
 
 ```txt
-roomCheckpoints/{roomId}
+roomCheckpoints/{roomId}/{randomBlobId}.bin
 ```
 
-Firestore receives:
+Firestore receives only:
 
 - format version
-- checkpoint version
-- encrypted checkpoint bytes
+- generation
+- opaque Storage blob path and byte length
 - update timestamp
+- expiry timestamp
 
 Firestore must not receive:
 
 - room keys
 - plaintext Markdown
-- decrypted workspace events
+- decrypted Yjs updates
 
-`tabula_create_workspace_room` saves this encrypted checkpoint after publishing
-initial workspace room events when Firebase is configured.
+`tabula_create_workspace_room` saves this encrypted checkpoint after creating
+the initial workspace Y.Doc when Firebase is configured.
 `tabula_connect_room` attempts to load and decrypt it before joining the live
 relay. The structured tool output includes `checkpointStatus` so agents can tell
 whether recovery was `loaded`, `saved`, `missing`, `disabled`, or `failed`.
@@ -195,10 +197,9 @@ Only send it to intended collaborators or agents.
 ## Room Write Policy
 
 Tabula MCP joins a live room as a `tabula-mcp` agent actor and uses the same
-room collaboration contract as Tabula.md. Document text changes are encrypted
-`text.updated` room events containing document-scoped Yjs update bytes. Folder
-and document tree changes are encrypted `workspace.updated` room events
-containing the latest workspace state.
+workspace Y.Doc, binary RoomWire v2 sync protocol, and Awareness state as
+Tabula.md. Document text and tree changes are Yjs transactions. The relay sees
+only encrypted `room-event` envelopes and cannot distinguish their meaning.
 
 Hosted production remote servers expose room/workspace tools as part of the
 agent-facing Tabula client surface. A remote MCP server that joins a room becomes

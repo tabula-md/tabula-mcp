@@ -125,7 +125,7 @@ const roomClientMock = vi.hoisted(() => {
         kind: "agent",
         name: identityName?.trim() || "Tabula Agent",
         client: "tabula-mcp",
-        capabilities: [...(actorCapabilities ?? ["presence", "read", "comment", "write", "create", "delete", "move"])],
+        capabilities: [...(actorCapabilities ?? ["presence", "read", "write"])],
         color: identityColor?.trim() || "#2563eb",
         joinedAt: new Date("2026-07-10T00:00:00.000Z").toISOString(),
       };
@@ -286,8 +286,6 @@ const roomClientMock = vi.hoisted(() => {
         throw new Error("Workspace state has not been received yet.");
       }
       const changedDocumentIds = new Set<string>();
-      let emittedWorkspaceUpdateCount = 0;
-      let emittedTextUpdateCount = 0;
 
       for (const change of changes) {
         if (change.type === "document.patch") {
@@ -304,7 +302,6 @@ const roomClientMock = vi.hoisted(() => {
           this.workspace.nodes = this.workspace.nodes.map((node) =>
             node.id === change.documentId ? { ...node, sha256, textLength: markdown.length } : node,
           );
-          emittedTextUpdateCount += 1;
           changedDocumentIds.add(change.documentId);
           continue;
         }
@@ -329,8 +326,6 @@ const roomClientMock = vi.hoisted(() => {
             markdown: change.markdown,
             sha256,
           });
-          emittedWorkspaceUpdateCount += 1;
-          emittedTextUpdateCount += 1;
           changedDocumentIds.add(documentId);
           continue;
         }
@@ -343,7 +338,6 @@ const roomClientMock = vi.hoisted(() => {
           if (cached) {
             this.documents.set(change.documentId, { ...cached, title: change.title });
           }
-          emittedWorkspaceUpdateCount += 1;
           changedDocumentIds.add(change.documentId);
           continue;
         }
@@ -352,14 +346,12 @@ const roomClientMock = vi.hoisted(() => {
           this.workspace.nodes = this.workspace.nodes.map((node) =>
             node.id === change.documentId ? { ...node, parentId: change.parentId } : node,
           );
-          emittedWorkspaceUpdateCount += 1;
           changedDocumentIds.add(change.documentId);
           continue;
         }
 
         this.workspace.nodes = this.workspace.nodes.filter((node) => node.id !== change.documentId);
         this.documents.delete(change.documentId);
-        emittedWorkspaceUpdateCount += 1;
         changedDocumentIds.add(change.documentId);
       }
 
@@ -371,8 +363,6 @@ const roomClientMock = vi.hoisted(() => {
         applied: true,
         changes,
         changedDocumentIds: this.lastChangedDocumentIds,
-        emittedWorkspaceUpdateCount,
-        emittedTextUpdateCount,
         workspace: this.workspace,
         documents: documentNodes(this.workspace).map((node) => ({
           documentId: node.id,
@@ -421,7 +411,6 @@ const roomClientMock = vi.hoisted(() => {
         },
         hydrationStatus: this.workspace ? "ready" : "waiting-for-peer-state",
         stateReceived: Boolean(this.workspace),
-        roomEvents: [],
       };
     }
 
@@ -694,7 +683,7 @@ describe("MCP end-to-end tool workflows", () => {
         name: "Workflow Agent",
       });
       expect(room.structuredContent.actor.capabilities).toEqual(
-        expect.arrayContaining(["presence", "read", "write", "create", "delete", "move"]),
+        ["presence", "read", "write"],
       );
       expect(room.structuredContent.published).toMatchObject({
         emittedWorkspace: true,
@@ -780,8 +769,6 @@ describe("MCP end-to-end tool workflows", () => {
       const apply = await callTool<{
         applied: boolean;
         changedDocumentIds: string[];
-        emittedTextUpdateCount: number;
-        emittedWorkspaceUpdateCount: number;
         workspace: { nodes: Array<{ id: string; title: string; parentId: string | null }> };
       }>(client, calledTools, "tabula_apply_workspace_changes", {
         sessionId: room.structuredContent.sessionId,
@@ -816,8 +803,6 @@ describe("MCP end-to-end tool workflows", () => {
       });
       expect(apply.structuredContent).toMatchObject({
         applied: true,
-        emittedTextUpdateCount: 2,
-        emittedWorkspaceUpdateCount: 4,
       });
       expect(apply.structuredContent.workspace.nodes).toEqual(
         expect.arrayContaining([

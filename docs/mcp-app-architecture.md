@@ -84,7 +84,7 @@ src/
   crypto.ts
   share.ts
   guidance.ts
-  room-events.ts
+  workspace-contract.ts
 api/
   mcp.ts
   health.ts
@@ -110,8 +110,9 @@ Responsibilities:
 - `src/app/tools.ts`: model-facing App tools and App-only state tools
 - `src/documents/*`: document domain and local/remote checkpoint stores
 - `src/share.ts`: encrypted JSON snapshot export
-- `src/room-client.ts`, `src/protocol.ts`, `src/crypto.ts`, `src/room-events.ts`:
-  room transport, protocol parsing, encryption primitives, and agent actor/event contracts
+- `src/room-client.ts`, `src/protocol.ts`, `src/crypto.ts`, `src/workspace-contract.ts`:
+  room transport adapters, protocol parsing, and MCP workspace tool views over
+  the shared `@tabula-md/tabula` collaboration core
 - `api/mcp.ts`, `api/health.ts`, `api/ready.ts`: Vercel deployment entrypoints
 - `workers/tabula-mcp-worker.ts`: Cloudflare Workers deployment entrypoint
 
@@ -244,10 +245,10 @@ server keeps plaintext checkpoints for iterative agent editing, while
 
 Live room checkpoints are a separate room-collaboration persistence path. When
 Firebase is configured, `tabula_create_workspace_room` and `tabula_connect_room`
-use the same encrypted `WorkspaceRoomCheckpoint` contract as `tabula-md`.
-Firestore stores encrypted room recovery bytes under `roomCheckpoints/{roomId}`;
-the room key remains in the `#room` fragment and is used only inside the MCP
-client process.
+use the same encrypted Y.Doc checkpoint contract as `tabula-md`. Firebase
+Storage stores the encrypted blob; Firestore stores only its generation,
+opaque path, size, update time, and expiry. The room key remains in the `#room`
+fragment and is used only inside the MCP client process.
 
 ## Dev Harness
 

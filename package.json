@@ -72,9 +72,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tabula-md/tabula": "0.2.0",
     "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@firebase/app": "^0.15.1",
+    "@firebase/firestore": "^4.16.0",
+    "@firebase/storage": "^0.14.3",
+    "lib0": "^0.2.117",
     "socket.io-client": "^4.8.3",
+    "y-protocols": "^1.0.7",
     "yjs": "^13.6.27",
     "zod": "^4.4.3"
   },

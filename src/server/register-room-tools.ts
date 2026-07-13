@@ -1,13 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { RoomCapability } from "@tabula-md/tabula/collaboration";
 import { z } from "zod";
 import { assertLocalImportRootAllowed } from "../import-roots.js";
 import { jsonContent, errorContent } from "../json.js";
 import { parseRoomShareUrl, resolveRoomServerUrl } from "../protocol.js";
 import type { SessionRegistry } from "../registry.js";
 import type { RuntimeEnvironment } from "../env.js";
-import { createFirebaseRoomCheckpointStore } from "../room-checkpoints.js";
+import { createFirebaseWorkspaceRoomCheckpointStore } from "../room-checkpoints.js";
 import { TabulaRoomClient } from "../room-client.js";
-import type { RoomCapability } from "../room-events.js";
 import { createRoomShareUrl, generateRoomId, generateRoomKey, shareMarkdownWorkspace } from "../share.js";
 import { addWorkspaceDocumentResourceUri, addWorkspaceResourceUris } from "../workspace-resources.js";
 import {
@@ -50,11 +50,7 @@ const workspaceFileInputSchema = z.object({
 const workspacePublisherCapabilities = [
   "presence",
   "read",
-  "comment",
   "write",
-  "create",
-  "delete",
-  "move",
 ] as const satisfies readonly RoomCapability[];
 
 const textPatchInputSchema = z.object({
@@ -541,16 +537,16 @@ export const registerRoomTools = (
           identityName,
           identityColor,
           actorCapabilities: workspacePublisherCapabilities,
-          roomCheckpointStore: createFirebaseRoomCheckpointStore({ env }),
+          roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
         });
         let recoveryStatus: Awaited<ReturnType<TabulaRoomClient["connect"]>>;
         let published: Awaited<ReturnType<TabulaRoomClient["publishWorkspaceSnapshot"]>>;
         try {
-          recoveryStatus = await client.connect();
           published = await client.publishWorkspaceSnapshot({
             workspace: roomWorkspace.workspace,
             documents: roomWorkspace.documents,
           });
+          recoveryStatus = await client.connect();
         } catch (error) {
           client.disconnect();
           throw error;
@@ -566,7 +562,7 @@ export const registerRoomTools = (
           recoveryStatus,
           published,
           note:
-            "Created a Tabula workspace room, published encrypted workspace.updated plus document-scoped text.updated room events, and saved an encrypted live room checkpoint when Firebase is configured. Continue with hash-guarded direct workspace edit tools for follow-up edits.",
+            "Created a Tabula workspace room, synchronized one encrypted workspace CRDT, and saved an encrypted live room checkpoint when Firebase is configured. Continue with hash-guarded direct workspace edit tools for follow-up edits.",
         };
       }),
   );
@@ -610,7 +606,7 @@ export const registerRoomTools = (
           writeAccess: writeEnabled,
           identityName,
           identityColor,
-          roomCheckpointStore: createFirebaseRoomCheckpointStore({ env }),
+          roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
         });
         const recoveryStatus = await client.connect();
         registry.add(client);
@@ -757,7 +753,7 @@ export const registerRoomTools = (
     "tabula_apply_workspace_changes",
     {
       description:
-        "Apply one or more workspace document changes to a connected Tabula room as direct encrypted workspace.updated and text.updated room events.",
+        "Apply one or more workspace document changes atomically to the connected encrypted workspace CRDT.",
       inputSchema: {
         ...optionalSessionSchema,
         changes: z
@@ -806,12 +802,12 @@ export const registerRoomTools = (
     "tabula_wait_for_changes",
     {
       description:
-        "Wait for a connected room's active document hash to differ from sinceSha256 or for an encrypted workspace room event, then return workspace document hash summaries and recent room events.",
+        "Wait for a connected room's active document hash or workspace CRDT state to change, then return workspace document hash summaries.",
       inputSchema: {
         ...optionalSessionSchema,
         sinceSha256: z.string().min(1).optional(),
         timeoutMs: z.number().int().min(0).max(30_000).default(15_000),
-        includeMarkdown: z.boolean().default(false).describe("Include legacy active-document Markdown in the result."),
+        includeMarkdown: z.boolean().default(false).describe("Include the active document Markdown in the result."),
       },
       annotations: {
         readOnlyHint: true,
@@ -831,7 +827,7 @@ export const registerRoomTools = (
           ...result,
           markdown: "",
           markdownIncluded: false,
-          note: "Markdown omitted by default. Call tabula_read_workspace_document for exact document text, or pass includeMarkdown=true for legacy active-document Markdown.",
+          note: "Markdown omitted by default. Call tabula_read_workspace_document for exact document text, or pass includeMarkdown=true.",
         };
       }),
   );
