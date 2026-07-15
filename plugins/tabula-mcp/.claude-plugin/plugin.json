@@ -1,0 +1,8 @@
+{
+  "name": "tabula-mcp",
+  "description": "Tabula.md workspace rooms for Claude Code.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Tabula.md"
+  }
+}
