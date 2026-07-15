@@ -22,6 +22,7 @@ npm run typecheck
 npm test
 npm run test:app
 npm run test:stdio
+npm run check:claude-plugin
 npm run check:deploy-targets
 npm run check:exports
 npm run check:pack
@@ -42,6 +43,9 @@ Expected results:
   it creates a document, writes the default local checkpoint, restarts the
   server, reopens the checkpoint, and shares with an explicit JSON snapshot
   service argument.
+- Claude Code marketplace configuration passes, including the marketplace
+  entry, plugin metadata, and the explicit npm package version pinned by the
+  plugin MCP configuration.
 - HTTP server tests pass, including `/health` metadata and a Streamable HTTP MCP
   client connection to `/mcp`.
 - Vercel and Cloudflare deployment target checks pass: the Vercel API entrypoint

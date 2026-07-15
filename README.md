@@ -24,6 +24,7 @@ endpoint.
 ## Documentation
 
 - [Codex CLI](docs/codex-cli.md): local stdio setup, approval behavior, and room workflow checks.
+- [Claude Code](docs/claude-code.md): marketplace plugin installation and verification.
 - [Claude Desktop](docs/claude-desktop.md): MCPB build, install, and manual smoke test.
 - [Deployment](docs/deployment.md): Vercel and Cloudflare hosted MCP targets.
 - [Security Model](docs/security-model.md): local trust boundary, room keys, share/export, and write policy.
@@ -113,6 +114,20 @@ tools.
 
 For the one-click Claude Desktop path, use the MCPB flow instead. It is
 zero-config and uses the same direct workspace collaboration surface.
+
+## Claude Code Plugin
+
+Claude Code users can install Tabula MCP from this repository's marketplace:
+
+```sh
+claude plugin marketplace add tabula-md/tabula-mcp
+claude plugin install tabula-mcp@tabula-md
+```
+
+The plugin starts the published `@tabula-md/mcp` package through `npx`. It
+adds the MCP server only; Tabula-specific Skills and slash commands are not
+installed. See [Claude Code](docs/claude-code.md) for verification and release
+versioning.
 
 ## Remote HTTP MCP
 

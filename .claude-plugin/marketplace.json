@@ -1,0 +1,14 @@
+{
+  "name": "tabula-md",
+  "owner": {
+    "name": "Tabula.md"
+  },
+  "description": "Claude Code plugins for Tabula.md Markdown collaboration.",
+  "plugins": [
+    {
+      "name": "tabula-mcp",
+      "source": "./plugins/tabula-mcp",
+      "description": "Open and collaborate on Tabula.md Markdown rooms from Claude Code."
+    }
+  ]
+}
