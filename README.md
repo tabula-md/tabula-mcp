@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://tabula.md">
+    <img src="https://tabula.md/favicon.svg" alt="Tabula.md" width="56" />
+  </a>
+</p>
+
 # Tabula.md MCP
 
 Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.
