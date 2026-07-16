@@ -102,13 +102,41 @@ const assertNoPageErrors = (consoleErrors, pageErrors) => {
   assert.deepEqual(consoleErrors, [], "dev harness should not log browser console errors");
 };
 
+const assertInlineDocumentPresentation = async (page, label) => {
+  const presentation = await page.evaluate(() => {
+    const preview = document.querySelector(".markdown-preview");
+    const status = document.querySelector(".status-grid");
+    const context = document.querySelector(".context-pane");
+    const shell = document.querySelector(".shell");
+    const toolbar = document.querySelector(".toolbar");
+
+    return {
+      contextDisplay: context ? window.getComputedStyle(context).display : "missing",
+      previewHeight: preview?.getBoundingClientRect().height ?? 0,
+      previewMaxHeight: preview ? window.getComputedStyle(preview).maxHeight : "missing",
+      shellMinHeight: shell ? window.getComputedStyle(shell).minHeight : "missing",
+      statusDisplay: status ? window.getComputedStyle(status).display : "missing",
+      toolbarHeight: toolbar?.getBoundingClientRect().height ?? 0,
+    };
+  });
+
+  assert.equal(presentation.statusDisplay, "none", `${label} should hide MCP implementation status`);
+  assert.equal(presentation.contextDisplay, "none", `${label} should show the document, not a fake side panel`);
+  assert.equal(presentation.previewMaxHeight, "420px", `${label} should bound the inline preview`);
+  assert(presentation.previewHeight <= 420, `${label} preview should not consume the host viewport`);
+  assert.notEqual(presentation.shellMinHeight, "100vh", `${label} should not reserve a desktop-sized inline app`);
+  assert(presentation.toolbarHeight <= 48, `${label} should keep continuation controls compact`);
+};
+
 const runDocumentFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
   await waitForMessage(page, "Tabula.md document is ready.");
   await page.getByRole("button", { name: "Open in Tabula" }).waitFor({ state: "visible" });
+  await assertInlineDocumentPresentation(page, "inline document");
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
+  await page.getByRole("heading", { name: "Outline" }).waitFor({ state: "visible" });
 
   const markdown = [
     "# Flow Smoke",
@@ -218,6 +246,7 @@ const runMobileLayoutFlow = async (baseUrl, browser) => {
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
   await waitForMessage(page, "Tabula.md document is ready.");
 
+  await assertInlineDocumentPresentation(page, "mobile inline document");
   await assertNoHorizontalOverflow(page, "mobile initial document layout");
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
@@ -260,6 +289,7 @@ const runRoomFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=room`);
   await waitForMessage(page, "Tabula.md content is current.");
+  await assertInlineDocumentPresentation(page, "inline room document");
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
 
