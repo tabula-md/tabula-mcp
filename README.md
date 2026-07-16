@@ -314,9 +314,9 @@ small ESM surface for tests and local embedding:
 
 ## Tools
 
-- `tabula_create_document`: create a Tabula.md Markdown document checkpoint and open the interactive MCP App editor in clients that support MCP Apps.
+- `tabula_create_document`: create a local Tabula.md Markdown checkpoint and open a compact MCP handoff card. From there, open an encrypted copy or start a live Tabula.md session.
 - `tabula_list_documents`: list Tabula.md document checkpoints in this MCP server.
-- `tabula_open_document`: open the latest or selected document checkpoint in the MCP App editor.
+- `tabula_open_document`: open the latest or selected document checkpoint in the MCP handoff card.
 - `tabula_read_me`: return workflow guidance for documents, rooms, sharing, and security boundaries.
 - `tabula_share_document`: export an App document checkpoint to an encrypted Tabula.md snapshot link. The JSON snapshot service receives only encrypted bytes; the snapshot key stays in the returned `#json` URL fragment.
 - `tabula_create_workspace`: create a local MCP workspace from zero or more inline Markdown files.
@@ -330,7 +330,7 @@ small ESM surface for tests and local embedding:
 - `tabula_read_workspace_document`: read decrypted Markdown for one cached workspace document from a room session or local/imported workspace.
 - `tabula_read_workspace_context`: read bounded Markdown excerpts from selected, searched, path-filtered, or changed cached workspace documents for agent planning without loading every document in full.
 - `tabula_apply_workspace_changes`: apply multi-document `document.patch`/`document.create`/`document.rename`/`document.move`/`document.delete` inputs atomically to the connected workspace CRDT.
-- `tabula_open_room_view`: open a connected room in the MCP App for status, outline, Markdown preview, refresh, and selection handoff in clients that support MCP Apps.
+- `tabula_open_room_view`: open a connected room's handoff card and continue in the actual Tabula.md session.
 - `tabula_set_presence`: publish cursor/selection presence to collaborators.
 - `tabula_wait_for_changes`: wait until the active document hash or workspace CRDT changes, returning document hash summaries.
 - `tabula_disconnect_room`: close a session.
@@ -379,26 +379,27 @@ Current release budget checks:
 - 20-file default workspace context result: <= 12 KB
 - 2 KB document read result: <= 4 KB
 
-## MCP App Document
+## MCP App Session Card
 
-Tabula MCP includes a progressive MCP Apps surface in the same package. Call
-`tabula_create_document` to open an editable Markdown document checkpoint when the
-MCP client supports `text/html;profile=mcp-app`.
+Tabula MCP includes a compact MCP Apps handoff surface in the same package.
+Call `tabula_create_document` to create a local Markdown checkpoint and open a
+Tabula.md Session Card when the MCP client supports
+`text/html;profile=mcp-app`.
 
 Call `tabula_read_me` once when the model needs to choose a Tabula.md workflow
 or verify security boundaries. It returns concise topic-specific guidance for
 local documents, encrypted rooms, sharing, and write policy.
 
-The Document App is bundled into `dist/document-app.html` during `npm run build`.
-For a local document, inline mode shows a Markdown preview with **Open a copy**,
-**Start session**, and `Edit`: Open a copy creates an encrypted `#json`
-snapshot, while Start session publishes the draft into a live `#room`.
-For a connected Room, the primary action is **Open session**, which opens that
-same Room in Tabula.md. Editing happens in fullscreen, where the App provides
-title editing, outline context, and Editor/Split/Preview modes for local
-Markdown drafts. It also opens connected rooms through `tabula_open_room_view`
-as a read-only room mode. It does not replace the
-workspace room tools: clients without MCP Apps support can keep using
+The Session Card is bundled into `dist/document-app.html` during `npm run build`.
+It does not reproduce the Tabula editor inside Claude. For a local document it
+shows **Open a copy** and **Start session**: Open a copy creates an encrypted
+`#json` snapshot, while Start session creates a live `#room`. For a connected
+Room, the primary action is **Open session**, which opens that same Room in the
+actual Tabula.md app. The surrounding Claude chrome belongs to the MCP host;
+Tabula.md remains the only visual editing and real-time collaboration surface.
+
+The Session Card does not replace the workspace room tools: clients without
+MCP Apps support can keep using
 `tabula_read_workspace`, `tabula_read_workspace_document`, and
 `tabula_apply_workspace_changes` normally. Agents can also create/import a
 workspace first, share it as an encrypted `#json` link, or create a fresh live
@@ -409,49 +410,34 @@ machine's local application state so the MCP server can recover them across
 process restarts.
 Set `TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS=1` to make local documents
 memory-only for a server session, or `TABULA_MCP_DOCUMENT_STORE_DIR` to choose a
-different local checkpoint directory. The MCP App also keeps an unsaved
-plaintext draft in the host browser's local storage, scoped by document id, so
-refreshing or reopening the App can recover recent edits. Saving clears the
-matching local draft.
+different local checkpoint directory. The Session Card does not keep a second
+browser-side editing draft; opening a copy or session hands the work into the
+actual Tabula.md client.
 
 Remote HTTP deployments use a checkpoint store selected by
 `TABULA_MCP_DEPLOYMENT_MODE=remote`: in-process TTL memory by default, or
 Upstash Redis/Vercel KV REST when configured. These remote checkpoints are
 plaintext MCP working state, not encrypted Tabula JSON snapshots. Exporting an
 App document into an encrypted Tabula.md share link is available through
-`tabula_share_document` and the App's `Share` control.
+`tabula_share_document` and the Session Card's **Open a copy** action.
 
-The app uses internal `tabula_app_document_snapshot`,
-`tabula_app_save_document`, and `tabula_app_room_snapshot` tools for App state.
-They are marked app-only so model-facing tool lists stay focused, while the
-normal read/write tools remain the compatibility path for Codex, Claude, and
-other MCP clients.
+The App keeps its implementation tools app-only so model-facing tool lists stay
+focused, while the normal document and Room tools remain the compatibility path
+for Codex, Claude, and other MCP clients.
 
 Starting a session makes the Room—not the local document checkpoint—the
 collaboration source of truth. A local MCP client may create a temporary Room
 when another participant remains connected; hosted MCP requires configured
 encrypted Room persistence before it will create a Room.
 
-For MCP App document checkpoints, the `Send Changes` control sends a compact
-Markdown change summary back into model context. It uses changed ranges and
-bounded excerpts instead of sending the whole document on every edit.
+Starting a session makes the Room—not the local document checkpoint—the
+collaboration source of truth. Agents read and update it through the guarded
+workspace tools, and people edit it in Tabula.md. Treat every `#json` or
+`#room` URL as a bearer secret.
 
-The `Send Selection` control similarly bounds large selections to a head/tail
-excerpt with truncation metadata instead of sending the full selected text.
-
-If a recovered browser draft differs from the latest saved MCP session snapshot,
-the App marks the draft as restored or conflicted and asks the user to review it
-before saving. This draft recovery is local to the MCP App host; it does not
-upload plaintext Markdown to Tabula.md room infrastructure.
-
-The `Share` control saves the current App document into the MCP checkpoint
-store, then uploads only encrypted snapshot bytes to the Tabula JSON snapshot
-service.
-It sends the resulting `https://tabula.md/#json=...,...` link back into model
-context. If the user has unsent App edits, the share handoff also includes the
-same compact change summary used by `Send Changes`, so the model can understand
-what changed without receiving the full Markdown body.
-Treat that link as a bearer secret.
+MCP hosts cache App resources by URI. Tabula fingerprints the bundled Session
+Card into its `ui://` resource URI, so a changed local MCPB does not reuse an
+earlier installed App bundle.
 
 See [MCP App Architecture](docs/mcp-app-architecture.md) for the bundled App
 resource structure and [Security Model](docs/security-model.md) for plaintext
@@ -509,9 +495,9 @@ npm run dev:app
 ```
 
 Then open `http://127.0.0.1:5174/index-dev.html?tabula-dev=1` for a local
-document fixture, or add `&fixture=room` for the read-only room fixture. The
-mock bridge implements App inputs, snapshots, save, share, display mode, and
-model context updates inside the browser only.
+document fixture, or add `&fixture=room` for the live-session fixture. The
+mock bridge implements the Session Card's App inputs, encrypted-copy handoff,
+session creation, and external-link opening inside the browser only.
 
 For an App smoke check:
 
@@ -520,10 +506,9 @@ npm run test:app
 ```
 
 This runs static bundle assertions and a Playwright browser flow against the dev
-harness. The browser flow edits and saves a local document in fullscreen, sends
-compact change and selection context, shares an encrypted link, opens the room
-fixture, refreshes it, and exercises fullscreen mode. If Chromium is missing in
-a fresh environment, run `npx playwright install chromium`.
+harness. The browser flow opens an encrypted copy, starts a live session, opens
+that session, and verifies the room handoff on desktop and mobile widths. If
+Chromium is missing in a fresh environment, run `npx playwright install chromium`.
 
 ## Editing Model
 

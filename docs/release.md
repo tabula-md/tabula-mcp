@@ -144,22 +144,16 @@ After installing the generated `.mcpb`:
 
 1. Call `tabula_read_me`.
 2. Create a local document with `tabula_create_document`.
-3. Confirm a local-document preview shows **Open a copy**, **Start session**,
-   and `Edit`.
-4. Click `Edit`, then edit title and Markdown in fullscreen.
-5. Switch between Editor, Split, and Preview.
-6. Save the document.
-7. Call `tabula_list_documents` and confirm the document checkpoint appears.
-8. Call `tabula_open_document` and confirm the App reopens the checkpoint.
-9. Click Send Changes and confirm Claude receives a compact summary.
-10. Click Share and confirm Claude receives a `https://tabula.md/#json=...,...`
-   link.
-11. Open that link in Tabula.md and confirm the snapshot import flow starts.
-12. Click **Start session** and confirm the result is a Room view whose
-    **Open session** action opens a `https://tabula.md/#room=...,...` URL.
-13. For room testing, connect a separate live room link with `tabula_connect_room`.
-14. Open the room view with `tabula_open_room_view`.
-15. Confirm Markdown preview, outline, refresh, and selection handoff work.
+3. Confirm the local-document Session Card shows **Open a copy** and **Start
+   session**, with no Markdown editor or `Edit` action.
+4. Call `tabula_list_documents` and confirm the document checkpoint appears.
+5. Call `tabula_open_document` and confirm the Session Card reopens the checkpoint.
+6. Click **Open a copy** and confirm it opens a `https://tabula.md/#json=...,...`
+   link in Tabula.md.
+7. Click **Start session** and confirm the result is a Room card whose
+   **Open session** action opens a `https://tabula.md/#room=...,...` URL.
+8. For room testing, connect a separate live room link with `tabula_connect_room`.
+9. Open the room handoff card with `tabula_open_room_view`.
 
 For local Tabula.md development, run the room server separately and use local
 links such as:

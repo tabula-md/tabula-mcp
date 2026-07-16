@@ -1,839 +1,191 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps/app-with-deps";
-import { createElement } from "react";
-import { createRoot } from "react-dom/client";
-import { TabulaEmbeddedDocumentWorkbench } from "@tabula-md/tabula/workbench";
-import "@tabula-md/tabula/workbench.css";
 import tabulaLogoUrl from "../../assets/icon.png";
-import { createMarkdownChangeSummary, formatDocumentChangeMessage } from "./change-summary.js";
-import { createSelectionContext, formatSelectionContextMessage } from "./selection-context.js";
-import {
-  clearDocumentDraft,
-  formatDraftStorageReason,
-  loadDocumentDraft,
-  saveDocumentDraft,
-} from "./draft-storage.js";
-import { renderMarkdownPreview } from "./markdown-preview.js";
 import "./document-app.css";
 
 const elements = {
-  titleInput: document.getElementById("titleInput"),
-  connectionStatus: document.getElementById("connectionStatus"),
-  writeMode: document.getElementById("writeMode"),
-  shaValue: document.getElementById("shaValue"),
-  peerCount: document.getElementById("peerCount"),
-  draftStatus: document.getElementById("draftStatus"),
+  tabulaMark: document.getElementById("tabulaMark"),
+  eyebrow: document.getElementById("sessionEyebrow"),
+  title: document.getElementById("sessionTitle"),
+  summary: document.getElementById("sessionSummary"),
+  documentMeta: document.getElementById("documentMeta"),
+  collaborationMeta: document.getElementById("collaborationMeta"),
   message: document.getElementById("message"),
-  contextPane: document.getElementById("contextPane"),
-  outlineList: document.getElementById("outlineList"),
-  markdownEditor: document.getElementById("markdownEditor"),
-  markdownPane: document.querySelector(".markdown-pane"),
-  markdownPreview: document.getElementById("markdownPreview"),
-  workbench: document.getElementById("tabulaWorkbench"),
-  roomHandoff: document.getElementById("roomHandoff"),
-  roomHandoffMark: document.getElementById("roomHandoffMark"),
-  roomHandoffTitle: document.getElementById("roomHandoffTitle"),
-  roomHandoffSummary: document.getElementById("roomHandoffSummary"),
-  roomHandoffMeta: document.getElementById("roomHandoffMeta"),
-  openSessionCardButton: document.getElementById("openSessionCardButton"),
-  viewModeButtons: document.querySelectorAll("[data-view-mode]"),
-  contextTabButtons: document.querySelectorAll("[data-context-tab]"),
-  textLength: document.getElementById("textLength"),
-  openTabulaButton: document.getElementById("openTabulaButton"),
+  openCopyButton: document.getElementById("openCopyButton"),
   startSessionButton: document.getElementById("startSessionButton"),
-  saveDocumentButton: document.getElementById("saveDocumentButton"),
-  sendChangesButton: document.getElementById("sendChangesButton"),
-  shareDocumentButton: document.getElementById("shareDocumentButton"),
-  refreshButton: document.getElementById("refreshButton"),
-  sendSelectionButton: document.getElementById("sendSelectionButton"),
-  displayModeButton: document.getElementById("displayModeButton"),
+  openSessionButton: document.getElementById("openSessionButton"),
 };
 
 const state = {
   app: null,
   mode: "idle",
   documentId: "",
-  title: "",
   sessionId: "",
-  roomId: "",
   shareUrl: "",
-  roomStatus: "",
-  roomHydrationStatus: "",
-  roomPeerCount: 0,
-  sha256: "",
-  lastSavedMarkdown: "",
-  lastSavedTitle: "",
-  lastContextMarkdown: "",
-  displayMode: "inline",
-  editViewMode: "split",
-  viewMode: "split",
-  contextView: "outline",
-  markdown: "",
-  selectedText: "",
-  workbenchRoot: null,
+  title: "",
 };
 
-let messageTimeout;
-
-const setMessage = (text, tone = "neutral") => {
-  window.clearTimeout(messageTimeout);
-  elements.message.textContent = text;
-  elements.message.dataset.tone = tone;
-  if (text && tone === "neutral") {
-    messageTimeout = window.setTimeout(() => {
-      if (elements.message.textContent === text) {
-        elements.message.textContent = "";
-      }
-    }, 2_500);
-  }
-};
-
-const setDraftStatus = (text, tone = "neutral") => {
-  elements.draftStatus.textContent = text;
-  elements.draftStatus.dataset.tone = tone;
-};
-
-const getDraftStorage = () => {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-};
-
-const shortHash = (value) => (value ? `${value.slice(0, 10)}...${value.slice(-6)}` : "-");
+const formatCount = (value) => new Intl.NumberFormat("en-US").format(Number(value) || 0);
 
 const getErrorText = (result) => {
   const textBlock = result?.content?.find((item) => item.type === "text");
-  return textBlock?.text || "Tabula Document App could not load the current content.";
+  return textBlock?.text || "Tabula.md could not prepare this handoff.";
 };
 
-const currentTitle = () => elements.titleInput.value.trim() || "Untitled Document";
-
-const updateTitleInputState = () => {
-  elements.titleInput.disabled = state.mode === "idle";
-  elements.titleInput.readOnly = state.mode !== "document" || state.displayMode !== "fullscreen";
+const setMessage = (text, tone = "neutral") => {
+  elements.message.textContent = text;
+  elements.message.dataset.tone = tone;
 };
 
-const updateDocumentActionState = () => {
-  const isDocument = state.mode === "document" && Boolean(state.documentId);
-  const isRoom = state.mode === "room" && Boolean(state.sessionId) && Boolean(state.shareUrl);
-  const hasContextChanges = isDocument && state.markdown !== state.lastContextMarkdown;
-  const hasSavedContentChanges =
-    isDocument &&
-    (state.markdown !== state.lastSavedMarkdown || currentTitle() !== state.lastSavedTitle);
+const updateActionState = () => {
+  const hasDocument = state.mode === "document" && Boolean(state.documentId);
+  const hasSession = state.mode === "room" && Boolean(state.sessionId) && Boolean(state.shareUrl);
 
-  elements.saveDocumentButton.disabled = !isDocument || !hasSavedContentChanges;
-  elements.saveDocumentButton.hidden = !hasSavedContentChanges;
-  elements.sendChangesButton.disabled = !hasContextChanges;
-  elements.sendChangesButton.hidden = !hasContextChanges;
-  elements.shareDocumentButton.disabled = !isDocument;
-  elements.sendSelectionButton.disabled = !isDocument || !state.selectedText;
-  elements.sendSelectionButton.hidden = !state.selectedText;
-  elements.openTabulaButton.disabled = !isDocument && !isRoom;
-  elements.openTabulaButton.textContent = isRoom ? "Open session" : "Open a copy";
-  elements.openTabulaButton.hidden = !isDocument && !isRoom;
-  elements.startSessionButton.hidden = !isDocument;
-  elements.startSessionButton.disabled = !isDocument;
-  elements.displayModeButton.hidden = state.mode === "room";
-  elements.openSessionCardButton.disabled = !isRoom;
-  updateTitleInputState();
+  elements.openCopyButton.hidden = !hasDocument;
+  elements.openCopyButton.disabled = !hasDocument;
+  elements.startSessionButton.hidden = !hasDocument;
+  elements.startSessionButton.disabled = !hasDocument;
+  elements.openSessionButton.hidden = !hasSession;
+  elements.openSessionButton.disabled = !hasSession;
 };
 
-const renderDocumentContent = (markdown) => {
-  state.markdown = markdown;
-  state.selectedText = "";
-  elements.markdownEditor.value = markdown;
-  elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
-  elements.textLength.textContent = `${markdown.length} chars`;
-};
-
-const renderWorkbench = () => {
-  const showWorkbench =
-    state.mode === "document" && Boolean(state.documentId) && state.displayMode === "fullscreen";
-  document.body.dataset.workbenchActive = showWorkbench ? "true" : "false";
-
-  if (!elements.workbench) {
-    return;
-  }
-
-  if (!state.workbenchRoot) {
-    state.workbenchRoot = createRoot(elements.workbench);
-  }
-
-  if (!showWorkbench) {
-    state.workbenchRoot.render(null);
-    return;
-  }
-
-  state.workbenchRoot.render(
-    createElement(TabulaEmbeddedDocumentWorkbench, {
-      key: state.documentId,
-      documentId: state.documentId,
-      markdown: state.markdown,
-      title: currentTitle(),
-      onMarkdownChange: (markdown) => {
-        if (state.mode !== "document" || markdown === state.markdown) {
-          return;
-        }
-
-        renderDocumentContent(markdown);
-        renderOutline(extractOutline(markdown));
-        persistCurrentDraft();
-        updateDocumentActionState();
-        setMessage("Document has unsaved changes.", "warning");
-        renderWorkbench();
-      },
-      onSelectedTextChange: (selectedText) => {
-        state.selectedText = selectedText;
-        updateDocumentActionState();
-      },
-    }),
-  );
-};
-
-const setViewMode = (viewMode) => {
-  state.viewMode = viewMode;
-  if (state.displayMode === "fullscreen") {
-    state.editViewMode = viewMode;
-  }
-  elements.markdownPane.dataset.viewMode = viewMode;
-  for (const button of elements.viewModeButtons) {
-    button.setAttribute("aria-pressed", button.dataset.viewMode === viewMode ? "true" : "false");
-  }
-};
-
-const setDisplayMode = (displayMode) => {
-  state.displayMode = displayMode;
-  document.body.dataset.displayMode = displayMode;
-  elements.displayModeButton.textContent = displayMode === "fullscreen" ? "Inline" : "Edit";
-  setViewMode(displayMode === "fullscreen" ? state.editViewMode : "preview");
-  updateTitleInputState();
-  renderWorkbench();
-};
-
-const renderRoomHandoff = (summary) => {
-  const peerCount = Number(summary?.peerCount ?? state.roomPeerCount ?? 0);
-  const waitingForWorkspaceState = summary?.stateReceived === false;
-  const canWrite = summary?.writeAccess === true;
-
-  elements.roomHandoffTitle.textContent = state.title || "Untitled session";
-  elements.roomHandoffSummary.textContent = waitingForWorkspaceState
-    ? "Connected to an encrypted session. Waiting for a collaborator to share the workspace state."
-    : "This encrypted session is live in Tabula.md. Open it to write and collaborate with people or agents.";
-  elements.roomHandoffMeta.textContent = canWrite
-    ? `${peerCount} collaborator${peerCount === 1 ? "" : "s"} connected · Write access available`
-    : `${peerCount} collaborator${peerCount === 1 ? "" : "s"} connected · MCP view is read-only`;
-};
-
-const setContextView = (contextView) => {
-  state.contextView = contextView;
-  elements.contextPane.dataset.contextView = contextView;
-  for (const button of elements.contextTabButtons) {
-    button.setAttribute("aria-pressed", button.dataset.contextTab === contextView ? "true" : "false");
-  }
-};
-
-const extractOutline = (markdown) => {
-  const headings = [];
-  let offset = 0;
-  const lines = markdown.split("\n");
-
-  for (const [index, line] of lines.entries()) {
-    const match = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
-    if (match?.[1] && match[2]) {
-      headings.push({
-        depth: match[1].length,
-        text: match[2].trim(),
-        line: index + 1,
-        offset,
-      });
-    }
-    offset += line.length + 1;
-  }
-
-  return headings;
-};
-
-const renderDocumentSummary = (summary) => {
-  if (!summary) {
-    return;
-  }
-
+const renderDocument = (document) => {
   state.mode = "document";
-  state.documentId = summary.documentId || state.documentId;
-  state.title = summary.title || state.title;
+  state.documentId = document.documentId || state.documentId;
   state.sessionId = "";
-  state.roomId = "";
   state.shareUrl = "";
-  state.roomStatus = "";
-  state.roomHydrationStatus = "";
-  state.roomPeerCount = 0;
-  state.sha256 = summary.sha256 || state.sha256;
-  document.body.dataset.surfaceKind = "document";
+  state.title = document.title || state.title || "Untitled document";
 
-  elements.titleInput.value = state.title || "Untitled Document";
-  elements.connectionStatus.textContent = "Local";
-  elements.writeMode.textContent = "Editable";
-  elements.shaValue.textContent = shortHash(summary.sha256);
-  elements.peerCount.textContent = "MCP";
-  elements.textLength.textContent = `${summary.textLength ?? 0} chars`;
-  elements.markdownEditor.readOnly = false;
-  updateDocumentActionState();
+  elements.eyebrow.textContent = "Private draft";
+  elements.title.textContent = state.title;
+  elements.summary.textContent =
+    "Claude created this local Markdown draft. Open a copy to continue alone, or start a live session to collaborate in Tabula.md.";
+  elements.documentMeta.textContent = `${formatCount(document.textLength)} characters · local checkpoint`;
+  elements.collaborationMeta.textContent = "Not shared yet";
+  updateActionState();
 };
 
-const renderRoomSummary = (summary) => {
-  if (!summary) {
-    return;
-  }
+const renderRoom = (room) => {
+  const peerCount = Number(room.peerCount ?? 0);
+  const waitingForWorkspaceState = room.stateReceived === false;
 
   state.mode = "room";
   state.documentId = "";
-  state.sessionId = summary.sessionId || state.sessionId;
-  state.roomId = summary.roomId || state.roomId;
-  state.shareUrl = summary.shareUrl || state.shareUrl;
-  state.title = summary.title || state.title || "Untitled session";
-  state.roomStatus = summary.status || state.roomStatus;
-  state.roomHydrationStatus = summary.hydrationStatus || state.roomHydrationStatus;
-  state.roomPeerCount = Number(summary.peerCount ?? state.roomPeerCount ?? 0);
-  state.sha256 = summary.sha256 || state.sha256;
-  document.body.dataset.surfaceKind = "room";
+  state.sessionId = room.sessionId || state.sessionId;
+  state.shareUrl = room.shareUrl || state.shareUrl;
+  state.title = room.title || state.title || "Untitled session";
 
-  elements.titleInput.value = state.title;
-  elements.connectionStatus.textContent = summary.status || "unknown";
-  elements.writeMode.textContent = summary.writeAccess ? "Write-enabled" : "Read-only";
-  elements.shaValue.textContent = shortHash(summary.sha256);
-  elements.peerCount.textContent = String(state.roomPeerCount);
-  elements.textLength.textContent = `${summary.textLength ?? 0} chars`;
-  setDraftStatus("Not used");
-  state.lastSavedMarkdown = "";
-  state.lastSavedTitle = state.title;
-  elements.markdownEditor.readOnly = true;
-  renderRoomHandoff(summary);
-  updateDocumentActionState();
+  elements.eyebrow.textContent = "Live session";
+  elements.title.textContent = state.title;
+  elements.summary.textContent = waitingForWorkspaceState
+    ? "Claude joined the encrypted session and is waiting for a collaborator to share the workspace state."
+    : "This encrypted session is ready in Tabula.md. Open it to write and collaborate with people or agents.";
+  elements.documentMeta.textContent = "Encrypted live session";
+  elements.collaborationMeta.textContent = `${peerCount} collaborator${peerCount === 1 ? "" : "s"} connected`;
+  updateActionState();
+};
+
+const renderToolResult = (result) => {
+  if (result.isError) {
+    setMessage(getErrorText(result), "error");
+    return false;
+  }
+
+  const content = result.structuredContent;
+  if (content?.document) {
+    renderDocument(content.document);
+    return true;
+  }
+  if (content?.room) {
+    renderRoom(content.room);
+    return true;
+  }
+
+  return false;
 };
 
 const openExternalLink = async (url, label) => {
   if (!state.app?.openLink) {
     throw new Error(`${label} is unavailable because this MCP host cannot open external links.`);
   }
+
   const result = await state.app.openLink({ url });
   if (result?.isError) {
     throw new Error(`${label} was blocked by this MCP host.`);
   }
 };
 
-const renderOutline = (outline) => {
-  elements.outlineList.replaceChildren();
-
-  if (!outline?.length) {
-    const item = document.createElement("li");
-    item.className = "empty";
-    item.textContent = "No headings";
-    elements.outlineList.append(item);
-    return;
-  }
-
-  for (const heading of outline) {
-    const item = document.createElement("li");
-    item.style.setProperty("--depth", String(Math.max(1, heading.depth || 1)));
-    item.textContent = heading.text || "(untitled)";
-    elements.outlineList.append(item);
-  }
-};
-
-const applyStoredDraft = (document, savedMarkdown) => {
-  const savedTitle = document.title || "Untitled Document";
-  const storage = getDraftStorage();
-  if (!storage) {
-    setDraftStatus("Unavailable", "warning");
-    return {
-      title: savedTitle,
-      markdown: savedMarkdown,
-      draftRestored: false,
-      hasConflict: false,
-      message: "",
-    };
-  }
-
-  const draft = loadDocumentDraft(storage, document.documentId);
-  if (!draft) {
-    setDraftStatus("Saved");
-    return {
-      title: savedTitle,
-      markdown: savedMarkdown,
-      draftRestored: false,
-      hasConflict: false,
-      message: "",
-    };
-  }
-
-  const draftTitle = draft.title || savedTitle;
-  if (draft.markdown === savedMarkdown && draftTitle === savedTitle) {
-    clearDocumentDraft(storage, document.documentId);
-    setDraftStatus("Saved");
-    return {
-      title: savedTitle,
-      markdown: savedMarkdown,
-      draftRestored: false,
-      hasConflict: false,
-      message: "",
-    };
-  }
-
-  const hasConflict = Boolean(draft.baseSha256 && draft.baseSha256 !== document.sha256);
-  setDraftStatus(hasConflict ? "Conflict" : "Restored", "warning");
-
-  return {
-    title: draftTitle,
-    markdown: draft.markdown,
-    draftRestored: true,
-    hasConflict,
-    message: hasConflict
-      ? "Restored a local draft that differs from the latest saved document. Review it before saving."
-      : "Restored an unsaved local draft. Save to keep it in this MCP session.",
-  };
-};
-
-const persistCurrentDraft = () => {
-  if (state.mode !== "document" || !state.documentId) {
-    return;
-  }
-
-  const storage = getDraftStorage();
-  const markdown = state.markdown;
-  const title = currentTitle();
-  if (markdown === state.lastSavedMarkdown && title === state.lastSavedTitle) {
-    clearDocumentDraft(storage, state.documentId);
-    setDraftStatus("Saved");
-    return;
-  }
-
-  const result = saveDocumentDraft(storage, {
-    documentId: state.documentId,
-    title,
-    markdown,
-    baseSha256: state.sha256,
-  });
-
-  if (!result.ok) {
-    setDraftStatus(
-      formatDraftStorageReason(result.reason),
-      result.reason === "draft-too-large" ? "warning" : "error",
-    );
-    return;
-  }
-
-  setDraftStatus("Draft saved", "warning");
-};
-
-const renderSnapshot = (snapshot, options = {}) => {
-  const { resetContextBaseline = true } = options;
-  let markdown = snapshot.markdown || "";
-  const waitingForWorkspaceState = !snapshot.document && snapshot.waitingForWorkspaceState === true;
-  const previousContextMarkdown = state.lastContextMarkdown;
-  let draftState = {
-    title: state.title,
-    draftRestored: false,
-    hasConflict: false,
-    message: "",
-  };
-
-  if (snapshot.document) {
-    renderDocumentSummary(snapshot.document);
-    state.lastSavedMarkdown = markdown;
-    state.lastSavedTitle = snapshot.document.title || "Untitled Document";
-    if (resetContextBaseline) {
-      state.lastContextMarkdown = markdown;
-    }
-    draftState = applyStoredDraft(snapshot.document, markdown);
-    state.title = draftState.title || state.title;
-    elements.titleInput.value = state.title;
-    markdown = draftState.markdown;
-    if (draftState.draftRestored && previousContextMarkdown === markdown) {
-      state.lastContextMarkdown = markdown;
-    }
-  } else {
-    renderRoomSummary(snapshot.room || snapshot.status);
-  }
-
-  renderDocumentContent(markdown);
-  if (!snapshot.document) {
-    state.lastContextMarkdown = markdown;
-  }
-  renderOutline(snapshot.document ? extractOutline(markdown) : snapshot.outline || []);
-  updateDocumentActionState();
-  renderWorkbench();
-  return { ...draftState, waitingForWorkspaceState };
-};
-
-const loadSnapshot = async () => {
-  if (!state.app) {
-    return;
-  }
-
-  const toolRequest =
-    state.mode === "document" && state.documentId
-      ? {
-          name: "tabula_app_document_snapshot",
-          arguments: { documentId: state.documentId },
-        }
-      : state.mode === "room" && state.sessionId
-        ? {
-            name: "tabula_app_room_snapshot",
-            arguments: { sessionId: state.sessionId },
-          }
-        : null;
-
-  if (!toolRequest) {
-    setMessage("Create a document or connect a Tabula.md room first.", "warning");
-    return;
-  }
-
-  elements.refreshButton.disabled = true;
-  setMessage("Refreshing Tabula.md content...");
-  try {
-    const result = await state.app.callServerTool(toolRequest);
-    if (result.isError) {
-      throw new Error(getErrorText(result));
-    }
-
-    const renderResult = renderSnapshot(result.structuredContent);
-    if (state.mode === "room" && !renderResult.waitingForWorkspaceState) {
-      setMessage("");
-      return;
-    }
-    setMessage(
-      renderResult.draftRestored
-        ? renderResult.message
-        : renderResult.waitingForWorkspaceState
-          ? "Connected to the room. Waiting for workspace state from a live peer..."
-          : "Tabula.md content is current.",
-      renderResult.draftRestored || renderResult.waitingForWorkspaceState ? "warning" : "neutral",
-    );
-  } catch (error) {
-    setMessage(error instanceof Error ? error.message : "Refresh failed.", "error");
-  } finally {
-    elements.refreshButton.disabled = false;
-  }
-};
-
-const saveDocument = async () => {
+const openCopy = async () => {
   if (!state.app || state.mode !== "document" || !state.documentId) {
-    setMessage("Create a local Tabula.md document first.", "warning");
+    setMessage("Create a local Tabula.md draft first.", "warning");
     return;
   }
 
-  elements.saveDocumentButton.disabled = true;
-  setMessage("Saving document...");
+  elements.openCopyButton.disabled = true;
+  elements.startSessionButton.disabled = true;
+  setMessage("Preparing encrypted Tabula.md copy...");
   try {
     const result = await state.app.callServerTool({
-      name: "tabula_app_save_document",
-      arguments: {
-        documentId: state.documentId,
-        title: currentTitle(),
-        markdown: state.markdown,
-      },
+      name: "tabula_share_document",
+      arguments: { documentId: state.documentId },
     });
     if (result.isError) {
       throw new Error(getErrorText(result));
     }
 
-    renderSnapshot(result.structuredContent, { resetContextBaseline: false });
-    setMessage(
-      elements.sendChangesButton.disabled
-        ? "Document saved in this MCP session."
-        : "Document saved in this MCP session. Send changes to update the model context.",
-    );
+    const shareUrl = result.structuredContent?.share?.shareUrl;
+    if (!shareUrl) {
+      throw new Error("Tabula.md did not return an encrypted copy link.");
+    }
+
+    await openExternalLink(shareUrl, "Open a copy");
+    setMessage("Opened a Tabula.md copy.");
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : "Save failed.", "error");
+    setMessage(error instanceof Error ? error.message : "Could not open a Tabula.md copy.", "error");
   } finally {
-    updateDocumentActionState();
+    updateActionState();
   }
-};
-
-const shareDocument = async ({ sendModelContext = true, openAfterShare = false } = {}) => {
-  if (!state.app || state.mode !== "document" || !state.documentId) {
-    setMessage("Create a local Tabula.md document first.", "warning");
-    return null;
-  }
-
-  elements.shareDocumentButton.disabled = true;
-  elements.saveDocumentButton.disabled = true;
-  elements.openTabulaButton.disabled = true;
-  setMessage(openAfterShare ? "Preparing encrypted Tabula.md snapshot..." : "Preparing encrypted Tabula.md share link...");
-  try {
-    const currentMarkdown = state.markdown;
-    const currentDocumentTitle = currentTitle();
-    const baseSha256 = state.sha256;
-    const changeSummary = createMarkdownChangeSummary(state.lastContextMarkdown, currentMarkdown);
-
-    const saveResult = await state.app.callServerTool({
-      name: "tabula_app_save_document",
-      arguments: {
-        documentId: state.documentId,
-        title: currentDocumentTitle,
-        markdown: currentMarkdown,
-      },
-    });
-    if (saveResult.isError) {
-      throw new Error(getErrorText(saveResult));
-    }
-    renderSnapshot(saveResult.structuredContent, { resetContextBaseline: false });
-
-    const shareResult = await state.app.callServerTool({
-      name: "tabula_share_document",
-      arguments: {
-        documentId: state.documentId,
-      },
-    });
-    if (shareResult.isError) {
-      throw new Error(getErrorText(shareResult));
-    }
-
-    const share = shareResult.structuredContent?.share;
-    if (!share?.shareUrl) {
-      throw new Error("Share tool did not return an encrypted Tabula.md link.");
-    }
-
-    state.shareUrl = share.shareUrl;
-
-    if (sendModelContext) {
-      await state.app.updateModelContext({
-        content: [
-          {
-            type: "text",
-            text: [
-              `Encrypted Tabula.md snapshot link for "${state.title || "Untitled Document"}":`,
-              share.shareUrl,
-              "",
-              "Treat this URL as a bearer secret because the #json fragment contains the snapshot key.",
-              ...(changeSummary.changed
-                ? [
-                    "",
-                    "Unsent edit summary included with this share:",
-                    "",
-                    formatDocumentChangeMessage({
-                      title: currentDocumentTitle,
-                      documentId: state.documentId,
-                      baseSha256,
-                      summary: changeSummary,
-                    }),
-                  ]
-                : []),
-            ].join("\n"),
-          },
-        ],
-        structuredContent: {
-          tabulaShare: share,
-          ...(changeSummary.changed
-            ? {
-                tabulaDocumentChange: {
-                  mode: "document",
-                  documentId: state.documentId,
-                  title: currentDocumentTitle,
-                  baseSha256,
-                  summary: changeSummary,
-                },
-              }
-            : {}),
-        },
-      });
-    }
-
-    if (openAfterShare) {
-      await openExternalLink(share.shareUrl, "Open a copy");
-    }
-
-    if (changeSummary.changed && sendModelContext) {
-      state.lastContextMarkdown = currentMarkdown;
-    }
-    updateDocumentActionState();
-    setMessage(openAfterShare ? "Opened a Tabula.md copy." : "Encrypted share link sent to the model context.");
-    return share;
-  } catch (error) {
-    setMessage(error instanceof Error ? error.message : "Could not create encrypted share link.", "error");
-    return null;
-  } finally {
-    updateDocumentActionState();
-  }
-};
-
-const openInTabula = async () => {
-  if (!state.app) {
-    return;
-  }
-
-  if (state.mode === "room" && state.shareUrl) {
-    try {
-      await openExternalLink(state.shareUrl, "Open session");
-      setMessage("");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not open the Tabula.md session.", "error");
-    }
-    return;
-  }
-
-  if (state.mode === "document" && state.documentId) {
-    await shareDocument({ sendModelContext: false, openAfterShare: true });
-    return;
-  }
-
-  setMessage("Create a local Tabula.md document first.", "warning");
 };
 
 const startSession = async () => {
   if (!state.app || state.mode !== "document" || !state.documentId) {
-    setMessage("Create a local Tabula.md document first.", "warning");
+    setMessage("Create a local Tabula.md draft first.", "warning");
     return;
   }
 
+  elements.openCopyButton.disabled = true;
   elements.startSessionButton.disabled = true;
-  elements.openTabulaButton.disabled = true;
   setMessage("Starting encrypted Tabula.md session...");
   try {
-    const saved = await state.app.callServerTool({
-      name: "tabula_app_save_document",
-      arguments: {
-        documentId: state.documentId,
-        title: currentTitle(),
-        markdown: state.markdown,
-      },
-    });
-    if (saved.isError) throw new Error(getErrorText(saved));
-
-    const started = await state.app.callServerTool({
+    const result = await state.app.callServerTool({
       name: "tabula_app_start_room_from_document",
       arguments: { documentId: state.documentId },
     });
-    if (started.isError) throw new Error(getErrorText(started));
+    if (!renderToolResult(result)) {
+      throw new Error("Tabula.md did not return a live session.");
+    }
 
-    renderSnapshot(started.structuredContent);
     setMessage("Tabula.md session is ready. Open session to continue in Tabula.md.");
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Could not start the Tabula.md session.", "error");
   } finally {
-    updateDocumentActionState();
+    updateActionState();
   }
 };
 
-const sendChanges = async () => {
-  if (!state.app || state.mode !== "document" || !state.documentId) {
-    setMessage("Create a local Tabula.md document first.", "warning");
+const openSession = async () => {
+  if (state.mode !== "room" || !state.shareUrl) {
+    setMessage("Start or open a Tabula.md session first.", "warning");
     return;
   }
 
-  const currentMarkdown = state.markdown;
-  const summary = createMarkdownChangeSummary(state.lastContextMarkdown, currentMarkdown);
-  if (!summary.changed) {
-    setMessage("No document changes to send.", "warning");
-    updateDocumentActionState();
-    return;
-  }
-
-  elements.sendChangesButton.disabled = true;
-  setMessage("Sending document changes to the model context...");
+  elements.openSessionButton.disabled = true;
   try {
-    await state.app.updateModelContext({
-      content: [
-        {
-          type: "text",
-          text: formatDocumentChangeMessage({
-            title: currentTitle(),
-            documentId: state.documentId,
-            baseSha256: state.sha256,
-            summary,
-          }),
-        },
-      ],
-      structuredContent: {
-        tabulaDocumentChange: {
-          mode: "document",
-          documentId: state.documentId,
-          title: currentTitle(),
-          baseSha256: state.sha256,
-          summary,
-        },
-      },
-    });
-    state.lastContextMarkdown = currentMarkdown;
-    updateDocumentActionState();
-    setMessage("Document changes sent to the model context.");
+    await openExternalLink(state.shareUrl, "Open session");
+    setMessage("");
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : "Could not send document changes.", "error");
-    updateDocumentActionState();
-  }
-};
-
-const getSelectedText = () => {
-  if (state.selectedText) {
-    return state.selectedText;
-  }
-
-  if (document.activeElement === elements.markdownEditor && elements.markdownEditor.selectionEnd > elements.markdownEditor.selectionStart) {
-    return elements.markdownEditor.value
-      .slice(elements.markdownEditor.selectionStart, elements.markdownEditor.selectionEnd)
-      .trim();
-  }
-
-  return window.getSelection()?.toString().trim() || "";
-};
-
-const sendSelection = async () => {
-  const selectedText = getSelectedText();
-  if (!selectedText) {
-    setMessage("Select Markdown text first.", "warning");
-    return;
-  }
-
-  const source =
-    state.mode === "document"
-      ? `document ${currentTitle() || state.documentId}`
-      : `room ${state.roomId || state.sessionId}`;
-  const selection = createSelectionContext(selectedText);
-
-  try {
-    await state.app.updateModelContext({
-      content: [
-        {
-          type: "text",
-          text: formatSelectionContextMessage({
-            source,
-            sha256: state.sha256,
-            selection,
-          }),
-        },
-      ],
-      structuredContent: {
-        tabulaSelection: {
-          mode: state.mode,
-          documentId: state.documentId || undefined,
-          sessionId: state.sessionId,
-          roomId: state.roomId,
-          sha256: state.sha256,
-          text: selection.text,
-          originalLength: selection.originalLength,
-          excerptLength: selection.excerptLength,
-          truncated: selection.truncated,
-        },
-      },
-    });
-    setMessage("Selection sent to the model context.");
-  } catch (error) {
-    setMessage(error instanceof Error ? error.message : "Could not send selection.", "error");
-  }
-};
-
-const toggleDisplayMode = async () => {
-  if (!state.app) {
-    return;
-  }
-
-  const requestedMode = state.displayMode === "fullscreen" ? "inline" : "fullscreen";
-  try {
-    const result = await state.app.requestDisplayMode({ mode: requestedMode });
-    setDisplayMode(result.mode || requestedMode);
-  } catch (error) {
-    setMessage(error instanceof Error ? error.message : "Display mode change failed.", "error");
+    setMessage(error instanceof Error ? error.message : "Could not open the Tabula.md session.", "error");
+  } finally {
+    updateActionState();
   }
 };
 
@@ -844,9 +196,6 @@ const applyHostContext = (context = {}) => {
   if (context.styles?.variables) {
     applyHostStyleVariables(context.styles.variables);
   }
-  if (context.displayMode) {
-    setDisplayMode(context.displayMode);
-  }
 };
 
 const createAppClient = () => {
@@ -855,8 +204,10 @@ const createAppClient = () => {
   }
 
   return new App(
-    { name: "Tabula Document", version: "0.1.4" },
-    { availableDisplayModes: ["inline", "fullscreen"] },
+    { name: "Tabula Session", version: "0.1.5" },
+    // The editing surface is tabula.md itself. This App stays inline as a
+    // compact bridge, rather than becoming a second Tabula implementation.
+    { availableDisplayModes: ["inline"] },
   );
 };
 
@@ -865,98 +216,39 @@ const boot = async () => {
   state.app = app;
 
   app.ontoolinput = (input) => {
-    const documentId = input?.arguments?.documentId;
-    const sessionId = input?.arguments?.sessionId;
-    if (typeof documentId === "string") {
+    if (typeof input?.arguments?.documentId === "string") {
       state.mode = "document";
-      state.documentId = documentId;
+      state.documentId = input.arguments.documentId;
+      setMessage("Preparing Tabula.md draft...");
+      return;
     }
-    if (typeof sessionId === "string") {
+    if (typeof input?.arguments?.sessionId === "string") {
       state.mode = "room";
-      state.sessionId = sessionId;
+      state.sessionId = input.arguments.sessionId;
+      setMessage("Preparing Tabula.md session...");
     }
-    setMessage(state.mode === "room" ? "Opening Tabula.md room..." : "Opening Tabula.md document...");
   };
 
   app.ontoolresult = (result) => {
-    if (result.isError) {
-      setMessage(getErrorText(result), "error");
+    if (!renderToolResult(result)) {
+      setMessage("Tabula.md handoff is ready.");
       return;
     }
-
-    if (result.structuredContent?.document || result.structuredContent?.markdown) {
-      const renderResult = renderSnapshot(result.structuredContent);
-      const readyMessage = result.structuredContent?.document
-        ? "Tabula.md document is ready."
-        : state.mode === "room"
-          ? ""
-          : "Tabula.md content is ready.";
-      setMessage(
-        renderResult.draftRestored ? renderResult.message : readyMessage,
-        renderResult.draftRestored ? "warning" : "neutral",
-      );
-      return;
-    }
-
-    const room = result.structuredContent?.room;
-    if (room) {
-      renderRoomSummary(room);
-      void loadSnapshot();
-    }
+    setMessage(state.mode === "room" ? "Tabula.md session is ready." : "Tabula.md draft is ready.");
   };
 
   app.onhostcontextchanged = applyHostContext;
 
-  elements.saveDocumentButton.addEventListener("click", () => void saveDocument());
-  elements.sendChangesButton.addEventListener("click", () => void sendChanges());
-  elements.openTabulaButton.addEventListener("click", () => void openInTabula());
-  elements.openSessionCardButton.addEventListener("click", () => void openInTabula());
+  elements.openCopyButton.addEventListener("click", () => void openCopy());
   elements.startSessionButton.addEventListener("click", () => void startSession());
-  elements.shareDocumentButton.addEventListener("click", () => void shareDocument());
-  elements.refreshButton.addEventListener("click", () => void loadSnapshot());
-  elements.sendSelectionButton.addEventListener("click", () => void sendSelection());
-  elements.displayModeButton.addEventListener("click", () => void toggleDisplayMode());
-  for (const button of elements.viewModeButtons) {
-    button.addEventListener("click", () => setViewMode(button.dataset.viewMode || "split"));
-  }
-  for (const button of elements.contextTabButtons) {
-    button.addEventListener("click", () => setContextView(button.dataset.contextTab || "outline"));
-  }
-  elements.titleInput.addEventListener("input", () => {
-    if (state.mode !== "document") {
-      return;
-    }
+  elements.openSessionButton.addEventListener("click", () => void openSession());
+  elements.tabulaMark.src = tabulaLogoUrl;
+  updateActionState();
 
-    state.title = currentTitle();
-    persistCurrentDraft();
-    updateDocumentActionState();
-    setMessage("Document has unsaved changes.", "warning");
-    renderWorkbench();
-  });
-  elements.markdownEditor.addEventListener("input", () => {
-    if (state.mode !== "document") {
-      return;
-    }
-
-    const markdown = elements.markdownEditor.value;
-    state.markdown = markdown;
-    state.selectedText = "";
-    elements.textLength.textContent = `${markdown.length} chars`;
-    elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
-    renderOutline(extractOutline(markdown));
-    persistCurrentDraft();
-    updateDocumentActionState();
-    setMessage("Document has unsaved changes.", "warning");
-  });
-
-  elements.roomHandoffMark.src = tabulaLogoUrl;
-  document.body.dataset.surfaceKind = "idle";
-  setDisplayMode(state.displayMode);
-  setContextView(state.contextView);
   await app.connect();
   applyHostContext(app.getHostContext?.());
 };
 
 boot().catch((error) => {
-  setMessage(error instanceof Error ? error.message : "Tabula Document App could not start.", "error");
+  setMessage(error instanceof Error ? error.message : "Tabula.md could not start.", "error");
 });

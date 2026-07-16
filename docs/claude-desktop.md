@@ -43,16 +43,12 @@ directly from an MCP tool inspector.
 
 Expected behavior:
 
-1. Claude opens the Tabula.md Document App.
-2. Inline mode shows the Markdown preview with **Open a copy**, **Start
-   session**, and `Edit`.
-3. Clicking `Edit` opens fullscreen editing, where title editing and
-   Editor/Split/Preview modes work.
-4. Save stores the document in the local MCP server process.
-5. Send Changes posts a compact edit summary back into model context.
-6. Share creates an encrypted `https://tabula.md/#json=...,...` link. If the
-   App has unsent edits, the share handoff also includes a compact edit summary.
-7. Click **Start session**. Confirm the view becomes a connected Room and its
+1. Claude opens the compact Tabula.md Session Card.
+2. The card shows **Open a copy** and **Start session**. It does not contain a
+   Markdown editor or a fullscreen `Edit` mode.
+3. Click **Open a copy**. Claude Desktop opens an encrypted
+   `https://tabula.md/#json=...,...` link in the real Tabula.md app.
+4. Click **Start session**. Confirm the card becomes a connected Room and its
    primary action changes to **Open session**. The opened URL must use `#room=`.
 
 Local App documents are checkpointed as plaintext files on this machine so they
@@ -88,7 +84,7 @@ Expected behavior:
    from a browser or another live peer. Until `stateReceived` is true, the MCP
    keeps workspace reads and edits blocked to avoid treating an empty local
    CRDT as the shared workspace.
-4. `tabula_open_room_view` opens the App room view.
+4. `tabula_open_room_view` opens the compact Room handoff card.
 5. `tabula_read_workspace`, `tabula_read_workspace_context`,
    `tabula_read_workspace_document`, and `tabula_apply_workspace_changes` let
    the agent inspect bounded context with document, path, query, and changed-since filters, read exact full text when needed, and
@@ -124,17 +120,13 @@ After installing the MCPB in Claude Desktop:
 
 1. Ask Claude: `Call tabula_read_me for document guidance.`
 2. Ask Claude: `Create a Tabula.md document titled Release Notes.`
-3. Confirm the inline view shows preview plus **Open a copy**, **Start
-   session**, and `Edit`.
-4. Click `Edit`, update the title and Markdown, then click Save.
-5. Ask Claude to call `tabula_list_documents` and confirm the saved document is
+3. Confirm the inline Session Card shows **Open a copy** and **Start session**,
+   with no Markdown editor or `Edit` button.
+4. Ask Claude to call `tabula_list_documents` and confirm the local checkpoint is
    listed.
-6. Ask Claude to call `tabula_open_document` and confirm the App reopens it.
-7. Click Send Changes and confirm Claude sees the edit summary.
-8. Make one more small edit, click Share, and confirm Claude receives both a
-   snapshot URL with `#json=` and a compact edit summary for the unsent change.
-9. Open the share URL in Tabula.md and confirm the snapshot import flow starts.
-10. Click **Start session**, then confirm the Room view's **Open session**
+5. Ask Claude to call `tabula_open_document` and confirm the Session Card reopens it.
+6. Click **Open a copy** and confirm the snapshot import flow starts in Tabula.md.
+7. Click **Start session**, then confirm the Room card's **Open session**
     action opens a `#room=` URL in Tabula.md.
 
 If the App fails to open, verify that the MCPB contains `server/document-app.html`

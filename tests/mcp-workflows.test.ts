@@ -2,7 +2,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Buffer } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { tabulaDocumentAppResourceUri } from "../src/app/types.js";
 import { MemoryDocumentStore } from "../src/documents/store.js";
 import { createTabulaMcpServer } from "../src/index.js";
 import { roomDocumentResourceUri, roomWorkspaceResourceUri } from "../src/workspace-resources.js";
@@ -903,12 +902,13 @@ describe("MCP end-to-end tool workflows", () => {
           title: "App Draft",
           markdown: "# App Draft\n\nInitial body.\n",
         });
+        const documentAppResourceUri = document.structuredContent.resourceUri;
         expect(document.structuredContent).toMatchObject({
           document: {
             title: "App Draft",
             outlineCount: 1,
           },
-          resourceUri: tabulaDocumentAppResourceUri,
+          resourceUri: expect.stringMatching(/^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/),
         });
 
         const listed = await callTool<{ documents: Array<{ documentId: string; title: string }> }>(
@@ -1020,9 +1020,9 @@ describe("MCP end-to-end tool workflows", () => {
         });
         expect(roomSnapshot.structuredContent.outline.length).toBe(1);
 
-        const appResource = await client.readResource({ uri: tabulaDocumentAppResourceUri });
+        const appResource = await client.readResource({ uri: documentAppResourceUri });
         expect(appResource.contents[0]).toMatchObject({
-          uri: tabulaDocumentAppResourceUri,
+          uri: documentAppResourceUri,
           mimeType: "text/html;profile=mcp-app",
         });
         expect(textContent(roomView)).toContain("Opening Tabula Room View");

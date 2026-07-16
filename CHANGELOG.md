@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.5
+
+- Replaced the MCP App's cloned Markdown editor with a compact Tabula.md
+  Session Card. Actual writing and real-time collaboration now always happen
+  in Tabula.md through **Open a copy** or **Open session**.
+- Fingerprinted the bundled MCP App resource URI so Claude Desktop cannot reuse
+  a stale App resource after an MCPB update.
+- Released the card as a new MCPB/plugin version so Claude Desktop recognizes
+  the update as a new extension install.
+
 ## 0.1.4
 
 - Rebuilt the MCP App around the same Tabula.md visual language: branded app

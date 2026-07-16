@@ -5,7 +5,7 @@ import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { tabulaDocumentAppResourceUri } from "../src/app/types.js";
+import { createDocumentAppResource } from "../src/app/resource.js";
 import { MemoryDocumentStore, type DocumentStoreDeploymentMode } from "../src/documents/store.js";
 import { createTabulaMcpServer, resolveWriteEnabled } from "../src/index.js";
 import { workspaceDocumentResourceUri, workspaceResourceUri } from "../src/workspace-resources.js";
@@ -77,6 +77,15 @@ describe("write access configuration", () => {
 });
 
 describe("MCP tool registration", () => {
+  it("fingerprints the App resource URI so hosts do not reuse stale bundled UI", () => {
+    const first = createDocumentAppResource({ documentAppHtml: "<!doctype html><title>First Session Card</title>" });
+    const next = createDocumentAppResource({ documentAppHtml: "<!doctype html><title>Next Session Card</title>" });
+
+    expect(first.uri).toMatch(/^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/);
+    expect(next.uri).toMatch(/^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/);
+    expect(next.uri).not.toBe(first.uri);
+  });
+
   it("does not expose the patch tool or writeAccess input in read-only mode", async () => {
     const tools = await listTools(false);
     const toolNames = tools.tools.map((tool) => tool.name);
@@ -611,28 +620,30 @@ describe("MCP tool registration", () => {
     const appDocumentSnapshotTool = tools.tools.find((tool) => tool.name === "tabula_app_document_snapshot");
     const appSaveDocumentTool = tools.tools.find((tool) => tool.name === "tabula_app_save_document");
     const appStartRoomTool = tools.tools.find((tool) => tool.name === "tabula_app_start_room_from_document");
+    const documentAppResourceUri = createDocumentTool?._meta?.["ui/resourceUri"];
 
     expect(jsonBytes(tools)).toBeLessThan(48_000);
+    expect(documentAppResourceUri).toMatch(/^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/);
     expect(createDocumentTool?._meta).toMatchObject({
       ui: {
-        resourceUri: tabulaDocumentAppResourceUri,
+        resourceUri: documentAppResourceUri,
       },
-      "ui/resourceUri": tabulaDocumentAppResourceUri,
+      "ui/resourceUri": documentAppResourceUri,
     });
     expect(createDocumentTool?.annotations?.readOnlyHint).toBe(false);
     expect(listDocumentsTool?.annotations?.readOnlyHint).toBe(true);
     expect(openDocumentTool?._meta).toMatchObject({
       ui: {
-        resourceUri: tabulaDocumentAppResourceUri,
+        resourceUri: documentAppResourceUri,
       },
-      "ui/resourceUri": tabulaDocumentAppResourceUri,
+      "ui/resourceUri": documentAppResourceUri,
     });
     expect(openDocumentTool?.annotations?.readOnlyHint).toBe(true);
     expect(roomViewTool?._meta).toMatchObject({
       ui: {
-        resourceUri: tabulaDocumentAppResourceUri,
+        resourceUri: documentAppResourceUri,
       },
-      "ui/resourceUri": tabulaDocumentAppResourceUri,
+      "ui/resourceUri": documentAppResourceUri,
     });
     expect(roomViewTool?.annotations?.readOnlyHint).toBe(true);
     expect(shareDocumentTool?.annotations).toMatchObject({
@@ -677,14 +688,17 @@ describe("MCP tool registration", () => {
   it("serves the Tabula Document resource as an MCP App HTML resource", async () => {
     await withClient(false, async (client) => {
       const resources = await client.listResources();
-      expect(resources.resources.some((resource) => resource.uri === tabulaDocumentAppResourceUri)).toBe(true);
+      const documentAppResource = resources.resources.find((resource) =>
+        /^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/.test(resource.uri),
+      );
+      expect(documentAppResource).toBeDefined();
 
-      const resource = await client.readResource({ uri: tabulaDocumentAppResourceUri });
+      const resource = await client.readResource({ uri: documentAppResource?.uri ?? "" });
       expect(resource.contents[0]).toMatchObject({
-        uri: tabulaDocumentAppResourceUri,
+        uri: documentAppResource?.uri,
         mimeType: "text/html;profile=mcp-app",
       });
-      expect("text" in resource.contents[0] ? resource.contents[0].text : "").toContain("Tabula.md Document");
+      expect("text" in resource.contents[0] ? resource.contents[0].text : "").toContain("Tabula.md Session");
     });
   });
 
