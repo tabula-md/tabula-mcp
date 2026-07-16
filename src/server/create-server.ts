@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createDocumentAppResource, registerDocumentAppResource } from "../app/resource.js";
 import { DocumentRegistry } from "../documents/registry.js";
 import type { RuntimeEnvironment } from "../env.js";
+import { registerFileResources } from "../file-resources.js";
 import {
   createDefaultDocumentStore,
   resolveDocumentStoreDeploymentMode,
@@ -10,7 +11,6 @@ import {
   type DocumentStoreKind,
 } from "../documents/store.js";
 import { SessionRegistry } from "../registry.js";
-import { registerWorkspaceResources } from "../workspace-resources.js";
 import { WorkspaceRegistry } from "../workspaces.js";
 import { TABULA_MCP_VERSION } from "../version.js";
 import { createCoreInstructions } from "./instructions.js";
@@ -57,7 +57,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   });
 
   registerDocumentAppResource(server, documentAppResource);
-  registerWorkspaceResources(server, registry, workspaces);
+  registerFileResources(server, registry, documents);
 
   registerCoreTools(server, registry, documents, {
     allowTemporaryRooms: allowRoomTools && allowTemporaryRooms,

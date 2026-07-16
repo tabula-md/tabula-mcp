@@ -150,6 +150,18 @@ describe("core MCP contract", () => {
       expect(draft.revision).toMatch(/^[a-f0-9]{64}$/);
       expect(created.content?.some((item) => item.type === "resource_link")).toBe(false);
 
+      const resources = await client.listResources();
+      const draftUri = `tabula://draft/${draft.draftId}`;
+      expect(resources.resources.some((resource) => resource.uri.startsWith("tabula://draft/"))).toBe(false);
+      expect(resources.resources.some((resource) => resource.uri.startsWith("tabula://workspace/"))).toBe(false);
+      const draftResource = await client.readResource({ uri: draftUri });
+      expect(draftResource.contents[0]).toMatchObject({
+        uri: draftUri,
+        mimeType: "text/markdown",
+        text: "# Research\n",
+        _meta: expect.objectContaining({ draftId: draft.draftId, revision: draft.revision }),
+      });
+
       const updated = await client.callTool({
         name: "tabula_update_draft",
         arguments: {
@@ -239,5 +251,18 @@ describe("core MCP contract", () => {
     await withClient(async (client) => {
       expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(coreTools);
     }, { writeEnabled: false });
+  });
+
+  it("exposes only path-oriented Draft and Session resource templates", async () => {
+    await withClient(async (client) => {
+      const templates = await client.listResourceTemplates();
+      expect(templates.resourceTemplates.map((template) => template.uriTemplate)).toEqual([
+        "tabula://draft/{draftId}",
+        "tabula://session/{sessionId}",
+        "tabula://session/{sessionId}/file/{path}",
+      ]);
+      expect(JSON.stringify(templates)).not.toContain("documentId");
+      expect(JSON.stringify(templates)).not.toContain("workspaceId");
+    });
   });
 });

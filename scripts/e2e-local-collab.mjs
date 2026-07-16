@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
 import { once } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createConnection, createServer } from "node:net";
+import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +13,7 @@ import { chromium } from "playwright";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultRoomRepoDir = path.resolve(rootDir, "../tabula-room");
 const defaultTabulaMdRepoDir = path.resolve(rootDir, "../marker 2");
+const defaultJsonRepoDir = path.resolve(rootDir, "../tabula-json");
 const defaultServerEntrypoint = path.join(rootDir, "dist", "index.js");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -19,6 +22,7 @@ const parseArgs = (argv) => {
   const parsed = {
     roomRepoDir: process.env.TABULA_ROOM_REPO_DIR || defaultRoomRepoDir,
     tabulaMdRepoDir: process.env.TABULA_MD_REPO_DIR || defaultTabulaMdRepoDir,
+    jsonRepoDir: process.env.TABULA_JSON_REPO_DIR || defaultJsonRepoDir,
     serverEntrypoint: process.env.TABULA_MCP_SERVER_ENTRYPOINT || defaultServerEntrypoint,
     headed: process.env.TABULA_E2E_HEADED === "1",
   };
@@ -40,6 +44,14 @@ const parseArgs = (argv) => {
         throw new Error("--tabula-md-repo-dir requires a value");
       }
       parsed.tabulaMdRepoDir = path.resolve(next);
+      index += 1;
+      continue;
+    }
+    if (arg === "--json-repo-dir") {
+      if (!next) {
+        throw new Error("--json-repo-dir requires a value");
+      }
+      parsed.jsonRepoDir = path.resolve(next);
       index += 1;
       continue;
     }
@@ -190,12 +202,14 @@ const callTool = async (client, name, args = {}) => {
   return result.structuredContent;
 };
 
-const withMcpClient = async ({ serverEntrypoint, roomUrl, appOrigin, firebaseConfig }, callback) => {
+const withMcpClient = async ({ serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, callback) => {
   const client = new Client({ name: "tabula-mcp-local-e2e", version: "0.0.0" });
   const env = {
     ...process.env,
     TABULA_ROOM_URL: roomUrl,
     TABULA_APP_ORIGIN: appOrigin,
+    TABULA_JSON_URL: jsonUrl,
+    TABULA_MCP_ALLOWED_JSON_SERVER_URLS: jsonUrl,
     TABULA_MCP_ALLOW_ANY_EGRESS: "1",
   };
   if (firebaseConfig) {
@@ -267,19 +281,85 @@ const tabTitles = async (page) =>
     })),
   );
 
+const openJsonCopy = async ({ browser, copyUrl, expectedText }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await context.newPage();
+  const parsedCopyUrl = new URL(copyUrl);
+  const requestUrls = [];
+  const responses = [];
+  const diagnostics = [];
+  page.on("request", (request) => requestUrls.push(request.url()));
+  page.on("response", (response) => {
+    if (response.status() >= 400 || response.url().includes("/api/v2/")) {
+      responses.push({ status: response.status(), url: response.url() });
+    }
+  });
+  page.on("console", (message) => diagnostics.push(`[console:${message.type()}] ${message.text()}`));
+  page.on("pageerror", (error) => diagnostics.push(`[pageerror] ${error.message}`));
+  await page.goto(parsedCopyUrl.origin);
+  await page.getByRole("button", { name: "New document", exact: true }).click();
+  await page.locator(".cm-content").waitFor();
+  await page.evaluate((hash) => {
+    window.location.hash = hash;
+  }, parsedCopyUrl.hash);
+  const modal = page.locator(".share-modal");
+  const deadline = Date.now() + 20_000;
+  let autoOpened = false;
+  let confirmationReady = false;
+  while (Date.now() < deadline) {
+    const [editorText, readyCount, modalText] = await Promise.all([
+      pageEditorText(page).catch(() => ""),
+      modal.locator(".json-import-copy").count(),
+      modal.textContent().catch(() => ""),
+    ]);
+    if (editorText.includes(expectedText)) {
+      autoOpened = true;
+      break;
+    }
+    if (readyCount > 0) {
+      confirmationReady = true;
+      break;
+    }
+    if (modalText.includes("Unable to open link")) break;
+    await page.waitForTimeout(100);
+  }
+  if (!autoOpened && !confirmationReady) {
+    const modalText = await modal.textContent().catch(() => "");
+    throw new Error(
+      `Export Copy did not become ready.\n${JSON.stringify({ modalText, responses, diagnostics }, null, 2)}`,
+    );
+  }
+  if (confirmationReady) {
+    await modal.locator("button.share-modal-primary").click();
+    await modal.waitFor({ state: "detached" });
+  }
+  const markdown = await waitForEditorText(page, expectedText);
+  const [, copyKey = ""] = parsedCopyUrl.hash.replace(/^#json=/, "").split(",");
+  assert(copyKey, "Export Copy should include a client-only decryption key");
+  assert(
+    requestUrls.every((url) => !url.includes(copyKey)),
+    "Opening Export Copy must not send the decryption key in a network request",
+  );
+  return { context, page, markdown };
+};
+
 const run = async () => {
   const options = parseArgs(process.argv.slice(2));
   const roomPort = await getFreePort();
+  const jsonPort = await getFreePort();
   const appPort = await getFreePort();
   const peerOnlyAppPort = await getFreePort();
   const roomUrl = `http://127.0.0.1:${roomPort}`;
+  const jsonUrl = `http://127.0.0.1:${jsonPort}`;
   const appOrigin = `http://127.0.0.1:${appPort}`;
   const peerOnlyAppOrigin = `http://127.0.0.1:${peerOnlyAppPort}`;
   let roomServer;
+  let jsonServer;
   let appServer;
   let peerOnlyAppServer;
   let firebaseServer;
   let browser;
+  const jsonDataDir = await mkdtemp(path.join(tmpdir(), "tabula-mcp-json-e2e-"));
   const firebaseConfig = JSON.stringify({
     apiKey: "tabula-local",
     authDomain: "tabula-local.firebaseapp.com",
@@ -302,6 +382,20 @@ const run = async () => {
     });
     await waitForHttp(`${roomUrl}/health`, { label: "tabula-room /health" });
 
+    jsonServer = spawnLogged({
+      command: "npm",
+      args: ["run", "dev"],
+      cwd: options.jsonRepoDir,
+      env: {
+        PORT: String(jsonPort),
+        TABULA_JSON_ALLOWED_ORIGINS: appOrigin,
+        TABULA_JSON_STORAGE_DRIVER: "file",
+        TABULA_JSON_DATA_DIR: jsonDataDir,
+      },
+      label: "tabula-json",
+    });
+    await waitForHttp(`${jsonUrl}/health`, { label: "tabula-json /health" });
+
     firebaseServer = spawnLogged({
       command: "npm",
       args: ["run", "dev:firebase"],
@@ -318,7 +412,7 @@ const run = async () => {
       cwd: options.tabulaMdRepoDir,
       env: {
         VITE_TABULA_ROOM_URL: roomUrl,
-        VITE_TABULA_JSON_URL: "http://127.0.0.1:9",
+        VITE_TABULA_JSON_URL: jsonUrl,
         VITE_TABULA_FIREBASE_CONFIG: firebaseConfig,
         VITE_TABULA_FIREBASE_EMULATOR_HOST: "127.0.0.1",
         VITE_TABULA_FIRESTORE_EMULATOR_PORT: "8080",
@@ -355,7 +449,7 @@ const run = async () => {
       }
     });
 
-    await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, firebaseConfig }, async (client) => {
+    await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, async (client) => {
       const expectedTools = [
         "tabula_create_draft", "tabula_update_draft", "tabula_start_session", "tabula_join_room",
         "tabula_list_files", "tabula_read_file", "tabula_search_files", "tabula_write_file", "tabula_export_copy",
@@ -366,6 +460,18 @@ const run = async () => {
         title: "README.md",
         content: "# MCP Local E2E\n\nInitial from MCP.\n",
       });
+      const draftCopy = await callTool(client, "tabula_export_copy", {
+        source: { kind: "draft", draftId: draft.draftId },
+      });
+      assert.match(draftCopy.copyUrl, new RegExp(`^${appOrigin.replaceAll(".", "\\.")}/#json=`));
+      const openedDraftCopy = await openJsonCopy({
+        browser,
+        copyUrl: draftCopy.copyUrl,
+        expectedText: "Initial from MCP.",
+      });
+      assert(openedDraftCopy.markdown.includes("# MCP Local E2E"));
+      await openedDraftCopy.context.close();
+
       const session = await callTool(client, "tabula_start_session", { draftId: draft.draftId });
       assert.match(session.sessionUrl, new RegExp(`^${appOrigin.replaceAll(".", "\\.")}/#room=`));
       assert.equal(session.ready, true);
@@ -408,6 +514,39 @@ const run = async () => {
       }
       assert(afterHumanEdit?.content.includes("Human browser edit."), "MCP should observe browser-originated text");
 
+      const sessionCopy = await callTool(client, "tabula_export_copy", {
+        source: { kind: "session", sessionId: session.sessionId },
+      });
+      assert.equal(sessionCopy.fileCount, 2);
+      const openedSessionCopy = await openJsonCopy({
+        browser,
+        copyUrl: sessionCopy.copyUrl,
+        expectedText: "Human browser edit.",
+      });
+      const copyTabs = await tabTitles(openedSessionCopy.page);
+      assert(copyTabs.some((tab) => tab.title === "Agent Notes.md"), "Session Copy should preserve all exported files");
+
+      const postExportContent = `${afterHumanEdit.content}\nChanged after Export Copy.\n`;
+      await callTool(client, "tabula_write_file", {
+        sessionId: session.sessionId,
+        path: "README.md",
+        content: postExportContent,
+        expectedRevision: afterHumanEdit.revision,
+      });
+      await waitForEditorText(page, "Changed after Export Copy.");
+      await openedSessionCopy.page.waitForTimeout(500);
+      assert(
+        !(await pageEditorText(openedSessionCopy.page)).includes("Changed after Export Copy."),
+        "Export Copy must not follow later live Session changes",
+      );
+      await openedSessionCopy.page.reload();
+      await waitForEditorText(openedSessionCopy.page, "Human browser edit.");
+      assert(
+        !(await pageEditorText(openedSessionCopy.page)).includes("Changed after Export Copy."),
+        "Reloaded Export Copy must remain immutable",
+      );
+      await openedSessionCopy.context.close();
+
       const peerDraft = await callTool(client, "tabula_create_draft", {
         title: "README.md",
         content: "# Peer-only recovery\n\nLoaded from the live MCP participant.\n",
@@ -421,6 +560,7 @@ const run = async () => {
         serverEntrypoint: options.serverEntrypoint,
         roomUrl,
         appOrigin: peerOnlyAppOrigin,
+        jsonUrl,
         firebaseConfig: null,
       }, async (peerClient) => {
         const joined = await callTool(peerClient, "tabula_join_room", { roomUrl: peerSession.sessionUrl });
@@ -438,6 +578,8 @@ const run = async () => {
         browserAfterMcpText,
         afterHumanEditMarkdown: afterHumanEdit.content,
         tabsAfterMcp,
+        draftCopyOpened: true,
+        sessionCopyImmutable: true,
         peerOnlyBrowserText,
       }, null, 2));
     });
@@ -446,7 +588,9 @@ const run = async () => {
     await stopProcess(peerOnlyAppServer);
     await stopProcess(appServer);
     await stopProcess(firebaseServer);
+    await stopProcess(jsonServer);
     await stopProcess(roomServer);
+    await rm(jsonDataDir, { recursive: true, force: true });
   }
 };
 
