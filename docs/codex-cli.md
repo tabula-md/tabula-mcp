@@ -1,19 +1,30 @@
 # Codex CLI
 
-Tabula.md MCP can be used from Codex CLI as a local stdio MCP server. Build the
-server first:
+Tabula.md MCP can be used from Codex CLI as a local stdio MCP server.
 
 ```sh
-npm install
-npm run build
+codex mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
 ```
 
 ## One-Off Configuration
 
-For a one-off Codex CLI run without editing the global Codex config, pass the MCP
-server as config overrides:
+Omit `--enable-write`, or replace it with `--read-only`, for inspection-only
+room access. Write access is fixed when the MCP process starts.
+
+Verify the installation:
 
 ```sh
+codex mcp list --json
+```
+
+## Development from source
+
+For a one-off Codex CLI run against a local checkout, build the server and pass
+the MCP server as config overrides:
+
+```sh
+npm install
+npm run build
 codex exec \
   -C /absolute/path/to/tabula-mcp \
   -c 'mcp_servers.tabula.command="node"' \
@@ -21,17 +32,12 @@ codex exec \
   'Use the tabula MCP server tools. Call tabula_read_me with topic="rooms".'
 ```
 
-For a persistent local setup, add the server with:
+For a persistent source-checkout setup, add the built server with:
 
 ```sh
 codex mcp add tabula -- node /absolute/path/to/tabula-mcp/dist/index.js
 ```
 
-Then verify it is configured:
-
-```sh
-codex mcp list --json
-```
 
 ## Room Workflow
 

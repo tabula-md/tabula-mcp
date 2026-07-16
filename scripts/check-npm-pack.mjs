@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -7,6 +8,8 @@ const requiredFiles = [
   "assets/icon.png",
   "dist/index.js",
   "dist/index.d.ts",
+  "dist/cli.js",
+  "dist/cli.d.ts",
   "dist/env.js",
   "dist/env.d.ts",
   "dist/server/index.js",
@@ -37,12 +40,28 @@ const isForbiddenGeneratedArtifact = (filePath) =>
   filePath.endsWith(".mcpb.sha256") ||
   filePath.includes("/node_modules/");
 
+const sensitiveContentPatterns = [
+  { label: "private key", pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
+  { label: "live room secret", pattern: /#room=[A-Za-z0-9_-]{8,},[A-Za-z0-9_-]{16,}/ },
+  { label: "live snapshot secret", pattern: /#json=[A-Za-z0-9_-]{8,},[A-Za-z0-9_-]{16,}/ },
+];
+
+const isTextPackageFile = (filePath) => /\.(?:css|d\.ts|html|js|json|md|txt)$/i.test(filePath);
+
 const main = async () => {
   const { stdout } = await execFileAsync("npm", ["pack", "--dry-run", "--json"], {
     maxBuffer: 1024 * 1024 * 20,
   });
   const pack = JSON.parse(stdout)[0];
   const paths = new Set(pack.files.map((file) => file.path));
+  const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+
+  if (packageJson.name !== "@tabula-md/mcp" || packageJson.publishConfig?.access !== "public") {
+    throw new Error("npm package metadata must publish @tabula-md/mcp with public access");
+  }
+  if (!packageJson.repository?.url || !packageJson.bugs?.url || !packageJson.homepage) {
+    throw new Error("npm package metadata is missing repository, bugs, or homepage URLs");
+  }
 
   for (const filePath of requiredFiles) {
     if (!paths.has(filePath)) {
@@ -53,6 +72,21 @@ const main = async () => {
   const forbidden = [...paths].filter(isForbiddenGeneratedArtifact);
   if (forbidden.length) {
     throw new Error(`npm package includes generated artifacts: ${forbidden.slice(0, 8).join(", ")}`);
+  }
+
+  const entrypoint = await readFile(packageJson.bin["tabula-mcp"], "utf8");
+  if (!entrypoint.startsWith("#!/usr/bin/env node")) {
+    throw new Error("npm CLI entrypoint is missing its node shebang");
+  }
+
+  for (const filePath of paths) {
+    if (!isTextPackageFile(filePath)) continue;
+    const content = await readFile(filePath, "utf8");
+    for (const candidate of sensitiveContentPatterns) {
+      if (candidate.pattern.test(content)) {
+        throw new Error(`npm package ${filePath} contains a possible ${candidate.label}`);
+      }
+    }
   }
 
   console.log(`npm package contents check passed (${pack.entryCount} files)`);

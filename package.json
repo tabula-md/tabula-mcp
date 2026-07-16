@@ -1,7 +1,7 @@
 {
   "name": "@tabula-md/mcp",
   "version": "0.1.1",
-  "description": "MCP server and MCP App for Tabula.md Markdown documents, encrypted rooms, and remote checkpoints.",
+  "description": "Shared Markdown workspaces for people and AI agents through Tabula.md rooms.",
   "license": "MIT",
   "author": {
     "name": "Tabula.md",
@@ -15,10 +15,13 @@
   "bugs": {
     "url": "https://github.com/tabula-md/tabula-mcp/issues"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": ["tabula", "markdown", "collaboration", "mcp", "mcp-app", "encrypted-rooms"],
   "type": "module",
   "bin": {
-    "tabula-mcp": "dist/index.js"
+    "tabula-mcp": "dist/cli.js"
   },
   "exports": {
     ".": {
@@ -84,6 +87,8 @@
     "check:directory-readiness": "node scripts/check-directory-readiness.mjs",
     "release:pack": "node scripts/pack-release.mjs && npm run check:claude-plugin && npm run check:directory-readiness",
     "release:verify": "npm run typecheck && npm test && npm run test:app && npm run test:stdio && npm run check:context-budget && npm run check:deploy-targets && npm run release:pack && npm run check:exports && npm run check:pack && npm audit --json && git diff --check",
+    "release:verify:full": "npm run release:verify && npm run test:e2e:local-collab",
+    "prepublishOnly": "npm run release:verify",
     "measure:mcp-context": "npm run build && node scripts/measure-mcp-context.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

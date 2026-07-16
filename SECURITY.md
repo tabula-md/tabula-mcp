@@ -27,12 +27,14 @@ Tabula MCP has two different data paths:
 - `tabula_share_document` exports through Tabula JSON encrypted snapshot links;
   the decryption key stays in the `#json` URL fragment.
 
-Remote room access is disabled for hosted production by default. Enabling
-`TABULA_MCP_ALLOW_REMOTE_ROOM=1` makes the hosted MCP server a trusted plaintext
-processor for room keys and decrypted Markdown.
+Hosted room access makes the hosted MCP server a trusted plaintext processor
+for room keys and decrypted Markdown. The official endpoint must disclose this
+boundary; use local stdio or MCPB when room plaintext must stay on the user's
+device.
 
-Production HTTP deployments must use authentication, Redis/Upstash-backed
-checkpoints, and an explicit browser Origin allowlist. Production memory
+Production HTTP deployments must use authentication or an explicit public
+unauthenticated policy, Redis/Upstash-backed checkpoints, and an explicit
+browser Origin allowlist. Production memory
 checkpoints are available only through the explicit unsafe
 `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` plus `TABULA_MCP_ALLOW_MEMORY_STORE=1`
 override for self-hosting and tests. Do not use that override for the official

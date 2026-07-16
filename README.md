@@ -1,15 +1,115 @@
 # Tabula MCP
 
-MCP server and MCP App for drafting Tabula.md Markdown documents and joining
-encrypted Tabula.md live rooms from Codex, Claude, and other MCP clients.
+Let Codex, Claude, and other agents work in the same Markdown workspace as your
+team.
 
-Tabula MCP lets an agent create a Markdown document checkpoint in an MCP App,
-join a shared Tabula workspace room, and apply hash-guarded workspace document
-changes as an agent collaborator. MCP document checkpoints are agent working state. Live room
-recovery uses encrypted workspace room checkpoints when Firebase is configured.
-Final handoff links still use Tabula.md's encrypted JSON snapshot flow, where
-the JSON service receives only encrypted bytes and the snapshot key stays in the
-`#json` fragment.
+Tabula MCP connects an agent to [Tabula.md](https://tabula.md) as a normal room
+collaborator. The agent can inspect a workspace tree, search and read bounded
+Markdown context, create or reorganize files, and apply hash-guarded changes to
+the same live workspace people have open in the browser.
+
+- Join an encrypted Tabula room from an MCP client.
+- Read and search multiple Markdown files without loading the whole workspace.
+- Create, rename, move, patch, and delete workspace documents atomically.
+- Publish agent presence and wait for collaborator changes.
+- Import local Markdown or create an encrypted room or snapshot link.
+- Use Tabula without a Tabula account.
+
+## Quick Start
+
+Requirements: Node.js `^20.19.0 || >=22.12.0`, npm, and an MCP client.
+
+### Codex
+
+```sh
+codex mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+```
+
+### Claude Code
+
+```sh
+claude mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+```
+
+### Other local MCP clients
+
+```json
+{
+  "mcpServers": {
+    "tabula": {
+      "command": "npx",
+      "args": ["-y", "@tabula-md/mcp@latest", "--enable-write"]
+    }
+  }
+}
+```
+
+Then give the agent a complete room invite and a task:
+
+```text
+Join this Tabula room, review the Markdown workspace, and update findings.md:
+
+https://tabula.md/#room=<roomId>,<roomKey>
+```
+
+The URL is a bearer secret. Anyone or any agent with it can decrypt and edit the
+room. Do not paste a production room URL into logs, issue trackers, or public
+screenshots.
+
+The examples explicitly enable writes. Omit `--enable-write`, or pass
+`--read-only`, when the agent should only inspect rooms. Write access is a server
+startup decision and cannot be enabled by a tool call.
+
+Check a local installation without inspecting room content or secrets:
+
+```sh
+npx -y @tabula-md/mcp@latest --doctor
+```
+
+## What agents can do
+
+### Join an existing room
+
+```text
+tabula_connect_room
+→ tabula_read_workspace
+→ tabula_read_workspace_context
+→ tabula_read_workspace_document when exact full text is needed
+→ tabula_apply_workspace_changes
+→ tabula_wait_for_changes
+```
+
+### Share local Markdown as a live room
+
+```text
+tabula_import_markdown_workspace
+→ tabula_create_workspace_room
+→ share the returned #room URL
+```
+
+### Hand off a non-live snapshot
+
+```text
+tabula_create_workspace or tabula_import_markdown_workspace
+→ tabula_share_workspace
+→ share the returned #json URL
+```
+
+## Local and hosted trust boundaries
+
+Local stdio is the recommended path for private room collaboration.
+
+| Path | Where the MCP runs | Plaintext and room keys | Use it for |
+| --- | --- | --- | --- |
+| Local stdio or MCPB | Your device | Stay in the local MCP process | Private live-room work |
+| Hosted MCP | Tabula's MCP runtime | Are processed by the hosted runtime for the session | Installation-free compatible clients and MCP Apps |
+| Tabula Room | Tabula relay | Relay receives encrypted envelopes only | Live synchronization |
+| Tabula JSON | Tabula snapshot store | Store receives encrypted snapshot bytes only | Non-live handoff |
+
+Using `https://mcp.tabula.md/mcp` makes that hosted MCP runtime a trusted room
+participant. This differs from local stdio even though the separate Tabula Room
+relay still receives only encrypted envelopes. See
+[Security Model](docs/security-model.md) and [Privacy Policy](PRIVACY.md).
 
 ## Status
 
@@ -32,24 +132,7 @@ endpoint.
 - [Release](docs/release.md): validation commands, MCPB checks, runtime support, and handoff notes.
 - [Privacy Policy](PRIVACY.md): local, hosted, encrypted-room, and support-data handling.
 
-## Quick Start
-
-Requirements:
-
-- Node.js `^20.19.0 || >=22.12.0`
-- npm
-- A Tabula.md room link or room server only if you want to open live rooms
-- A Tabula JSON snapshot service only if you want to create encrypted snapshot
-  share links
-- Firebase Web config only if you want live room checkpoint recovery without an
-  active peer
-
-```sh
-git clone git@github.com:tabula-md/tabula-mcp.git
-cd tabula-mcp
-npm install
-npm run build
-```
+## Service defaults and self-hosting
 
 For local Tabula.md development links such as `http://localhost:5173/#room=...`,
 Tabula MCP defaults the room server to `http://localhost:3002`.
@@ -81,31 +164,6 @@ For self-hosted app links, configure the snapshot service explicitly:
 export TABULA_JSON_URL=https://json.example.com
 ```
 
-## MCP Client Configuration
-
-Use the built server over stdio for local MCP clients:
-
-```json
-{
-  "mcpServers": {
-    "tabula": {
-      "command": "node",
-      "args": ["/absolute/path/to/tabula-mcp/dist/index.js"]
-    }
-  }
-}
-```
-
-Then ask the agent to create a document checkpoint with `tabula_create_document`, or call
-`tabula_connect_room` with a full room invite URL:
-
-```txt
-https://tabula.md/#room=<roomId>,<roomKey>
-```
-
-The `#room` fragment contains the room key and is a secret. Anyone or any agent
-with that URL can decrypt the room. Treat room links like bearer tokens.
-
 Agents edit the same workspace Y.Doc that Tabula.md uses. A Tabula room is a
 workspace room; a one-document room is represented as a workspace with one
 document. Agents use `tabula_apply_workspace_changes` to apply one atomic Yjs
@@ -113,8 +171,8 @@ transaction across the workspace tree and document texts. `document.patch` input
 must include the latest lowercase SHA-256 hex `baseSha256` returned by the read
 tools.
 
-For the one-click Claude Desktop path, use the MCPB flow instead. It is
-zero-config and uses the same direct workspace collaboration surface.
+For the one-click Claude Desktop path, use the MCPB flow. It is zero-config and
+uses the same direct workspace collaboration surface.
 
 ## Claude Code Plugin
 
@@ -139,8 +197,9 @@ https://mcp.tabula.md/mcp
 ```
 
 The official hosted endpoint is intended to match Tabula.md's no-login product
-shape: MCP clients can connect without a bearer token. It exposes the same
-agent workspace surface as local stdio where the runtime can support it:
+shape: MCP clients can connect without a bearer token. It can expose the same
+agent workspace surface as local stdio when its production configuration and
+stateful runtime support it:
 workspace creation/import from inline files, encrypted JSON snapshot export,
 new room creation, and existing room connection. Room and workspace tools require
 stateful MCP HTTP sessions because the MCP server keeps active room transports

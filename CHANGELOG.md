@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Reworked public installation around the published `@tabula-md/mcp` package
+  for Codex, Claude Code, and generic local MCP clients.
+- Added `--help`, `--version`, and secret-free `--doctor` CLI surfaces.
+- Clarified local and hosted MCP plaintext trust boundaries.
+- Added operational-log redaction for bearer tokens and Tabula room/snapshot
+  URL fragments.
+- Added a full local collaboration release gate for maintainers with sibling
+  Tabula app and room checkouts.
+
 ## 0.1.1
 
 - Added directory-ready MCPB metadata: an HTTPS privacy policy URL, complete
@@ -8,14 +19,10 @@
   privacy policy, and generated directory submission assets aligned.
 - Prepared stateful Cloudflare MCP HTTP deployment for workspace-room tools.
 
-## Unreleased
-
 - Added Vercel and Cloudflare hosted MCP deployment targets.
 - Added production guardrails for remote HTTP deployments: bearer auth,
   Redis-backed checkpoints, request limits, rate limits, bounded sessions, and
   structured request logging.
-- Added stateless production HTTP mode for hosted document workflows when remote
-  room tools are disabled.
 - Added an explicit unsafe production memory checkpoint override for
   Excalidraw-style self-hosting.
 - Added `/ready` readiness metadata alongside `/health`.

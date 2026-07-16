@@ -11,6 +11,13 @@ Run:
 npm run release:verify
 ```
 
+Before a public release, also run the cross-repository multi-file collaboration
+gate from a checkout that has sibling `tabula-md` and `tabula-room` repositories:
+
+```sh
+npm run release:verify:full
+```
+
 The GitHub Actions CI workflow runs the same `npm run release:verify` gate on
 pull requests and pushes to `main` using Node.js 22.12.0. It installs Playwright
 Chromium before running the App browser smoke.
@@ -22,6 +29,7 @@ npm run typecheck
 npm test
 npm run test:app
 npm run test:stdio
+npm run test:e2e:local-collab
 npm run check:claude-plugin
 npm run check:deploy-targets
 npm run check:exports
@@ -43,6 +51,10 @@ Expected results:
   it creates a document, writes the default local checkpoint, restarts the
   server, reopens the checkpoint, and shares with an explicit JSON snapshot
   service argument.
+- The full local release gate creates a multi-file room, connects the MCP as an
+  agent actor, reads workspace context, applies a guarded change, and observes
+  the result in Tabula.md. It is separate from public CI while its sibling
+  service repositories are not all public dependencies.
 - Claude Code marketplace configuration passes, including the marketplace
   entry, plugin metadata, and the explicit npm package version pinned by the
   plugin MCP configuration.
