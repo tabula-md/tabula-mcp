@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use current npm with trusted publishing support
+        run: npm install --global npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify tag and release metadata
+        id: release
+        run: |
+          node scripts/check-release-contract.mjs --tag "$GITHUB_REF_NAME"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Run the release gate and build artifacts
+        run: npm run release:verify
+
+      - name: Publish npm package through OIDC
+        run: npm publish --access public --ignore-scripts
+
+      - name: Create GitHub Release and upload MCPB artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/tabula-mcp-${VERSION}.mcpb#Claude Desktop extension ${VERSION}" \
+            "dist/tabula-mcp-${VERSION}.mcpb.sha256#SHA-256 checksum ${VERSION}" \
+            "dist/tabula-mcp.mcpb#Latest Claude Desktop extension" \
+            "dist/tabula-mcp.mcpb.sha256#Latest SHA-256 checksum" \
+            --title "Tabula.md MCP ${VERSION}" \
+            --generate-notes \
+            --verify-tag
+
+      - name: Verify published npm and GitHub surfaces
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-published-release.mjs

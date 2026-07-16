@@ -22,6 +22,13 @@ The GitHub Actions CI workflow runs the same `npm run release:verify` gate on
 pull requests and pushes to `main` using Node.js 22.12.0. It installs Playwright
 Chromium before running the App browser smoke.
 
+Public releases use the dedicated `.github/workflows/release.yml` workflow on
+tags shaped as `v<package-version>`. The npm Trusted Publisher must authorize
+the `tabula-md/tabula-mcp` repository, `release.yml`, and the `npm publish`
+action. The workflow uses GitHub-hosted Node.js 24 and current npm, publishes
+through OIDC without an npm token, creates the GitHub Release, uploads the MCPB
+artifacts, and verifies both public surfaces.
+
 Equivalent individual commands:
 
 ```sh
@@ -78,7 +85,14 @@ unpacks the generated artifact for the same bundle checks, and writes:
 ```txt
 dist/tabula-mcp-<version>.mcpb
 dist/tabula-mcp-<version>.mcpb.sha256
+dist/tabula-mcp.mcpb
+dist/tabula-mcp.mcpb.sha256
 ```
+
+The stable `tabula-mcp.mcpb` name makes
+`https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb`
+a permanent Claude Desktop download URL. It is byte-identical to the versioned
+artifact in the same release.
 
 Generated `dist/` output, staged `dist/mcpb/` contents, `.mcpb` files, and
 `.sha256` checksum files are not source artifacts and should not be committed.
