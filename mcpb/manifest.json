@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "tabula-mcp",
   "display_name": "Tabula.md MCP",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Create private Markdown drafts and work with people or agents in live Tabula sessions.",
   "long_description": "Tabula.md MCP gives Claude a small file-oriented interface for Markdown collaboration. Claude can create private drafts, join encrypted live sessions, list, read, search, and write Markdown files, and export fixed encrypted copies. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
   "author": {

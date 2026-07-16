@@ -12,7 +12,7 @@ npm ci
 npm run build:mcpb
 ```
 
-Open `dist/tabula-mcp-0.2.0.mcpb`, install it, and restart Claude Desktop. Packaging also creates stable `dist/tabula-mcp.mcpb` and `dist/tabula-mcp.mcpb.sha256` aliases for the latest-release download. When replacing an older build, a full restart is required because Claude Desktop caches MCP App resources and tool definitions.
+Open `dist/tabula-mcp-0.2.1.mcpb`, install it, and restart Claude Desktop. Packaging also creates stable `dist/tabula-mcp.mcpb` and `dist/tabula-mcp.mcpb.sha256` aliases for the latest-release download. When replacing an older build, a full restart is required because Claude Desktop caches MCP App resources and tool definitions.
 
 ## Use
 

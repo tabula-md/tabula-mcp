@@ -30,17 +30,17 @@ npm pack --dry-run
 Expected version alignment for this release:
 
 ```text
-@tabula-md/mcp             0.2.0
-tabula-mcp MCPB            0.2.0
-Claude Code plugin         0.2.0
-mcp.tabula.md health       0.2.0
+@tabula-md/mcp             0.2.1
+tabula-mcp MCPB            0.2.1
+Claude Code plugin         0.2.1
+mcp.tabula.md health       0.2.1
 ```
 
 `npm run release:pack` produces both versioned and stable artifacts:
 
 ```text
-dist/tabula-mcp-0.2.0.mcpb
-dist/tabula-mcp-0.2.0.mcpb.sha256
+dist/tabula-mcp-0.2.1.mcpb
+dist/tabula-mcp-0.2.1.mcpb.sha256
 dist/tabula-mcp.mcpb
 dist/tabula-mcp.mcpb.sha256
 ```
@@ -50,7 +50,7 @@ The stable artifact supports the permanent latest-release URL:
 
 ## Manual acceptance
 
-1. Install `dist/tabula-mcp-0.2.0.mcpb` and restart Claude Desktop.
+1. Install `dist/tabula-mcp-0.2.1.mcpb` and restart Claude Desktop.
 2. Confirm exactly nine core tools are loaded.
 3. Create a Draft.
 4. Use **Open a copy** and confirm the resulting `#json` opens in Tabula.md.

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.1
+
+- Replaced the production Firebase checkpoint SDK transport with standard REST
+  requests so Cloudflare Workers can create durable encrypted sessions without
+  relying on the unavailable `XMLHttpRequest` runtime API.
+- Preserved generation-guarded checkpoint writes, encrypted blob cleanup, and
+  Firebase emulator coverage while adding REST conflict and error tests.
+
 ## 0.2.0
 
 - Replaced the 0.1 workspace/CRDT tool surface with nine high-level Draft,

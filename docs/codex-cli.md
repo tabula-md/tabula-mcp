@@ -7,7 +7,7 @@ Configure Tabula as a stdio MCP server:
   "mcpServers": {
     "tabula": {
       "command": "npx",
-      "args": ["-y", "@tabula-md/mcp@0.2.0"]
+      "args": ["-y", "@tabula-md/mcp@0.2.1"]
     }
   }
 }

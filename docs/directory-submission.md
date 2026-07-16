@@ -42,7 +42,7 @@ drafts to remain on their own machine.
 ## Submission values
 
 - Product name: `Tabula.md MCP`
-- MCPB artifact: `dist/tabula-mcp-0.2.0.mcpb`
+- MCPB artifact: `dist/tabula-mcp-0.2.1.mcpb`
 - Privacy policy: `https://mcp.tabula.md/privacy`
 - Support:
   `https://github.com/tabula-md/tabula-mcp/issues`
@@ -70,13 +70,13 @@ when the submission UI asks for it.
 
 ## Directory and organization rollout
 
-1. Publish the matching `@tabula-md/mcp@0.2.0` npm release before distributing
+1. Publish the matching `@tabula-md/mcp@0.2.1` npm release before distributing
    the Claude Code plugin; its plugin configuration is intentionally pinned to
    that exact version.
 2. Build and validate the artifact with `npm run release:pack`.
 3. Submit the remote `https://mcp.tabula.md/mcp` MCP App through the MCP
    directory submission flow, including the three paired screenshots.
-4. Submit the local `dist/tabula-mcp-0.2.0.mcpb` through the Desktop Extension
+4. Submit the local `dist/tabula-mcp-0.2.1.mcpb` through the Desktop Extension
    submission flow, including the same privacy-policy URL.
 5. For a customer-specific Team or Enterprise rollout, the customer’s owner
    uploads the same MCPB in **Organization settings → Connectors → Desktop →
