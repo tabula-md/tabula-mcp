@@ -3,12 +3,12 @@
   "owner": {
     "name": "Tabula.md"
   },
-  "description": "Private Markdown drafts, live Tabula sessions, and encrypted copies for Claude Code.",
+  "description": "Connect Claude Code to shared Tabula.md Markdown workspaces.",
   "plugins": [
     {
       "name": "tabula-mcp",
       "source": "./plugins/tabula-mcp",
-      "description": "Private Markdown drafts, live Tabula sessions, and encrypted copies for Claude Code."
+      "description": "Connect Claude Code to shared Tabula.md Markdown workspaces."
     }
   ]
 }
