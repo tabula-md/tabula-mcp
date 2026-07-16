@@ -21,7 +21,7 @@ describe("Tabula MCP Web handler", () => {
     const response = await handler.fetch(new Request("https://mcp.example.com/"));
 
     await expect(response.json()).resolves.toMatchObject({
-      description: "Create private Markdown drafts and work with people or agents in live Tabula sessions.",
+      description: "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
     });
   });
 

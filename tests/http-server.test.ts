@@ -56,7 +56,7 @@ describe("Tabula MCP HTTP server", () => {
       const response = await fetch(serverUrl(address.address, address.port, "/"));
 
       await expect(response.json()).resolves.toMatchObject({
-        description: "Create private Markdown drafts and work with people or agents in live Tabula sessions.",
+        description: "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
       });
     } finally {
       await httpServer.close();

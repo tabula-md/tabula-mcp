@@ -15,17 +15,17 @@ const mcpConfig = await readJson("plugins/tabula-mcp/.mcp.json");
 
 assert.equal(marketplace.name, "tabula-md", "Marketplace name must stay stable for installed users.");
 assert.equal(marketplace.owner?.name, "Tabula.md", "Marketplace owner name must be present.");
-assert.equal(marketplace.description, "Private Markdown drafts, live Tabula sessions, and encrypted copies for Claude Code.");
+assert.equal(marketplace.description, "Connect Claude Code to shared Tabula.md Markdown workspaces.");
 
 const marketplacePlugin = marketplace.plugins?.find((candidate) => candidate.name === "tabula-mcp");
 assert.ok(marketplacePlugin, "Marketplace must include the tabula-mcp plugin.");
 assert.equal(marketplacePlugin.source, "./plugins/tabula-mcp", "tabula-mcp source must stay inside this marketplace.");
-assert.equal(marketplacePlugin.description, "Private Markdown drafts, live Tabula sessions, and encrypted copies for Claude Code.");
+assert.equal(marketplacePlugin.description, "Connect Claude Code to shared Tabula.md Markdown workspaces.");
 
 assert.equal(plugin.name, "tabula-mcp", "Plugin name must match the marketplace entry.");
 assert.equal(plugin.version, packageJson.version, "Plugin version must match the published MCP package version.");
 assert.equal(plugin.author?.name, "Tabula.md", "Plugin author name must be present.");
-assert.equal(plugin.description, "Private Markdown drafts, live Tabula sessions, and encrypted copies for Claude Code.");
+assert.equal(plugin.description, "Connect Claude Code to shared Tabula.md Markdown workspaces.");
 
 const tabulaServer = mcpConfig.mcpServers?.tabula;
 assert.equal(tabulaServer?.command, "npx", "Claude Code plugin must launch the published package through npx.");
