@@ -3,8 +3,8 @@
   "name": "tabula-mcp",
   "display_name": "Tabula.md MCP",
   "version": "0.1.6",
-  "description": "Work with people and AI agents in shared Tabula.md Markdown workspaces.",
-  "long_description": "Tabula.md MCP lets Claude join a shared multi-file Markdown workspace as an agent collaborator. It can inspect bounded context, read documents, publish presence, and apply hash-guarded workspace changes. Local documents are checkpointed as plaintext on this machine for local recovery. Room keys from invite URL fragments stay local, while the Tabula Room server receives only encrypted envelopes.",
+  "description": "Let Claude work with people in shared Tabula.md Markdown workspaces.",
+  "long_description": "Tabula.md MCP lets Claude create private Markdown drafts, open encrypted copy links, and join live sessions where people and Claude continue in the same files. Local working drafts stay on this machine. Complete #room and #json URLs are bearer secrets; the Tabula Room relay and Tabula JSON store receive encrypted data only.",
   "author": {
     "name": "Tabula.md",
     "url": "https://tabula.md"
@@ -61,43 +61,43 @@
     },
     {
       "name": "tabula_create_workspace",
-      "description": "Create a local Tabula workspace from inline Markdown files."
+      "description": "Create a private Tabula.md Markdown workspace from inline files."
     },
     {
       "name": "tabula_import_markdown_workspace",
-      "description": "Import Markdown files into a local Tabula workspace from inline files or an allowed local root."
+      "description": "Import Markdown files from inline content or an allowed directory on this device."
     },
     {
       "name": "tabula_share_workspace",
-      "description": "Export a local Tabula workspace as an encrypted JSON snapshot link."
+      "description": "Create an encrypted Tabula.md copy link from a private workspace."
     },
     {
       "name": "tabula_create_workspace_room",
-      "description": "Create a new encrypted Tabula.md live workspace room from a local workspace and save an encrypted checkpoint when Firebase is configured."
+      "description": "Start an encrypted Tabula.md live session from a private workspace."
     },
     {
       "name": "tabula_connect_room",
-      "description": "Join an encrypted Tabula.md room invite URL. Claude can receive state from an active browser peer without checkpoint persistence; Firebase recovery is optional."
+      "description": "Join an encrypted Tabula.md live-session invite so Claude and people can work in the same files."
     },
     {
       "name": "tabula_list_sessions",
-      "description": "List encrypted Tabula.md room sessions connected in this local MCP process."
+      "description": "List Tabula.md live sessions connected in this local MCP process."
     },
     {
       "name": "tabula_read_workspace",
-      "description": "Read the latest Tabula workspace tree metadata from a connected room."
+      "description": "Read workspace metadata from a live session or private MCP workspace."
     },
     {
       "name": "tabula_read_workspace_document",
-      "description": "Read cached Markdown for one document in a connected Tabula workspace room."
+      "description": "Read one Markdown document from a live session or private MCP workspace."
     },
     {
       "name": "tabula_read_workspace_context",
-      "description": "Read filtered, bounded Markdown excerpts from cached workspace documents for agent planning."
+      "description": "Read bounded Markdown excerpts from selected workspace documents."
     },
     {
       "name": "tabula_apply_workspace_changes",
-      "description": "Apply hash-guarded workspace document changes as encrypted direct collaboration events."
+      "description": "Apply hash-guarded document changes to a connected Tabula.md live session."
     },
     {
       "name": "tabula_room_status",
@@ -105,19 +105,19 @@
     },
     {
       "name": "tabula_open_room_view",
-      "description": "Open a compact handoff card for a connected Tabula.md room, then continue in the actual Tabula.md session."
+      "description": "Open a compact handoff card for a connected live session, then continue in Tabula.md."
     },
     {
       "name": "tabula_set_presence",
-      "description": "Publish this local MCP client's cursor or selection presence to collaborators."
+      "description": "Show Claude's current document or selection to live-session collaborators."
     },
     {
       "name": "tabula_wait_for_changes",
-      "description": "Wait for active document hash changes or encrypted workspace room events and return document hash summaries."
+      "description": "Wait for live-session documents to change and return their latest hash summaries."
     },
     {
       "name": "tabula_disconnect_room",
-      "description": "Disconnect one encrypted Tabula.md room session from this local MCP process."
+      "description": "Disconnect this local MCP process from a Tabula.md live session."
     }
   ],
   "tools_generated": true,

@@ -5,6 +5,7 @@ import { jsonContent, errorContent } from "../json.js";
 import { parseRoomShareUrl, resolveRoomServerUrl } from "../protocol.js";
 import type { SessionRegistry } from "../registry.js";
 import type { RuntimeEnvironment } from "../env.js";
+import type { DocumentStoreDeploymentMode } from "../documents/store.js";
 import { createFirebaseWorkspaceRoomCheckpointStore } from "../room-checkpoints.js";
 import { TabulaRoomClient } from "../room-client.js";
 import { shareMarkdownWorkspace } from "../share.js";
@@ -346,14 +347,37 @@ export const registerRoomTools = (
   server: McpServer,
   registry: SessionRegistry,
   workspaces: WorkspaceRegistry,
-  { env, writeEnabled, allowTemporaryRooms = true }: { env?: RuntimeEnvironment; writeEnabled: boolean; allowTemporaryRooms?: boolean },
+  {
+    env,
+    writeEnabled,
+    allowTemporaryRooms = true,
+    deploymentMode,
+  }: {
+    env?: RuntimeEnvironment;
+    writeEnabled: boolean;
+    allowTemporaryRooms?: boolean;
+    deploymentMode: DocumentStoreDeploymentMode;
+  },
 ) => {
+  const workspaceLocation = deploymentMode === "local"
+    ? "this local MCP process"
+    : "this hosted MCP session";
+  const importDescription = deploymentMode === "local"
+    ? "Import Markdown into a private workspace from inline files or an allowed directory on this device."
+    : "Import Markdown into a private workspace in this hosted MCP session. Use inline files for user content; local-path reads the hosted server's filesystem, not the user's device.";
+  const createSessionDescription = deploymentMode === "local"
+    ? "Start an encrypted Tabula.md live session from a private workspace and return its invite URL. The session may be temporary when encrypted recovery is not configured."
+    : "Start an encrypted Tabula.md live session from a private hosted workspace and return its invite URL. Hosted session creation requires encrypted room recovery to be configured.";
+  const connectSessionDescription = deploymentMode === "local"
+    ? "Join an encrypted Tabula.md live session in this local MCP process. The invite key stays on this device and is never sent to the room relay."
+    : "Join an encrypted Tabula.md live session from this hosted MCP service. The hosted service becomes a trusted plaintext participant; the invite key is never sent to the room relay.";
+
   server.registerTool(
     "tabula_create_workspace",
     {
       title: "Create Tabula Workspace",
       description:
-        "Create a local Tabula workspace in this MCP session from zero or more inline Markdown files. Use tabula_create_workspace_room to turn it into a live room or tabula_share_workspace to export it.",
+        `Create a private Tabula.md Markdown workspace in ${workspaceLocation} from zero or more inline files. Start a live session or create an encrypted copy link when it is ready to share.`,
       inputSchema: {
         title: z.string().min(1).max(120).optional().describe("Optional workspace title."),
         files: z.array(workspaceFileInputSchema).optional().describe("Optional initial Markdown files."),
@@ -381,8 +405,7 @@ export const registerRoomTools = (
     "tabula_import_markdown_workspace",
     {
       title: "Import Markdown Workspace",
-      description:
-        "Import Markdown into a local Tabula workspace from either this MCP server's filesystem or an inline files array. Filesystem paths are resolved where the MCP server is running.",
+      description: importDescription,
       inputSchema: {
         title: z.string().min(1).max(120).optional().describe("Optional workspace title."),
         detail: workspaceDetailSchema,
@@ -448,7 +471,7 @@ export const registerRoomTools = (
     {
       title: "Share Tabula Workspace",
       description:
-        "Export a local/imported Tabula workspace as an encrypted Tabula.md #json snapshot link. The JSON snapshot service receives only encrypted bytes.",
+        "Create an encrypted Tabula.md copy link from a private Markdown workspace. The snapshot service receives only encrypted bytes.",
       inputSchema: {
         ...optionalWorkspaceSchema,
         appOrigin: z
@@ -488,9 +511,8 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_create_workspace_room",
     {
-      title: "Create Tabula Workspace Room",
-      description:
-        "Create a new encrypted Tabula.md live workspace room from a local/imported MCP workspace, publish initial workspace state, and return a shareable #room URL.",
+      title: "Start Tabula Live Session",
+      description: createSessionDescription,
       inputSchema: {
         ...optionalWorkspaceSchema,
         appOrigin: z.string().url().default("https://tabula.md").describe("Tabula.md app origin for the returned #room URL."),
@@ -535,9 +557,8 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_connect_room",
     {
-      title: "Connect Tabula Room",
-      description:
-        "Join this local MCP process to an encrypted Tabula.md live room URL. The #room fragment contains the room key, is used locally, and is never sent to the room server. Checkpoint recovery is optional when an active peer can send workspace state.",
+      title: "Join Tabula Live Session",
+      description: connectSessionDescription,
       inputSchema: {
         roomUrl: z.string().url().describe("Full Tabula room invite URL, including /#room=<roomId>,<roomKey>."),
         roomServerUrl: z
@@ -600,8 +621,8 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_list_sessions",
     {
-      title: "List Tabula Room Sessions",
-      description: "List Tabula room sessions currently connected in this MCP process.",
+      title: "List Tabula Live Sessions",
+      description: `List live sessions currently connected in ${workspaceLocation}.`,
       inputSchema: {},
       annotations: {
         readOnlyHint: true,
@@ -619,8 +640,8 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_room_status",
     {
-      title: "Get Tabula Room Status",
-      description: "Return connection, metadata, collaborator, hash, and write-access state for a connected Tabula room.",
+      title: "Get Tabula Live Session Status",
+      description: "Return connection, collaborator, document hash, and write-access state for a connected Tabula.md live session.",
       inputSchema: optionalSessionSchema,
       annotations: {
         readOnlyHint: true,
@@ -637,7 +658,7 @@ export const registerRoomTools = (
     {
       title: "Read Tabula Workspace",
       description:
-        "Read decrypted Tabula workspace tree metadata from a connected room session or a local/imported MCP workspace.",
+        "Read Markdown workspace metadata from a connected live session or a private workspace in this MCP session.",
       inputSchema: {
         ...optionalWorkspaceOrSessionSchema,
         detail: workspaceDetailSchema,
@@ -660,7 +681,7 @@ export const registerRoomTools = (
     {
       title: "Read Tabula Workspace Document",
       description:
-        "Read decrypted Markdown for one document from a connected room session or local/imported MCP workspace. Use tabula_read_workspace first to get document ids.",
+        "Read one Markdown document from a connected live session or private MCP workspace. Use tabula_read_workspace first to get document ids.",
       inputSchema: {
         ...optionalWorkspaceOrSessionSchema,
         documentId: z.string().min(1).describe("Workspace document id from tabula_read_workspace."),
@@ -685,7 +706,7 @@ export const registerRoomTools = (
     {
       title: "Read Tabula Workspace Context",
       description:
-        "Read a bounded Markdown context bundle from a connected room session or local/imported workspace. This is for agent planning; use tabula_read_workspace_document for exact full text.",
+        "Read bounded Markdown excerpts from a connected live session or private MCP workspace. Use this for planning, then read a full document only when needed.",
       inputSchema: {
         ...optionalWorkspaceOrSessionSchema,
         documentIds: z
@@ -741,7 +762,7 @@ export const registerRoomTools = (
     {
       title: "Apply Tabula Workspace Changes",
       description:
-        "Apply one or more workspace document changes atomically to the connected encrypted workspace CRDT.",
+        "Apply one or more hash-guarded document changes atomically to a connected Tabula.md live session.",
       inputSchema: {
         ...optionalSessionSchema,
         changes: z
@@ -764,7 +785,7 @@ export const registerRoomTools = (
     "tabula_set_presence",
     {
       title: "Set Tabula Presence",
-      description: "Publish this MCP client's current cursor/selection presence to collaborators.",
+      description: "Show this agent's current document or selection to other live-session collaborators.",
       inputSchema: {
         ...optionalSessionSchema,
         fileTitle: z.string().min(1).max(120).optional(),
@@ -792,7 +813,7 @@ export const registerRoomTools = (
     {
       title: "Wait for Tabula Changes",
       description:
-        "Wait for a connected room's active document hash or workspace CRDT state to change, then return workspace document hash summaries.",
+        "Wait for documents in a connected live session to change, then return their latest hash summaries.",
       inputSchema: {
         ...optionalSessionSchema,
         sinceSha256: z.string().min(1).optional(),
@@ -827,8 +848,8 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_disconnect_room",
     {
-      title: "Disconnect Tabula Room",
-      description: "Disconnect one connected Tabula room session.",
+      title: "Leave Tabula Live Session",
+      description: "Disconnect this MCP runtime from one Tabula.md live session.",
       inputSchema: optionalSessionSchema,
       annotations: {
         readOnlyHint: false,

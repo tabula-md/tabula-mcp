@@ -3,6 +3,7 @@
 import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { TABULA_MCP_PRODUCT_DESCRIPTION } from "./public-copy.js";
 import type { TabulaMcpServerInstance } from "./server/create-server.js";
 import type { TabulaMcpHttpServer } from "./server/http.js";
 
@@ -57,9 +58,11 @@ export const getPackageVersion = () => {
   return typeof packageJson.version === "string" ? packageJson.version : "unknown";
 };
 
-export const CLI_HELP = `Tabula MCP
+export const CLI_HELP = `Tabula.md MCP
 
-Local MCP server and MCP App for shared Markdown workspaces.
+${TABULA_MCP_PRODUCT_DESCRIPTION}
+
+Local stdio is the default. Use --http only for a trusted remote deployment.
 
 Usage:
   tabula-mcp [--stdio]

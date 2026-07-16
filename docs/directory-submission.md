@@ -7,12 +7,11 @@ App, which is the broad directory path, and the local Claude Desktop extension.
 
 ## Product summary
 
-**Tabula.md MCP** lets Claude create and continue Markdown documents locally,
-open encrypted Tabula.md collaboration rooms, and hand an encrypted Markdown
-snapshot to another person or agent. It is local by default: Markdown draft
-checkpoints stay on the user’s device. A room key or snapshot key stays in the
-share URL fragment while Tabula’s relay and snapshot services receive encrypted
-bytes only.
+**Tabula.md MCP** connects Claude to shared Tabula.md Markdown workspaces.
+People work in Tabula.md while Claude reads and changes the same files through
+MCP. The local MCPB keeps working drafts on the user’s device. Complete `#room`
+and `#json` URLs are bearer secrets; Tabula’s relay and snapshot services
+receive encrypted data only.
 
 ## Remote MCP App submission
 
@@ -66,9 +65,13 @@ when the submission UI asks for it.
 
 | Screenshot | Paired user prompt | What the reviewer sees |
 | --- | --- | --- |
-| `assets/directory/document-preview.png` | “Create a Markdown brief titled Launch Brief and open it in Tabula.” | Compact local-draft handoff with **Open a copy** and **Start session**. |
-| `assets/directory/document-editor.png` | “Start a Tabula session for Launch Brief.” | Live session with **Open session** and a truthful Claude collaborator state. |
-| `assets/directory/room-context.png` | “Open this Tabula room and summarize its current Markdown without changing it.” | Read-only live-session handoff with a clear **Open session** continuation into Tabula.md. |
+| `assets/directory/local-draft-card.png` | “Create a Markdown brief titled Launch Brief and open it in Tabula.md.” | Private-draft handoff with **Open a copy** and **Start session**. |
+| `assets/directory/live-session-card.png` | “Start a Tabula.md session for Launch Brief.” | Newly started live session with **Open session** and Claude’s collaborator state. |
+| `assets/directory/connected-session-card.png` | “Join this Tabula.md session and summarize its Markdown without changing it.” | Existing live-session handoff with a clear continuation into Tabula.md. |
+
+Regenerate all three captures from the current Session Card with
+`npm run capture:directory-assets`. The readiness check verifies their names,
+format, and 1440 × 1024 dimensions.
 
 ## Directory and organization rollout
 

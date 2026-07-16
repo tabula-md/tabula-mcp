@@ -49,7 +49,10 @@ const withClient = async <T>(
   }
 };
 
-const listTools = async (writeEnabled: boolean, options: { mcpApps?: boolean } = {}) =>
+const listTools = async (
+  writeEnabled: boolean,
+  options: { mcpApps?: boolean; deploymentMode?: DocumentStoreDeploymentMode } = {},
+) =>
   withClient(writeEnabled, (client) => client.listTools(), options);
 
 const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), "utf8");
@@ -77,6 +80,37 @@ describe("write access configuration", () => {
 });
 
 describe("MCP tool registration", () => {
+  it("describes local and hosted runtimes truthfully during initialization", async () => {
+    const inspectRuntime = (deploymentMode: DocumentStoreDeploymentMode) =>
+      withClient(true, async (client) => ({
+        instructions: client.getInstructions(),
+        tools: await client.listTools(),
+      }), { deploymentMode });
+
+    const local = await inspectRuntime("local");
+    const hosted = await inspectRuntime("remote");
+    const localCreate = local.tools.tools.find((tool) => tool.name === "tabula_create_workspace");
+    const localImport = local.tools.tools.find((tool) => tool.name === "tabula_import_markdown_workspace");
+    const localConnect = local.tools.tools.find((tool) => tool.name === "tabula_connect_room");
+    const hostedCreate = hosted.tools.tools.find((tool) => tool.name === "tabula_create_workspace");
+    const hostedImport = hosted.tools.tools.find((tool) => tool.name === "tabula_import_markdown_workspace");
+    const hostedConnect = hosted.tools.tools.find((tool) => tool.name === "tabula_connect_room");
+    const hostedStart = hosted.tools.tools.find((tool) => tool.name === "tabula_create_workspace_room");
+
+    expect(local.instructions).toContain("This MCP server runs locally");
+    expect(local.instructions).toContain("Filesystem paths refer to this device");
+    expect(localCreate?.description).toContain("this local MCP process");
+    expect(localImport?.description).toContain("directory on this device");
+    expect(localConnect?.description).toContain("invite key stays on this device");
+
+    expect(hosted.instructions).toContain("This MCP server is hosted");
+    expect(hosted.instructions).toContain("trusted plaintext participant");
+    expect(hostedCreate?.description).toContain("this hosted MCP session");
+    expect(hostedImport?.description).toContain("not the user's device");
+    expect(hostedConnect?.description).toContain("hosted service becomes a trusted plaintext participant");
+    expect(hostedStart?.description).toContain("requires encrypted room recovery");
+  });
+
   it("fingerprints the App resource URI so hosts do not reuse stale bundled UI", () => {
     const first = createDocumentAppResource({ documentAppHtml: "<!doctype html><title>First Session Card</title>" });
     const next = createDocumentAppResource({ documentAppHtml: "<!doctype html><title>Next Session Card</title>" });
