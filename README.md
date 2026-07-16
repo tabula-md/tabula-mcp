@@ -72,14 +72,19 @@ The Session resource is a compact path and revision manifest. File resources ret
 
 ### Claude Desktop
 
-Build the local extension:
+Download the latest
+[Tabula.md MCP extension](https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb),
+then install it by double-clicking the file or from **Settings → Extensions →
+Advanced settings → Install Extension**.
+
+For a local development build:
 
 ```sh
 npm ci
 npm run build:mcpb
 ```
 
-Then open `dist/tabula-mcp-0.2.0.mcpb` in Claude Desktop and restart Claude Desktop after replacing an older build.
+Open `dist/tabula-mcp-0.2.0.mcpb` in Claude Desktop and restart Claude Desktop after replacing an older build.
 
 ### Claude Code or Codex CLI
 

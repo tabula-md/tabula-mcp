@@ -13,6 +13,12 @@ For a live local collaboration check:
 npm run release:verify:full
 ```
 
+Public releases use `.github/workflows/release.yml` on tags shaped as
+`v<package-version>`. The npm Trusted Publisher must authorize the canonical
+repository and workflow. The workflow publishes with OIDC provenance, creates
+the GitHub Release, uploads versioned and stable MCPB artifacts, and verifies
+the public npm and GitHub surfaces.
+
 ## Build artifacts
 
 ```sh
@@ -29,6 +35,18 @@ tabula-mcp MCPB            0.2.0
 Claude Code plugin         0.2.0
 mcp.tabula.md health       0.2.0
 ```
+
+`npm run release:pack` produces both versioned and stable artifacts:
+
+```text
+dist/tabula-mcp-0.2.0.mcpb
+dist/tabula-mcp-0.2.0.mcpb.sha256
+dist/tabula-mcp.mcpb
+dist/tabula-mcp.mcpb.sha256
+```
+
+The stable artifact supports the permanent latest-release URL:
+`https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb`.
 
 ## Manual acceptance
 

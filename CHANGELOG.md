@@ -15,6 +15,8 @@
   server instructions.
 - Made the compact Session Card call the same Start Session and Export Copy
   services as model-facing tools.
+- Preserved the OIDC npm and GitHub Release workflow, including provenance,
+  versioned MCPB artifacts, stable download aliases, and post-publish checks.
 
 ## 0.1.6
 
