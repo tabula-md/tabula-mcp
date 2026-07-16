@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- Added directory-ready MCPB metadata: an HTTPS privacy policy URL, complete
+  tool display titles, and the white-background Tabula.md icon.
+- Added a release check that keeps the npm package, Claude Code plugin, MCPB,
+  privacy policy, and generated directory submission assets aligned.
+- Prepared stateful Cloudflare MCP HTTP deployment for workspace-room tools.
+
 ## Unreleased
 
 - Added Vercel and Cloudflare hosted MCP deployment targets.

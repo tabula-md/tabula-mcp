@@ -40,6 +40,7 @@ const requiredFiles = [
   "server/guidance.js",
   "server/output-schemas.js",
   "README.md",
+  "PRIVACY.md",
   "docs/codex-cli.md",
   "docs/claude-desktop.md",
   "docs/security-model.md",
@@ -140,8 +141,7 @@ const listBundledModelFacingTools = async (bundleDir) => {
     const tools = await client.listTools();
     return tools.tools
       .filter((tool) => !isAppOnlyTool(tool))
-      .map((tool) => tool.name)
-      .sort();
+      .sort((left, right) => left.name.localeCompare(right.name));
   } finally {
     await client.close();
     assert(
@@ -178,6 +178,10 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   const manifest = await readJson(bundleDir, "manifest.json");
   const bundlePackage = await readJson(bundleDir, "package.json");
   assert(!("user_config" in manifest), `MCPB ${label} manifest must not include installer user_config`);
+  assert(
+    Array.isArray(manifest.privacy_policies) && manifest.privacy_policies.every((policy) => /^https:\/\//.test(policy)),
+    `MCPB ${label} manifest must include HTTPS privacy policy URLs`,
+  );
   assert(manifest.icon === "assets/icon.png", `MCPB ${label} manifest must point icon to assets/icon.png`);
   assert(
     manifest.icons?.some((icon) => icon.src === "assets/icon.png" && icon.size === "512x512"),
@@ -216,9 +220,19 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   const modelFacingTools = await listBundledModelFacingTools(bundleDir);
   assertMatchingToolNames(
     manifest.tools.map((tool) => tool.name).sort(),
-    modelFacingTools,
+    modelFacingTools.map((tool) => tool.name),
     `MCPB ${label} manifest tools must match the bundled direct-collaboration server's model-facing tools`,
   );
+  for (const tool of modelFacingTools) {
+    assert(typeof tool.title === "string" && tool.title.trim(), `MCPB ${label} tool ${tool.name} must have a display title`);
+    assert(tool.annotations, `MCPB ${label} tool ${tool.name} must have safety annotations`);
+    for (const annotation of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {
+      assert(
+        typeof tool.annotations[annotation] === "boolean",
+        `MCPB ${label} tool ${tool.name} must declare ${annotation}`,
+      );
+    }
+  }
 
   const appHtml = await readFile(path.join(bundleDir, "server", "document-app.html"), "utf8");
   const icon = await readFile(path.join(bundleDir, "assets", "icon.png"));

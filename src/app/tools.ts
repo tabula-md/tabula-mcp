@@ -165,6 +165,8 @@ export const registerDocumentAppTools = (
         inputSchema: optionalSessionSchema,
         annotations: {
           readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
           openWorldHint: true,
         },
         _meta: {
@@ -249,10 +251,13 @@ export const registerDocumentAppTools = (
       server,
       "tabula_app_room_snapshot",
       {
+        title: "Read Tabula Room App Snapshot",
         description: "Read a connected room snapshot for the Tabula Document MCP App.",
         inputSchema: optionalSessionSchema,
         annotations: {
           readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
           openWorldHint: true,
         },
         _meta: {
@@ -273,10 +278,13 @@ export const registerDocumentAppTools = (
     server,
     "tabula_app_document_snapshot",
     {
+      title: "Read Tabula Document App Snapshot",
       description: "Read a document checkpoint snapshot for the Tabula Document MCP App.",
       inputSchema: optionalDocumentSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
         openWorldHint: false,
       },
       _meta: {
@@ -296,6 +304,7 @@ export const registerDocumentAppTools = (
     server,
     "tabula_app_save_document",
     {
+      title: "Save Tabula Document",
       description: "Save the current Markdown for a local Tabula Document MCP App document.",
       inputSchema: {
         documentId: z.string().uuid().describe("Document id returned by tabula_create_document."),

@@ -358,6 +358,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_create_workspace",
     {
+      title: "Create Tabula Workspace",
       description:
         "Create a local Tabula workspace in this MCP session from zero or more inline Markdown files. Use tabula_create_workspace_room to turn it into a live room or tabula_share_workspace to export it.",
       inputSchema: {
@@ -386,6 +387,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_import_markdown_workspace",
     {
+      title: "Import Markdown Workspace",
       description:
         "Import Markdown into a local Tabula workspace from either this MCP server's filesystem or an inline files array. Filesystem paths are resolved where the MCP server is running.",
       inputSchema: {
@@ -451,6 +453,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_share_workspace",
     {
+      title: "Share Tabula Workspace",
       description:
         "Export a local/imported Tabula workspace as an encrypted Tabula.md #json snapshot link. The JSON snapshot service receives only encrypted bytes.",
       inputSchema: {
@@ -492,6 +495,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_create_workspace_room",
     {
+      title: "Create Tabula Workspace Room",
       description:
         "Create a new encrypted Tabula.md live workspace room from a local/imported MCP workspace, publish initial workspace state, and return a shareable #room URL.",
       inputSchema: {
@@ -570,6 +574,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_connect_room",
     {
+      title: "Connect Tabula Room",
       description:
         "Connect this local MCP process to an encrypted Tabula.md live room URL. The #room fragment contains the room key, is used locally, and is never sent to the room server.",
       inputSchema: {
@@ -630,10 +635,14 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_list_sessions",
     {
+      title: "List Tabula Room Sessions",
       description: "List Tabula room sessions currently connected in this MCP process.",
       inputSchema: {},
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
       },
     },
     async () =>
@@ -645,10 +654,14 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_room_status",
     {
+      title: "Get Tabula Room Status",
       description: "Return connection, metadata, collaborator, hash, and write-access state for a connected Tabula room.",
       inputSchema: optionalSessionSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
       },
     },
     async ({ sessionId }) => runTool(async () => registry.get(sessionId).getStatus()),
@@ -657,6 +670,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_read_workspace",
     {
+      title: "Read Tabula Workspace",
       description:
         "Read decrypted Tabula workspace tree metadata from a connected room session or a local/imported MCP workspace.",
       inputSchema: {
@@ -665,6 +679,8 @@ export const registerRoomTools = (
       },
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
         openWorldHint: true,
       },
     },
@@ -677,6 +693,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_read_workspace_document",
     {
+      title: "Read Tabula Workspace Document",
       description:
         "Read decrypted Markdown for one document from a connected room session or local/imported MCP workspace. Use tabula_read_workspace first to get document ids.",
       inputSchema: {
@@ -685,6 +702,8 @@ export const registerRoomTools = (
       },
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
         openWorldHint: true,
       },
     },
@@ -699,6 +718,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_read_workspace_context",
     {
+      title: "Read Tabula Workspace Context",
       description:
         "Read a bounded Markdown context bundle from a connected room session or local/imported workspace. This is for agent planning; use tabula_read_workspace_document for exact full text.",
       inputSchema: {
@@ -728,6 +748,8 @@ export const registerRoomTools = (
       },
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
         openWorldHint: true,
       },
     },
@@ -752,6 +774,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_apply_workspace_changes",
     {
+      title: "Apply Tabula Workspace Changes",
       description:
         "Apply one or more workspace document changes atomically to the connected encrypted workspace CRDT.",
       inputSchema: {
@@ -775,6 +798,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_set_presence",
     {
+      title: "Set Tabula Presence",
       description: "Publish this MCP client's current cursor/selection presence to collaborators.",
       inputSchema: {
         ...optionalSessionSchema,
@@ -801,6 +825,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_wait_for_changes",
     {
+      title: "Wait for Tabula Changes",
       description:
         "Wait for a connected room's active document hash or workspace CRDT state to change, then return workspace document hash summaries.",
       inputSchema: {
@@ -811,6 +836,8 @@ export const registerRoomTools = (
       },
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
         openWorldHint: true,
       },
     },
@@ -835,6 +862,7 @@ export const registerRoomTools = (
   server.registerTool(
     "tabula_disconnect_room",
     {
+      title: "Disconnect Tabula Room",
       description: "Disconnect one connected Tabula room session.",
       inputSchema: optionalSessionSchema,
       annotations: {
