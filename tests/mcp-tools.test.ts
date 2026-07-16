@@ -647,7 +647,7 @@ describe("MCP tool registration", () => {
       expect(structured.readMe.nextActions.length).toBeGreaterThan(0);
       expect(structured.readMe.securityRules.join("\n")).toContain("#room");
       expect(structured.runtime).toMatchObject({
-        version: "0.1.6",
+        version: "0.1.7",
         deploymentMode: "local",
         writeAccess: "read-only",
       });

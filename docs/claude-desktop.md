@@ -4,6 +4,9 @@ Tabula.md MCP is packaged for Claude Desktop as a zero-config MCP Bundle
 (`.mcpb`). Normal users should not enter a room URL, room key, token, or write
 setting during installation.
 
+Download the latest public bundle from
+[GitHub Releases](https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb).
+
 ## Build
 
 ```sh
@@ -15,7 +18,9 @@ Build and release packaging require Node.js `^20.19.0 || >=22.12.0`.
 
 The bundle includes `assets/icon.png` for the Claude Desktop extension listing
 and is written to `dist/tabula-mcp-<version>.mcpb`, with a matching
-`dist/tabula-mcp-<version>.mcpb.sha256` checksum.
+`dist/tabula-mcp-<version>.mcpb.sha256` checksum. Packaging also creates stable
+`dist/tabula-mcp.mcpb` and `dist/tabula-mcp.mcpb.sha256` aliases used by the
+latest-release download URL.
 
 `release:pack` builds the TypeScript server, bundles the Document App, stages
 the MCPB directory, validates the manifest, packs the bundle, and runs the

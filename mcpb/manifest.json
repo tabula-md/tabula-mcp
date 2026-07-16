@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "tabula-mcp",
   "display_name": "Tabula.md MCP",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Let Claude work with people in shared Tabula.md Markdown workspaces.",
   "long_description": "Tabula.md MCP lets Claude create private Markdown drafts, open encrypted copy links, and join live sessions where people and Claude continue in the same files. Local working drafts stay on this machine. Complete #room and #json URLs are bearer secrets; the Tabula Room relay and Tabula JSON store receive encrypted data only.",
   "author": {

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { copyFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -37,6 +37,9 @@ const main = async () => {
   const mcpbFilename = `tabula-mcp-${pkg.version}.mcpb`;
   const mcpbPath = path.join(distDir, mcpbFilename);
   const checksumPath = `${mcpbPath}.sha256`;
+  const stableFilename = "tabula-mcp.mcpb";
+  const stablePath = path.join(distDir, stableFilename);
+  const stableChecksumPath = `${stablePath}.sha256`;
 
   await runNpmScript("build:mcpb");
   await runNpmScript("check:exports");
@@ -45,8 +48,10 @@ const main = async () => {
 
   const checksum = await sha256File(mcpbPath);
   await writeFile(checksumPath, `${checksum}  ${mcpbFilename}\n`, "utf8");
+  await copyFile(mcpbPath, stablePath);
+  await writeFile(stableChecksumPath, `${checksum}  ${stableFilename}\n`, "utf8");
 
-  console.log(`Release checksum written to ${path.relative(rootDir, checksumPath)}`);
+  console.log(`Release artifacts written to ${path.relative(rootDir, mcpbPath)} and ${path.relative(rootDir, stablePath)}`);
 };
 
 main().catch((error) => {

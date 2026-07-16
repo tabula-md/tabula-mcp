@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.7
+
+- Made local and hosted MCP descriptions state their real runtime and plaintext
+  trust boundary, with concise server instructions for choosing a workflow.
+- Limited default hosted Markdown import to inline files; trusted self-hosted
+  deployments can expose operator-approved server paths explicitly.
+- Aligned npm, MCPB, Claude Code, CLI, README, and directory surfaces around
+  one Tabula.md product story and the current Session Card.
+- Added an OIDC-based npm and GitHub Release workflow with provenance,
+  versioned MCPB artifacts, stable download aliases, and post-publish checks.
+
 ## 0.1.6
 
 - Made Room connection intentionally read/write capable by default. MCP hosts

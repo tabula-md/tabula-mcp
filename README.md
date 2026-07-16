@@ -45,11 +45,11 @@ claude plugin install tabula-mcp@tabula-md
 
 ### Claude Desktop
 
-Until the first public MCPB release is available, build the extension from this
-repository with `npm run release:pack`. Then install
-`dist/tabula-mcp-<version>.mcpb` by double-clicking it or from **Settings →
-Extensions → Advanced settings → Install Extension**. No installer
-configuration is required.
+Download the latest
+[Tabula.md MCP extension](https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb),
+then install it by double-clicking the file or from **Settings → Extensions →
+Advanced settings → Install Extension**. No installer configuration is
+required.
 
 See [Claude Desktop setup](docs/claude-desktop.md) for the complete check.
 
