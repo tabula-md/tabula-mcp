@@ -7,13 +7,13 @@ Tabula.md copy or live session without manual setup.
 
 ## Product Shape
 
-The MCP App is a compact Tabula.md Session Card:
+The MCP App is a compact Tabula Session Card:
 
 - local Markdown document creation
 - MCP document checkpointing
 - encrypted export to a Tabula.md snapshot link
 - creation and status handoff for an encrypted live room
-- a single `Open a copy` or `Open session` action into the actual Tabula.md app
+- `Open a copy` or `Open session` actions into the actual Tabula.md app
 
 The card is not a dashboard, a database, or a second document editor. Tabula.md
 itself is the only visual editing and real-time collaboration surface. Claude
@@ -158,6 +158,7 @@ Model-facing tools:
 
 - `tabula_read_me`
 - `tabula_create_document`
+- `tabula_update_document`
 - `tabula_list_documents`
 - `tabula_open_document`
 - `tabula_share_document`
@@ -205,11 +206,12 @@ App-only tools:
 - `tabula_app_start_room_from_document`
 - `tabula_app_room_snapshot`
 
-`tabula_app_start_room_from_document` is the Session Card action that turns a
-local draft into a Room. The remaining snapshot and save helpers are retained
-only for already-installed pre-0.1.5 App resources during the transition; the
-Session Card itself does not call them. All App-only tools are marked with MCP
-Apps visibility metadata so model-facing tool lists stay focused.
+`tabula_app_start_room_from_document` turns a local draft into a Room and
+connects Claude as the actual read/write collaborator that published it. There
+is no invisible transport, phantom collaborator, or second product-level write
+switch. The MCP host remains responsible for asking the user to approve each
+mutating tool call. All App-only tools are marked with MCP Apps visibility
+metadata so model-facing tool lists stay focused.
 
 ## Collaboration Boundary
 
@@ -218,10 +220,11 @@ keystrokes or selections back into the model context. The model works through
 document and workspace tools; people edit in the actual Tabula.md browser app.
 
 A local draft exposes **Open a copy** (encrypted `#json` snapshot) and **Start
-session** (live encrypted `#room`). After a Room starts, the card exposes only
-**Open session**. The connected Room is the sole collaboration object for human
-and agent reads and writes; no later local checkpoint edits are silently
-mirrored into it.
+session** (a live encrypted `#room`). Starting a session connects Claude as a
+real Room collaborator. The card shows **Open session** and a collaborator
+count derived only from Awareness actors, never relay sockets. The connected
+Room is the sole collaboration object for human and agent reads and writes; no
+later local checkpoint edits are silently mirrored into it.
 
 MCP hosts cache App resources by URI. `resource.ts` fingerprints the bundled
 App HTML into the `ui://tabula/document-<hash>.html` resource URI, so a changed

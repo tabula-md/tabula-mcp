@@ -229,7 +229,7 @@ const runAppClientSmoke = async ({ storeDir, jsonServerUrl, uploads, serverCwd, 
     const resource = await client.readResource({ uri: documentAppResourceUri });
     const appHtml = resource.contents?.[0]?.text || "";
     assert(resource.contents?.[0]?.mimeType === "text/html;profile=mcp-app", "Document App resource must be MCP App HTML");
-    assert(appHtml.includes("Tabula.md Session"), "Session Card resource should contain the bundled App HTML");
+    assert(appHtml.includes("<title>Tabula Session</title>"), "Session Card resource should contain the bundled App HTML");
     assert(!appHtml.includes("dev-only-not-a-real-key"), "Document App resource must not contain dev share fixture data");
 
     const plaintext = "# Stdio Smoke\n\nPlaintext should stay local.";

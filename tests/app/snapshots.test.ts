@@ -37,6 +37,10 @@ describe("readRoomSnapshot", () => {
         stateReceived: false,
       },
     });
+    const snapshot = await readRoomSnapshot(registry);
+    expect(snapshot.room).not.toHaveProperty("peerCount");
+    expect(snapshot.room).not.toHaveProperty("title");
+    expect(snapshot.room.collaboratorCount).toBe(0);
     expect(readMarkdown).not.toHaveBeenCalled();
     expect(getOutline).not.toHaveBeenCalled();
   });

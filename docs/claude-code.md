@@ -6,10 +6,11 @@ Claude Code plugin marketplace.
 ## Direct install
 
 ```sh
-claude mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+claude mcp add tabula -- npx -y @tabula-md/mcp@latest
 ```
 
-Omit `--enable-write`, or replace it with `--read-only`, for inspection-only
+Tabula connects as a read/write Room actor by default. Claude Code controls
+approval for each mutating call. Add `--read-only` only for inspection-only
 room access. Restart Claude Code if the server does not appear immediately,
 then run `/mcp` to verify it.
 

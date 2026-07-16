@@ -42,6 +42,10 @@ export class SessionRegistry {
     return [...this.sessions.values()];
   }
 
+  has() {
+    return this.sessions.size > 0;
+  }
+
   remove(sessionId?: string) {
     const session = this.get(sessionId);
     session.disconnect();

@@ -8,13 +8,13 @@ type RoomStatus = Awaited<ReturnType<ReturnType<SessionRegistry["get"]>["getStat
 export const summarizeRoomStatus = (status: RoomStatus) => ({
   sessionId: status.sessionId,
   roomId: status.roomId,
-  title: status.activeDocumentTitle ?? "Untitled session",
   shareUrl: status.shareUrl,
   status: status.status,
   writeAccess: status.writeAccess,
   textLength: status.textLength,
   sha256: status.sha256,
-  peerCount: status.peerCount,
+  // Relay sockets include the local MCP transport. Product UI must use the
+  // awareness-derived collaborator count rather than this diagnostic value.
   collaboratorCount: status.collaborators.length,
   hydrationStatus: status.hydrationStatus,
   stateReceived: status.stateReceived,

@@ -109,12 +109,14 @@ const roomClientMock = vi.hoisted(() => {
       identityName,
       identityColor,
       actorCapabilities,
+      writeAccess,
     }: {
       parsedRoom: { roomId: string; shareUrl: string };
       roomServerUrl: string;
       identityName?: string;
       identityColor?: string;
       actorCapabilities?: readonly string[];
+      writeAccess?: boolean;
     }) {
       this.roomId = parsedRoom.roomId;
       this.roomServerUrl = roomServerUrl;
@@ -124,7 +126,7 @@ const roomClientMock = vi.hoisted(() => {
         kind: "agent",
         name: identityName?.trim() || "Tabula Agent",
         client: "tabula-mcp",
-        capabilities: [...(actorCapabilities ?? ["presence", "read", "write"])],
+        capabilities: [...(actorCapabilities ?? (writeAccess ? ["presence", "read", "write"] : ["presence", "read"]))],
         color: identityColor?.trim() || "#2563eb",
         joinedAt: new Date("2026-07-10T00:00:00.000Z").toISOString(),
       };
@@ -468,9 +470,11 @@ const modelFacingTools = [
 
 const appTools = [
   "tabula_create_document",
+  "tabula_update_document",
   "tabula_list_documents",
   "tabula_open_document",
   "tabula_share_document",
+  "tabula_app_start_room_from_document",
   "tabula_open_room_view",
   "tabula_app_room_snapshot",
   "tabula_app_document_snapshot",
@@ -877,7 +881,7 @@ describe("MCP end-to-end tool workflows", () => {
       const emptySessions = await callTool<{ sessions: unknown[] }>(client, calledTools, "tabula_list_sessions");
       expect(emptySessions.structuredContent.sessions).toEqual([]);
       expect([...calledTools].sort()).toEqual([...modelFacingTools].sort());
-    });
+    }, { writeEnabled: true });
   });
 
   it("exercises every MCP App document and room-view tool for app-capable clients", async () => {
@@ -911,6 +915,24 @@ describe("MCP end-to-end tool workflows", () => {
           resourceUri: expect.stringMatching(/^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/),
         });
 
+        const updated = await callTool<{ document: { documentId: string; title: string; sha256: string }; markdown: string }>(
+          client,
+          calledTools,
+          "tabula_update_document",
+          {
+            documentId: document.structuredContent.document.documentId,
+            title: "App Draft Updated",
+            markdown: "# App Draft Updated\n\nUpdated by Claude.\n",
+          },
+        );
+        expect(updated.structuredContent).toMatchObject({
+          document: {
+            documentId: document.structuredContent.document.documentId,
+            title: "App Draft Updated",
+          },
+          markdown: "# App Draft Updated\n\nUpdated by Claude.\n",
+        });
+
         const listed = await callTool<{ documents: Array<{ documentId: string; title: string }> }>(
           client,
           calledTools,
@@ -919,7 +941,7 @@ describe("MCP end-to-end tool workflows", () => {
         expect(listed.structuredContent.documents).toEqual([
           expect.objectContaining({
             documentId: document.structuredContent.document.documentId,
-            title: "App Draft",
+            title: "App Draft Updated",
           }),
         ]);
 
@@ -929,7 +951,7 @@ describe("MCP end-to-end tool workflows", () => {
           "tabula_open_document",
           { documentId: document.structuredContent.document.documentId },
         );
-        expect(opened.structuredContent.markdown).toBe("# App Draft\n\nInitial body.\n");
+        expect(opened.structuredContent.markdown).toBe("# App Draft Updated\n\nUpdated by Claude.\n");
 
         const saved = await callTool<{ document: { documentId: string; title: string; sha256: string }; markdown: string }>(
           client,
@@ -1020,6 +1042,21 @@ describe("MCP end-to-end tool workflows", () => {
         });
         expect(roomSnapshot.structuredContent.outline.length).toBe(1);
 
+        const preparedSession = await callTool<{
+          mode: string;
+          room: { sessionId: string; roomId: string; agentConnected: boolean; collaboratorCount: number };
+        }>(client, calledTools, "tabula_app_start_room_from_document", {
+          documentId: document.structuredContent.document.documentId,
+          appOrigin: "http://127.0.0.1:5173",
+        });
+        expect(preparedSession.structuredContent).toMatchObject({
+          mode: "room",
+          room: {
+            agentConnected: true,
+            collaboratorCount: 0,
+          },
+        });
+
         const appResource = await client.readResource({ uri: documentAppResourceUri });
         expect(appResource.contents[0]).toMatchObject({
           uri: documentAppResourceUri,
@@ -1030,7 +1067,7 @@ describe("MCP end-to-end tool workflows", () => {
           [...appTools].sort(),
         );
       },
-      { mcpApps: true },
+      { mcpApps: true, writeEnabled: true },
     );
   });
 });

@@ -80,18 +80,17 @@ export const createDevApp = () => {
             room: {
               sessionId: "123e4567-e89b-42d3-a456-426614174998",
               roomId: "started-from-document",
-              title: documentSnapshot.document.title,
               shareUrl: "http://localhost:5173/#room=started-from-document,example-key-for-local-preview-only",
-              status: "connected",
-              writeAccess: false,
+              status: "ready",
               sha256: documentSnapshot.document.sha256,
               textLength: documentSnapshot.markdown.length,
-              peerCount: 0,
+              collaboratorCount: 0,
+              agentConnected: true,
               hydrationStatus: "ready",
               stateReceived: true,
             },
           };
-          return textResult("Started Tabula.md session.", roomSnapshot);
+          return textResult("Started a Tabula session. Claude is connected to the shared workspace.", roomSnapshot);
         }
         case "tabula_share_document":
           return textResult("Encrypted Tabula.md snapshot link created.", {

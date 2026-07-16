@@ -121,10 +121,13 @@ the key or plaintext Markdown.
 
 ## MCP Document Checkpoints
 
-`tabula_create_document` creates a document checkpoint in the MCP server's
-document registry. Checkpoints are plaintext working state so the agent and MCP
-App can continue editing without re-sending the full Markdown document on every
-turn.
+When Claude is not connected to a Room, `tabula_create_document` creates a
+document checkpoint in the MCP server's document registry. Checkpoints are
+plaintext working state so the agent can continue editing without re-sending
+the full Markdown document on every turn. When Claude is connected to a shared
+session, the same tool creates the document directly in that Room instead of
+creating a second local checkpoint. The MCP host controls approval for that
+mutating tool call.
 
 Local stdio/MCPB default checkpoint locations:
 

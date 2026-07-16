@@ -1,5 +1,3 @@
-const writeEnabledValues = new Set(["1", "true", "yes", "on"]);
-
 export type WriteAccessConfig = {
   env?: NodeJS.ProcessEnv;
   argv?: readonly string[];
@@ -13,5 +11,9 @@ export const resolveWriteEnabled = ({ env = process.env, argv = process.argv.sli
     return true;
   }
 
-  return writeEnabledValues.has((env.TABULA_MCP_ENABLE_WRITE ?? "").trim().toLowerCase());
+  // MCP hosts own the human approval step for a mutating tool invocation.
+  // Tabula should therefore be a capable Room actor by default; `--read-only`
+  // remains the explicit server-operator opt-out for inspection-only installs.
+  void env;
+  return true;
 };

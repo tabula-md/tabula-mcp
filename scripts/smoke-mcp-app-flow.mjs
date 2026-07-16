@@ -65,14 +65,14 @@ const assertSessionCardPresentation = async (page, label) => {
   await page.locator(".session-card").waitFor({ state: "visible" });
   assert.equal(await page.locator("textarea").count(), 0, `${label} must not render a second Markdown editor`);
   assert.equal(await page.locator("[data-tabula-document-workbench]").count(), 0, `${label} must not embed the Tabula workbench`);
-  assert.equal(await page.getByRole("button", { name: "Edit" }).count(), 0, `${label} must not offer a second editing mode`);
+  assert.equal(await page.getByRole("button", { name: /^Edit$/ }).count(), 0, `${label} must not offer a second editing mode`);
 };
 
 const runDocumentFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
   await waitForMessage(page, "Tabula.md draft is ready.");
-  await page.getByRole("heading", { name: "Launch Brief" }).waitFor({ state: "visible" });
+  await page.getByText("Tabula", { exact: true }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Open a copy" }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Start session" }).waitFor({ state: "visible" });
   await assertSessionCardPresentation(page, "document handoff");
@@ -84,8 +84,9 @@ const runDocumentFlow = async (baseUrl, browser) => {
   assert(events.openLinks.some((request) => String(request?.url).includes("#json=")), "Open a copy should open the Tabula.md snapshot link");
 
   await page.getByRole("button", { name: "Start session" }).click();
-  await waitForMessage(page, "Tabula.md session is ready.");
+  await waitForMessage(page, "Shared session is ready. Claude is connected to it.");
   await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
+  await page.getByText("Claude is connected · 0 other collaborators", { exact: true }).waitFor({ state: "visible" });
   assert.equal(await page.getByRole("button", { name: "Open a copy" }).isVisible(), false);
   assert.equal(await page.getByRole("button", { name: "Start session" }).isVisible(), false);
 
@@ -117,8 +118,8 @@ const runRoomFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=room`);
   await waitForMessage(page, "Tabula.md session is ready.");
-  await page.getByRole("heading", { name: "Research Review" }).waitFor({ state: "visible" });
-  await page.getByText("This encrypted session is ready in Tabula.md.").waitFor({ state: "visible" });
+  assert.equal(await page.getByText("Research Review", { exact: true }).count(), 0, "room handoff must not present a document title as a session title");
+  await page.getByText("Claude is connected to this shared workspace. Claude Desktop asks before it applies changes.").waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
   await assertSessionCardPresentation(page, "room handoff");
 

@@ -22,13 +22,13 @@ Requirements: Node.js `^20.19.0 || >=22.12.0`, npm, and an MCP client.
 ### Codex
 
 ```sh
-codex mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+codex mcp add tabula -- npx -y @tabula-md/mcp@latest
 ```
 
 ### Claude Code
 
 ```sh
-claude mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+claude mcp add tabula -- npx -y @tabula-md/mcp@latest
 ```
 
 ### Other local MCP clients
@@ -38,7 +38,7 @@ claude mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
   "mcpServers": {
     "tabula": {
       "command": "npx",
-      "args": ["-y", "@tabula-md/mcp@latest", "--enable-write"]
+      "args": ["-y", "@tabula-md/mcp@latest"]
     }
   }
 }
@@ -56,9 +56,10 @@ The URL is a bearer secret. Anyone or any agent with it can decrypt and edit the
 room. Do not paste a production room URL into logs, issue trackers, or public
 screenshots.
 
-The examples explicitly enable writes. Omit `--enable-write`, or pass
-`--read-only`, when the agent should only inspect rooms. Write access is a server
-startup decision and cannot be enabled by a tool call.
+Tabula connects Claude with read/write capabilities by default. Claude Desktop,
+Codex, and other MCP hosts decide whether to approve each mutating tool call.
+Pass `--read-only` only for an inspection-only server; it is a server-startup
+decision and cannot be enabled by a tool call.
 
 Check a local installation without inspecting room content or secrets:
 
@@ -273,7 +274,7 @@ send `Origin` are still allowed through the Origin gate.
 Production/public endpoint controls:
 
 - `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables production guardrails.
-- `TABULA_MCP_ENABLE_WRITE=1` enables hash-guarded room edits; the default is read-only.
+- `--read-only` disables hash-guarded room edits for an inspection-only hosted connector. The default server mode is read/write; the MCP host still owns per-tool approval.
 - `TABULA_MCP_AUTH_TOKEN` is required in production unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
 - `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth and ignores any stale auth token secret.
 - Production remote mode requires Redis/Upstash REST credentials by default.
@@ -316,7 +317,8 @@ small ESM surface for tests and local embedding:
 
 ## Tools
 
-- `tabula_create_document`: create a local Tabula.md Markdown checkpoint and open a compact MCP handoff card. From there, open an encrypted copy or start a live Tabula.md session.
+- `tabula_create_document`: create a document in the active writable Tabula session, or a private local draft when Claude is not connected to a session, then open a compact MCP handoff card.
+- `tabula_update_document`: update the latest or selected private local draft. Connected sessions use hash-guarded `tabula_apply_workspace_changes` after Claude is explicitly allowed to edit.
 - `tabula_list_documents`: list Tabula.md document checkpoints in this MCP server.
 - `tabula_open_document`: open the latest or selected document checkpoint in the MCP handoff card.
 - `tabula_read_me`: return workflow guidance for documents, rooms, sharing, and security boundaries.
@@ -384,8 +386,9 @@ Current release budget checks:
 ## MCP App Session Card
 
 Tabula MCP includes a compact MCP Apps handoff surface in the same package.
-Call `tabula_create_document` to create a local Markdown checkpoint and open a
-Tabula.md Session Card when the MCP client supports
+Call `tabula_create_document` to create a private Markdown checkpoint (or a
+document in the active writable session) and open a Tabula Session Card when
+the MCP client supports
 `text/html;profile=mcp-app`.
 
 Call `tabula_read_me` once when the model needs to choose a Tabula.md workflow
@@ -393,12 +396,14 @@ or verify security boundaries. It returns concise topic-specific guidance for
 local documents, encrypted rooms, sharing, and write policy.
 
 The Session Card is bundled into `dist/document-app.html` during `npm run build`.
-It does not reproduce the Tabula editor inside Claude. For a local document it
-shows **Open a copy** and **Start session**: Open a copy creates an encrypted
-`#json` snapshot, while Start session creates a live `#room`. For a connected
-Room, the primary action is **Open session**, which opens that same Room in the
-actual Tabula.md app. The surrounding Claude chrome belongs to the MCP host;
-Tabula.md remains the only visual editing and real-time collaboration surface.
+Its centered header is simply **[Tabula mark] Tabula**; it does not reproduce
+the Tabula editor inside Claude. For a local document it shows **Open a copy**
+and **Start session**: Open a copy creates an encrypted `#json` snapshot, while
+Start session creates a live `#room` and connects Claude as a real read/write
+Room collaborator. The shared-session card offers **Open session** only. The
+surrounding Claude chrome belongs to the MCP host and is where per-tool approval
+occurs; Tabula.md remains the only visual editing and real-time collaboration
+surface.
 
 The Session Card does not replace the workspace room tools: clients without
 MCP Apps support can keep using

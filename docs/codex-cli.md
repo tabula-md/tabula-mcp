@@ -3,13 +3,14 @@
 Tabula.md MCP can be used from Codex CLI as a local stdio MCP server.
 
 ```sh
-codex mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+codex mcp add tabula -- npx -y @tabula-md/mcp@latest
 ```
 
 ## One-Off Configuration
 
-Omit `--enable-write`, or replace it with `--read-only`, for inspection-only
-room access. Write access is fixed when the MCP process starts.
+Tabula connects as a read/write Room actor by default. The MCP host controls
+approval for each mutating call. Add `--read-only` only for inspection-only
+room access; this server policy is fixed when the process starts.
 
 Verify the installation:
 

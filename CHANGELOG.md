@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.1.6
+
+- Made Room connection intentionally read/write capable by default. MCP hosts
+  such as Claude Desktop remain responsible for per-tool mutation approval;
+  `--read-only` is the explicit inspection-only server mode.
+- Made **Start session** create the actual Claude Room collaborator immediately.
+  The Session Card now reports only Awareness collaborators, never the internal
+  relay socket count, and no longer includes an `Invite Claude` or a redundant
+  `Allow Claude to edit` control.
+- Simplified the Session Card to a centered **[Tabula mark] Tabula** header and
+  removed document titles from the collaboration chrome.
+- Added `tabula_update_document` for intentional edits to an existing private
+  draft; when a Room is connected, new document creation writes directly to the
+  shared workspace.
+
 ## 0.1.5
 
 - Aligned encrypted **Open a copy** `#json` snapshots with Tabula.md's shared
