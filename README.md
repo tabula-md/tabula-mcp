@@ -56,6 +56,18 @@ The default server exposes exactly nine model-facing tools:
 
 For an existing file, call `tabula_read_file` first and pass its `revision` as `expectedRevision` to `tabula_write_file`. The server rejects stale writes and computes the collaboration patch itself.
 
+## Read-only resources
+
+MCP clients can also read Draft and Session content through read-only resource templates:
+
+```text
+tabula://draft/{draftId}
+tabula://session/{sessionId}
+tabula://session/{sessionId}/file/{encodedPath}
+```
+
+The Session resource is a compact path and revision manifest. File resources return Markdown. Drafts are readable only when the client already knows the `draftId` returned by a tool; `resources/list` never enumerates a potentially shared Draft store. Resources do not expose room URLs, room keys, CRDT nodes, internal document IDs, or checkpoint state. Changes still go through `tabula_write_file`; tool results do not automatically attach a resource link for every file.
+
 ## Install
 
 ### Claude Desktop
@@ -169,6 +181,12 @@ npm test
 npm run test:app
 npm run test:stdio
 npm run check:context-budget
+```
+
+Run the full local Room and encrypted Copy browser flow when the sibling Tabula repositories are available:
+
+```sh
+npm run test:e2e:local-collab
 ```
 
 Build and verify the extension:

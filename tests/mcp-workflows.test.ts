@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const roomMock = vi.hoisted(() => {
   const hash = (value: string) => `${value.length.toString(16).padStart(64, "0")}`;
   let sequence = 0;
+  let stateReceived = true;
   class MockRoomClient {
     readonly sessionId = `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`;
     readonly roomId: string;
@@ -12,7 +13,10 @@ const roomMock = vi.hoisted(() => {
     readonly roomServerUrl: string;
     readonly writeAccess: boolean;
     readonly actor = { id: "agent", capabilities: ["presence", "read", "write"] };
-    documents: Record<string, string> = { main: "# Shared\n\nhello\n" };
+    documents: Record<string, string> = {
+      main: "# Shared\n\nhello\n",
+      guide: "# Guide\n\nnested\n",
+    };
     workspace = {
       roomId: "room",
       mode: "workspace" as const,
@@ -21,7 +25,9 @@ const roomMock = vi.hoisted(() => {
       activeDocumentId: "main",
       nodes: [
         { id: "root", type: "folder" as const, parentId: null, title: "Workspace", order: 0, createdAt: "2026-07-17T00:00:00.000Z", updatedAt: "2026-07-17T00:00:00.000Z" },
+        { id: "docs", type: "folder" as const, parentId: "root", title: "docs", order: 0, createdAt: "2026-07-17T00:00:00.000Z", updatedAt: "2026-07-17T00:00:00.000Z" },
         { id: "main", type: "document" as const, parentId: "root", title: "shared.md", order: 0, createdAt: "2026-07-17T00:00:00.000Z", updatedAt: "2026-07-17T00:00:00.000Z", sha256: hash("# Shared\n\nhello\n"), textLength: 18 },
+        { id: "guide", type: "document" as const, parentId: "docs", title: "guide.md", order: 0, createdAt: "2026-07-17T00:00:00.000Z", updatedAt: "2026-07-17T00:00:00.000Z", sha256: hash("# Guide\n\nnested\n"), textLength: 17 },
       ],
     };
     constructor({ parsedRoom, roomServerUrl, writeAccess }: {
@@ -42,8 +48,8 @@ const roomMock = vi.hoisted(() => {
         roomId: this.roomId,
         shareUrl: this.shareUrl,
         roomServerUrl: this.roomServerUrl,
-        stateReceived: true,
-        hydrationStatus: "ready",
+        stateReceived,
+        hydrationStatus: stateReceived ? "ready" : "waiting-for-peer-state",
         writeAccess: this.writeAccess,
         collaborators: [{ id: "human" }],
         recoveryMode: "temporary",
@@ -97,7 +103,12 @@ const roomMock = vi.hoisted(() => {
     }
     disconnect() {}
   }
-  return { MockRoomClient };
+  return {
+    MockRoomClient,
+    setStateReceived(value: boolean) {
+      stateReceived = value;
+    },
+  };
 });
 
 vi.mock("../src/room-client.js", () => ({ TabulaRoomClient: roomMock.MockRoomClient }));
@@ -124,6 +135,7 @@ const withClient = async (callback: (client: Client) => Promise<void>) => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  roomMock.setStateReceived(true);
   vi.restoreAllMocks();
 });
 
@@ -138,11 +150,38 @@ describe("core MCP workflows", () => {
         fileCount: number;
         otherCollaboratorCount: number;
       };
-      expect(session).toMatchObject({ ready: true, canWrite: true, fileCount: 1, otherCollaboratorCount: 1 });
+      expect(session).toMatchObject({ ready: true, canWrite: true, fileCount: 2, otherCollaboratorCount: 1 });
       expect(JSON.stringify(joined.structuredContent)).not.toContain(roomUrl);
 
+      const resources = await client.listResources();
+      const manifestUri = `tabula://session/${session.sessionId}`;
+      const fileUri = `tabula://session/${session.sessionId}/file/shared.md`;
+      const nestedFileUri = `tabula://session/${session.sessionId}/file/docs%2Fguide.md`;
+      expect(resources.resources).toEqual(expect.arrayContaining([
+        expect.objectContaining({ uri: manifestUri, mimeType: "application/json" }),
+        expect.objectContaining({ uri: fileUri, mimeType: "text/markdown" }),
+        expect.objectContaining({ uri: nestedFileUri, mimeType: "text/markdown" }),
+      ]));
+      expect(JSON.stringify(resources)).not.toContain("documentId");
+      const manifest = await client.readResource({ uri: manifestUri });
+      const manifestValue = JSON.parse(manifest.contents[0]?.text ?? "{}");
+      expect(manifestValue.sessionId).toBe(session.sessionId);
+      expect(manifestValue.files).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "shared.md" }),
+        expect.objectContaining({ path: "docs/guide.md" }),
+      ]));
+      const fileResource = await client.readResource({ uri: fileUri });
+      expect(fileResource.contents[0]).toMatchObject({ text: "# Shared\n\nhello\n" });
+      const nestedFileResource = await client.readResource({ uri: nestedFileUri });
+      expect(nestedFileResource.contents[0]).toMatchObject({
+        text: "# Guide\n\nnested\n",
+        _meta: expect.objectContaining({ path: "docs/guide.md" }),
+      });
+
       const listed = await client.callTool({ name: "tabula_list_files", arguments: { sessionId: session.sessionId } });
-      expect(listed.structuredContent).toMatchObject({ files: [expect.objectContaining({ path: "shared.md" })] });
+      expect((listed.structuredContent as { files: unknown[] }).files).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "shared.md" }),
+      ]));
 
       const read = await client.callTool({ name: "tabula_read_file", arguments: { sessionId: session.sessionId, path: "shared.md" } });
       const file = read.structuredContent as { content: string; revision: string };
@@ -175,6 +214,31 @@ describe("core MCP workflows", () => {
         fileCount: 1,
         sessionUrl: expect.stringMatching(/^https:\/\/tabula\.md\/#room=/),
       });
+    });
+  });
+
+  it("returns session_not_ready without discarding the connected session", async () => {
+    roomMock.setStateReceived(false);
+    await withClient(async (client) => {
+      const joined = await client.callTool({ name: "tabula_join_room", arguments: { roomUrl } });
+      expect(joined.isError).toBe(true);
+      expect(joined.structuredContent).toBeUndefined();
+      const error = JSON.parse(joined.content?.find((item) => item.type === "text")?.text ?? "{}");
+      expect(error).toMatchObject({
+        code: "session_not_ready",
+        sessionId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+        retry: expect.stringContaining("List Files"),
+      });
+
+      roomMock.setStateReceived(true);
+      const listed = await client.callTool({
+        name: "tabula_list_files",
+        arguments: { sessionId: error.sessionId },
+      });
+      expect(listed.isError).not.toBe(true);
+      expect((listed.structuredContent as { files: unknown[] }).files).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "shared.md" }),
+      ]));
     });
   });
 });

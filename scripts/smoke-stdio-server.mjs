@@ -137,6 +137,17 @@ const run = async () => {
       assert(uri, "Tabula Session MCP App resource should be present");
       const resource = await client.readResource({ uri });
       assert.equal(resource.contents[0]?.mimeType, "text/html;profile=mcp-app");
+      const draftUri = `tabula://draft/${draft.draftId}`;
+      assert(
+        resources.resources.every((candidate) => !candidate.uri.startsWith("tabula://draft/")),
+        "resources/list must not enumerate drafts from a potentially shared store",
+      );
+      assert(
+        resources.resources.every((candidate) => !candidate.uri.startsWith("tabula://workspace/")),
+        "legacy workspace resources must not be exposed",
+      );
+      const draftResource = await client.readResource({ uri: draftUri });
+      assert.equal(draftResource.contents[0]?.text, "# Stdio Smoke\n\nUpdated private plaintext.\n");
 
       const restored = await client.callTool({
         name: "tabula_update_draft",

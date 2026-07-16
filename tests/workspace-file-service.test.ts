@@ -80,7 +80,7 @@ const createHarness = async () => {
     },
   };
   const registry = { get: () => session } as unknown as SessionRegistry;
-  return { registry, docs, workspace };
+  return { registry, docs, session, workspace };
 };
 
 describe("workspace file service", () => {
@@ -168,5 +168,25 @@ describe("workspace file service", () => {
       textLength: 0,
     });
     expect(() => buildWorkspacePathIndex(workspace)).toThrowError(expect.objectContaining({ code: "invalid_path" }));
+  });
+
+  it("normalizes live collaboration failures as write_failed", async () => {
+    const { registry, session } = await createHarness();
+    const current = await readSessionFile({ registry, sessionId, path: "README.md" });
+    session.applyWorkspaceChanges = async () => {
+      throw new Error("transport closed");
+    };
+
+    await expect(writeSessionFile({
+      registry,
+      sessionId,
+      path: "README.md",
+      content: `${current.content}\nChanged\n`,
+      expectedRevision: current.revision,
+    })).rejects.toMatchObject({
+      code: "write_failed",
+      details: { path: "README.md" },
+      retry: "Read the latest file state and retry once.",
+    });
   });
 });

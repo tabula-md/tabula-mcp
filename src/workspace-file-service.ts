@@ -27,6 +27,15 @@ const readReadySnapshot = async (registry: SessionRegistry, sessionId: string) =
   return { session, snapshot: await session.readWorkspaceSnapshot() };
 };
 
+const writeFailed = (path: string) => new TabulaCoreError(
+  "write_failed",
+  "Tabula could not apply the file change to the live session.",
+  {
+    details: { path },
+    retry: "Read the latest file state and retry once.",
+  },
+);
+
 export const listSessionFiles = async ({
   registry,
   sessionId,
@@ -206,11 +215,17 @@ export const writeSessionFile = async ({
           retry: "Read the file again, merge the changes, and retry.",
         });
       }
-      throw error;
+      if (error instanceof TabulaCoreError) throw error;
+      throw writeFailed(filePath);
     }
-    const updated = await session.readWorkspaceSnapshot();
+    let updated;
+    try {
+      updated = await session.readWorkspaceSnapshot();
+    } catch {
+      throw writeFailed(filePath);
+    }
     const updatedNode = updated.workspace.nodes.find((node) => node.id === existing.node.id && node.type === "document");
-    if (!updatedNode || updatedNode.type !== "document") throw new Error("Updated Tabula file was not found.");
+    if (!updatedNode || updatedNode.type !== "document") throw writeFailed(filePath);
     return { sessionId, path: filePath, created: false, changed: true, revision: updatedNode.sha256, textLength: content.length };
   }
 
@@ -222,14 +237,24 @@ export const writeSessionFile = async ({
       retry: "Choose an existing folder or write the file at the session root.",
     });
   }
-  const changed = await session.applyWorkspaceChanges({
-    changes: [{ type: "document.create", parentId: parent?.node.id ?? null, title: path.posix.basename(filePath), markdown: content }],
-  });
+  let changed;
+  try {
+    changed = await session.applyWorkspaceChanges({
+      changes: [{ type: "document.create", parentId: parent?.node.id ?? null, title: path.posix.basename(filePath), markdown: content }],
+    });
+  } catch {
+    throw writeFailed(filePath);
+  }
   const documentId = changed.changedDocumentIds[0];
-  if (!documentId) throw new Error("Tabula did not return the created document id.");
-  const created = await session.readWorkspaceSnapshot();
+  if (!documentId) throw writeFailed(filePath);
+  let created;
+  try {
+    created = await session.readWorkspaceSnapshot();
+  } catch {
+    throw writeFailed(filePath);
+  }
   const createdNode = created.workspace.nodes.find((node) => node.id === documentId && node.type === "document");
-  if (!createdNode || createdNode.type !== "document") throw new Error("Created Tabula file was not found.");
+  if (!createdNode || createdNode.type !== "document") throw writeFailed(filePath);
   return { sessionId, path: filePath, created: true, changed: true, revision: createdNode.sha256, textLength: content.length };
 };
 

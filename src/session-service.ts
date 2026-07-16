@@ -1,4 +1,5 @@
 import type { RuntimeEnvironment } from "./env.js";
+import { TabulaCoreError } from "./core-errors.js";
 import { parseRoomShareUrl, resolveRoomServerUrl } from "./protocol.js";
 import type { SessionRegistry } from "./registry.js";
 import { createFirebaseWorkspaceRoomCheckpointStore } from "./room-checkpoints.js";
@@ -41,13 +42,20 @@ export const joinRoomSession = async ({
     roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
   });
   try {
-    await client.connect({ waitForStateMs: 10_000 });
-    registry.add(client);
-    return summarizeSession(client);
+    await client.connect({ waitForStateMs: 30_000 });
   } catch (error) {
     client.disconnect();
     throw error;
   }
+  registry.add(client);
+  const session = await summarizeSession(client);
+  if (!session.ready) {
+    throw new TabulaCoreError("session_not_ready", "The Tabula session connected but its workspace state has not arrived.", {
+      details: { sessionId: session.sessionId },
+      retry: "Keep the Tabula room open and retry List Files with this session id.",
+    });
+  }
+  return session;
 };
 
 export const startDraftSession = async ({

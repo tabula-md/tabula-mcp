@@ -5,6 +5,7 @@ export type TabulaCoreErrorCode =
   | "session_not_found"
   | "session_not_ready"
   | "stale_revision"
+  | "write_failed"
   | "write_disabled";
 
 export class TabulaCoreError extends Error {
