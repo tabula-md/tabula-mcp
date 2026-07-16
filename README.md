@@ -84,6 +84,11 @@ needs a snapshot instead of an ongoing workspace.
 - [Privacy policy](PRIVACY.md)
 - [Changelog](CHANGELOG.md)
 
+## Backed By
+
+Tabula.md MCP is backed by
+[Marker Inc Korea](https://github.com/Marker-Inc-Korea).
+
 ## License
 
 MIT
