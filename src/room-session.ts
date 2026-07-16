@@ -1,4 +1,3 @@
-import type { RoomCapability } from "@tabula-md/tabula/collaboration";
 import type { RuntimeEnvironment } from "./env.js";
 import { TabulaMcpError, parseRoomShareUrl, resolveRoomServerUrl } from "./protocol.js";
 import type { SessionRegistry } from "./registry.js";
@@ -6,12 +5,6 @@ import { createFirebaseWorkspaceRoomCheckpointStore } from "./room-checkpoints.j
 import { TabulaRoomClient } from "./room-client.js";
 import { createRoomShareUrl, generateRoomId, generateRoomKey } from "./share.js";
 import { withWorkspaceRoomId, type StoredWorkspace } from "./workspaces.js";
-
-const workspacePublisherCapabilities = [
-  "presence",
-  "read",
-  "write",
-] as const satisfies readonly RoomCapability[];
 
 export const startWorkspaceRoom = async ({
   registry,
@@ -22,6 +15,7 @@ export const startWorkspaceRoom = async ({
   identityName,
   identityColor,
   allowTemporary = true,
+  writeAccess = true,
 }: {
   registry: SessionRegistry;
   workspace: StoredWorkspace;
@@ -32,7 +26,12 @@ export const startWorkspaceRoom = async ({
   identityColor?: string;
   /** Temporary Rooms must remain attached to a local, stateful MCP process. */
   allowTemporary?: boolean;
+  /** Read-only servers may join existing Rooms but cannot publish a new one. */
+  writeAccess?: boolean;
 }) => {
+  if (!writeAccess) {
+    throw new TabulaMcpError("This Tabula MCP server was started with --read-only and cannot create a live session. Restart without --read-only to publish a shared workspace.");
+  }
   const roomId = generateRoomId();
   const roomKey = generateRoomKey();
   const roomUrl = createRoomShareUrl({ appOrigin, roomId, roomKey });
@@ -52,10 +51,9 @@ export const startWorkspaceRoom = async ({
   const client = new TabulaRoomClient({
     parsedRoom,
     roomServerUrl: resolvedRoomServerUrl,
-    writeAccess: false,
+    writeAccess,
     identityName,
     identityColor,
-    actorCapabilities: workspacePublisherCapabilities,
     roomCheckpointStore,
   });
 
@@ -76,8 +74,8 @@ export const startWorkspaceRoom = async ({
       recoveryStatus,
       published,
       note: temporary
-        ? "Started a temporary Tabula session. Keep this MCP process or another participant connected; without an encrypted checkpoint, the room cannot be recovered after every participant leaves."
-        : "Started a durable Tabula session with an encrypted room checkpoint. Continue through the connected Room session for all collaborative reads and edits.",
+        ? "Started a temporary Tabula session. It stays available while this Claude window or another participant remains connected. Claude is connected as a collaborator."
+        : "Started a durable Tabula session with an encrypted room checkpoint. Claude is connected as a collaborator.",
     };
   } catch (error) {
     client.disconnect();

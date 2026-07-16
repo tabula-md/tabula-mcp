@@ -150,10 +150,13 @@ After installing the generated `.mcpb`:
 5. Call `tabula_open_document` and confirm the Session Card reopens the checkpoint.
 6. Click **Open a copy** and confirm it opens a `https://tabula.md/#json=...,...`
    link in Tabula.md.
-7. Click **Start session** and confirm the result is a Room card whose
-   **Open session** action opens a `https://tabula.md/#room=...,...` URL.
-8. For room testing, connect a separate live room link with `tabula_connect_room`.
-9. Open the room handoff card with `tabula_open_room_view`.
+7. Click **Start session** and confirm the result is a shared-session card with
+   **Claude is connected · 0 other collaborators** and **Open session**.
+   **Open session** must open a `https://tabula.md/#room=...,...` URL.
+8. Ask Claude to change the shared workspace and confirm the host's normal
+   approval mode, rather than a second Tabula permission control, governs it.
+9. For room testing, connect a separate live room link with `tabula_connect_room`.
+10. Open the room handoff card with `tabula_open_room_view`.
 
 For local Tabula.md development, run the room server separately and use local
 links such as:

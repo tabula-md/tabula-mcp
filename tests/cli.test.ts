@@ -56,8 +56,8 @@ describe("CLI options", () => {
   });
 
   it("provides installable client commands in help", () => {
-    expect(CLI_HELP).toContain("codex mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write");
-    expect(CLI_HELP).toContain("claude mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write");
+    expect(CLI_HELP).toContain("codex mcp add tabula -- npx -y @tabula-md/mcp@latest");
+    expect(CLI_HELP).toContain("claude mcp add tabula -- npx -y @tabula-md/mcp@latest");
     expect(getPackageVersion()).toMatch(/^\d+\.\d+\.\d+/);
   });
 

@@ -23,7 +23,6 @@ const main = async () => {
   for (const expected of [
     "tabulaMark",
     "sessionEyebrow",
-    "sessionTitle",
     "documentMeta",
     "collaborationMeta",
     "openCopyButton",
@@ -40,6 +39,10 @@ const main = async () => {
   }
 
   assertIncludes(devHtml, "/src/app-dev/main.js", "dev harness");
+  assertIncludes(builtHtml, ">Tabula<", "built session card");
+  if (builtHtml.includes("Tabula.md</span>") || builtHtml.includes("sessionTitle")) {
+    throw new Error("built session card must use the centered Tabula brand without a document title header");
+  }
   assertIncludes(builtHtml, "Private draft", "built session card");
   if (builtHtml.includes("TabulaEmbeddedDocumentWorkbench") || builtHtml.includes("data-tabula-document-workbench")) {
     throw new Error("built session card must not bundle a second Tabula editor");

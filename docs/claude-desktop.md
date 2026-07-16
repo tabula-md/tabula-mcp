@@ -43,13 +43,16 @@ directly from an MCP tool inspector.
 
 Expected behavior:
 
-1. Claude opens the compact Tabula.md Session Card.
+1. Claude opens the compact Tabula Session Card.
 2. The card shows **Open a copy** and **Start session**. It does not contain a
    Markdown editor or a fullscreen `Edit` mode.
 3. Click **Open a copy**. Claude Desktop opens an encrypted
    `https://tabula.md/#json=...,...` link in the real Tabula.md app.
-4. Click **Start session**. Confirm the card becomes a connected Room and its
-   primary action changes to **Open session**. The opened URL must use `#room=`.
+4. Click **Start session**. Confirm the card becomes a shared session with
+   **Open session** and the truthful label **Claude is connected · 0 other
+   collaborators**. The opened URL must use `#room=`.
+5. Ask Claude to change the shared workspace. Claude Desktop's normal approval
+   mode must govern the mutating tool call.
 
 Local App documents are checkpointed as plaintext files on this machine so they
 can recover across MCP process restarts. They are not uploaded to Tabula.md room
@@ -126,8 +129,11 @@ After installing the MCPB in Claude Desktop:
    listed.
 5. Ask Claude to call `tabula_open_document` and confirm the Session Card reopens it.
 6. Click **Open a copy** and confirm the snapshot import flow starts in Tabula.md.
-7. Click **Start session**, then confirm the Room card's **Open session**
-    action opens a `#room=` URL in Tabula.md.
+7. Click **Start session**, then confirm the shared-session card shows **Open
+   session** and **Claude is connected · 0 other collaborators**, and its
+   **Open session** action opens a `#room=` URL in Tabula.md.
+8. Ask Claude to modify the shared workspace and verify its normal approval
+   mode governs the mutation.
 
 If the App fails to open, verify that the MCPB contains `server/document-app.html`
 and that `npm run check:mcpb` passes.

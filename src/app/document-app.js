@@ -5,7 +5,6 @@ import "./document-app.css";
 const elements = {
   tabulaMark: document.getElementById("tabulaMark"),
   eyebrow: document.getElementById("sessionEyebrow"),
-  title: document.getElementById("sessionTitle"),
   summary: document.getElementById("sessionSummary"),
   documentMeta: document.getElementById("documentMeta"),
   collaborationMeta: document.getElementById("collaborationMeta"),
@@ -21,7 +20,6 @@ const state = {
   documentId: "",
   sessionId: "",
   shareUrl: "",
-  title: "",
 };
 
 const formatCount = (value) => new Intl.NumberFormat("en-US").format(Number(value) || 0);
@@ -53,34 +51,30 @@ const renderDocument = (document) => {
   state.documentId = document.documentId || state.documentId;
   state.sessionId = "";
   state.shareUrl = "";
-  state.title = document.title || state.title || "Untitled document";
 
   elements.eyebrow.textContent = "Private draft";
-  elements.title.textContent = state.title;
   elements.summary.textContent =
-    "Claude created this local Markdown draft. Open a copy to continue alone, or start a live session to collaborate in Tabula.md.";
-  elements.documentMeta.textContent = `${formatCount(document.textLength)} characters · local checkpoint`;
+    "This draft stays on this device until you open a copy or start a shared session.";
+  elements.documentMeta.textContent = `${formatCount(document.textLength)} characters · private draft`;
   elements.collaborationMeta.textContent = "Not shared yet";
   updateActionState();
 };
 
 const renderRoom = (room) => {
-  const peerCount = Number(room.peerCount ?? 0);
+  const collaboratorCount = Number(room.collaboratorCount ?? 0);
   const waitingForWorkspaceState = room.stateReceived === false;
 
   state.mode = "room";
   state.documentId = "";
   state.sessionId = room.sessionId || state.sessionId;
   state.shareUrl = room.shareUrl || state.shareUrl;
-  state.title = room.title || state.title || "Untitled session";
 
-  elements.eyebrow.textContent = "Live session";
-  elements.title.textContent = state.title;
+  elements.eyebrow.textContent = "Shared session";
   elements.summary.textContent = waitingForWorkspaceState
-    ? "Claude joined the encrypted session and is waiting for a collaborator to share the workspace state."
-    : "This encrypted session is ready in Tabula.md. Open it to write and collaborate with people or agents.";
+    ? "Claude is connected to this session and is waiting for workspace state."
+    : "Claude is connected to this shared workspace. Claude Desktop asks before it applies changes.";
   elements.documentMeta.textContent = "Encrypted live session";
-  elements.collaborationMeta.textContent = `${peerCount} collaborator${peerCount === 1 ? "" : "s"} connected`;
+  elements.collaborationMeta.textContent = `Claude is connected · ${collaboratorCount} other collaborator${collaboratorCount === 1 ? "" : "s"}`;
   updateActionState();
 };
 
@@ -164,7 +158,7 @@ const startSession = async () => {
       throw new Error("Tabula.md did not return a live session.");
     }
 
-    setMessage("Tabula.md session is ready. Open session to continue in Tabula.md.");
+    setMessage("Shared session is ready. Claude is connected to it.");
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Could not start the Tabula.md session.", "error");
   } finally {
@@ -204,7 +198,7 @@ const createAppClient = () => {
   }
 
   return new App(
-    { name: "Tabula Session", version: "0.1.5" },
+    { name: "Tabula Session", version: "0.1.6" },
     // The editing surface is tabula.md itself. This App stays inline as a
     // compact bridge, rather than becoming a second Tabula implementation.
     { availableDisplayModes: ["inline"] },

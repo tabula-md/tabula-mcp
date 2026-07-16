@@ -2,7 +2,7 @@
   "mcpServers": {
     "tabula": {
       "command": "npx",
-      "args": ["-y", "@tabula-md/mcp@0.1.5"]
+      "args": ["-y", "@tabula-md/mcp@0.1.6"]
     }
   }
 }

@@ -40,15 +40,15 @@ Upstash Redis or Vercel KV-compatible REST credentials:
 TABULA_MCP_DEPLOYMENT_MODE=remote
 TABULA_MCP_PRODUCTION=1
 TABULA_MCP_PUBLIC_UNAUTHENTICATED=1
-TABULA_MCP_ENABLE_WRITE=1
 TABULA_MCP_DOCUMENT_STORE_DRIVER=redis
 UPSTASH_REDIS_REST_URL=https://...
 UPSTASH_REDIS_REST_TOKEN=...
 ```
 
-`TABULA_MCP_ENABLE_WRITE=1` is required when the hosted connector should apply
-hash-guarded room edits. Omit it for a review-only deployment. Confirm the
-effective policy through `GET /health` before advertising live agent editing.
+The hosted connector has read/write Room capabilities by default; the MCP host
+controls approval for each mutating call. Start it with `--read-only` only for
+a review-only deployment. Confirm the effective policy through `GET /health`
+before advertising live agent editing.
 
 The same store is used by both Vercel and Cloudflare deployments. Export/share
 still goes through `tabula-json` as encrypted `#json` snapshot links.

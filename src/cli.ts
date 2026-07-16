@@ -68,18 +68,18 @@ Usage:
   tabula-mcp --version
 
 Install for Codex:
-  codex mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+  codex mcp add tabula -- npx -y @tabula-md/mcp@latest
 
 Install for Claude Code:
-  claude mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+  claude mcp add tabula -- npx -y @tabula-md/mcp@latest
 
 Options:
   --stdio          Run the local stdio MCP server (default for MCP clients)
   --http           Run a Streamable HTTP MCP server
   --host <host>    HTTP listen host
   --port <port>    HTTP listen port
-  --enable-write   Allow hash-guarded workspace changes
-  --read-only      Disable workspace changes
+  --enable-write   Compatibility alias; writes are enabled by default
+  --read-only      Run as an inspection-only server without workspace changes
   --doctor         Check the local runtime without printing secrets
   -h, --help       Show this help
   -v, --version    Show the package version

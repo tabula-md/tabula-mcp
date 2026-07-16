@@ -2,6 +2,7 @@ import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { DocumentRegistry } from "../documents/registry.js";
+import { inferDocumentTitle } from "../documents/snapshot.js";
 import type { RuntimeEnvironment } from "../env.js";
 import { errorContent } from "../json.js";
 import type { SessionRegistry } from "../registry.js";
@@ -51,12 +52,32 @@ export const registerDocumentAppTools = (
   options: {
     allowRoomTools?: boolean;
     allowTemporaryRooms?: boolean;
+    writeEnabled?: boolean;
     env?: RuntimeEnvironment;
     resourceUri: string;
   },
 ) => {
   const allowRoomTools = options.allowRoomTools ?? true;
+  const writeEnabled = options.writeEnabled ?? true;
   const resourceUri = options.resourceUri;
+
+  const roomCard = (
+    room: Record<string, unknown>,
+    { agentConnected }: { agentConnected: boolean },
+  ) => ({
+    ...room,
+    agentConnected,
+  });
+
+  const readAgentRoomCard = async (sessionId: string) => {
+    const snapshot = await readRoomSnapshot(registry, sessionId);
+    return {
+      ...snapshot,
+      room: roomCard(snapshot.room, {
+        agentConnected: true,
+      }),
+    };
+  };
 
   registerAppTool(
     server,
@@ -64,7 +85,7 @@ export const registerDocumentAppTools = (
     {
       title: "Create Tabula Document",
       description:
-        "Create a local Tabula.md Markdown checkpoint and open a compact handoff card. From the card, open an encrypted copy in Tabula.md or start a live encrypted session.",
+        "Create a Markdown document in the current writable Tabula session, or a private local draft when Claude is not connected to a session. Open a compact handoff card.",
       inputSchema: {
         title: z.string().min(1).max(120).optional().describe("Optional document title. Defaults to the first H1 or Untitled Document."),
         markdown: z.string().default("").describe("Initial Markdown content for the document checkpoint."),
@@ -83,6 +104,30 @@ export const registerDocumentAppTools = (
     },
     async ({ title, markdown }) =>
       runStructuredTool(async () => {
+        if (registry.has()) {
+          const session = registry.get();
+          const status = await session.getStatus();
+          if (!status.writeAccess) {
+            throw new Error("This Tabula MCP connection was started with --read-only. Restart without --read-only before changing the shared workspace.");
+          }
+
+          const documentTitle = inferDocumentTitle(title, markdown);
+          const changed = await session.applyWorkspaceChanges({
+            changes: [{ type: "document.create", parentId: null, title: documentTitle, markdown }],
+          });
+          const createdDocumentId = changed.changedDocumentIds[0];
+          const room = await readAgentRoomCard(status.sessionId);
+
+          return {
+            value: {
+              ...room,
+              createdDocumentId,
+              resourceUri,
+            },
+            text: `Created "${documentTitle}" in the current Tabula session.`,
+          };
+        }
+
         const document = await documents.create({ title, markdown });
 
         return {
@@ -95,6 +140,44 @@ export const registerDocumentAppTools = (
       }),
   );
 
+  registerAppTool(
+    server,
+    "tabula_update_document",
+    {
+      title: "Update Tabula Document",
+      description:
+        "Update the latest or selected private Tabula Markdown draft. To change a connected shared session, use tabula_apply_workspace_changes.",
+      inputSchema: {
+        ...optionalDocumentSchema,
+        title: z.string().min(1).max(120).optional().describe("Optional new document title."),
+        markdown: z.string().describe("Replacement Markdown for the private draft."),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+      _meta: {
+        ui: {
+          resourceUri,
+        },
+      },
+    },
+    async ({ documentId, title, markdown }) =>
+      runStructuredTool(async () => {
+        const current = await documents.get(documentId);
+        const document = await documents.update({ documentId: current.documentId, title, markdown });
+        return {
+          value: {
+            ...documentSnapshotContent(document),
+            resourceUri,
+          },
+          text: `Updated private Tabula.md draft "${document.title}".`,
+        };
+      }),
+  );
+
   if (allowRoomTools) {
     registerAppTool(
       server,
@@ -102,7 +185,7 @@ export const registerDocumentAppTools = (
       {
         title: "Start Tabula Session",
         description:
-          "Turn a local Tabula Document MCP App draft into a one-document encrypted Tabula.md live session. A configured checkpoint makes the session durable; otherwise it stays available while a participant remains connected.",
+          "Turn a private Tabula draft into an encrypted live session and connect Claude as a collaborator. A configured checkpoint makes the session durable; otherwise it stays available while a participant remains connected.",
         inputSchema: {
           ...optionalDocumentSchema,
           appOrigin: z.string().url().default("https://tabula.md").describe("Tabula.md app origin for the returned #room URL."),
@@ -134,15 +217,16 @@ export const registerDocumentAppTools = (
             appOrigin,
             roomServerUrl,
             allowTemporary: options.allowTemporaryRooms,
+            writeAccess: writeEnabled,
           });
-          const snapshot = await readRoomSnapshot(registry, started.sessionId);
+          const room = await readAgentRoomCard(started.sessionId);
 
           return {
             value: {
-              ...snapshot,
+              ...room,
               resourceUri,
             },
-            text: `Started Tabula session ${started.roomId}.`,
+            text: "Started a Tabula session. Claude is connected to the shared workspace.",
           };
         }),
     );
@@ -244,7 +328,9 @@ export const registerDocumentAppTools = (
           return {
             value: {
               mode: "room",
-              room,
+              room: roomCard(room, {
+                agentConnected: true,
+              }),
               resourceUri,
             },
             text: `Opening Tabula Room View for room ${status.roomId}.`,

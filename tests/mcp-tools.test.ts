@@ -60,17 +60,17 @@ afterEach(() => {
 });
 
 describe("write access configuration", () => {
-  it("defaults to read-only", () => {
-    expect(resolveWriteEnabled({ env: {}, argv: [] })).toBe(false);
+  it("defaults to read/write so the MCP host can govern mutation approval", () => {
+    expect(resolveWriteEnabled({ env: {}, argv: [] })).toBe(true);
   });
 
-  it("enables write mode with an environment variable", () => {
+  it("keeps the legacy environment variable compatible", () => {
     expect(resolveWriteEnabled({ env: { TABULA_MCP_ENABLE_WRITE: "1" }, argv: [] })).toBe(true);
     expect(resolveWriteEnabled({ env: { TABULA_MCP_ENABLE_WRITE: "true" }, argv: [] })).toBe(true);
     expect(resolveWriteEnabled({ env: { TABULA_MCP_ENABLE_WRITE: "YES" }, argv: [] })).toBe(true);
   });
 
-  it("enables write mode with a CLI flag and lets --read-only override it", () => {
+  it("keeps the CLI alias and lets --read-only override it", () => {
     expect(resolveWriteEnabled({ env: {}, argv: ["--enable-write"] })).toBe(true);
     expect(resolveWriteEnabled({ env: { TABULA_MCP_ENABLE_WRITE: "1" }, argv: ["--read-only"] })).toBe(false);
   });
@@ -184,7 +184,7 @@ describe("MCP tool registration", () => {
   });
 
   it("does not let hosted MCP create a temporary Room without encrypted recovery", async () => {
-    await withClient(false, async (client) => {
+    await withClient(true, async (client) => {
       const created = await client.callTool({
         name: "tabula_create_workspace",
         arguments: {
@@ -599,7 +599,7 @@ describe("MCP tool registration", () => {
       expect(structured.readMe.nextActions.length).toBeGreaterThan(0);
       expect(structured.readMe.securityRules.join("\n")).toContain("#room");
       expect(structured.runtime).toMatchObject({
-        version: "0.1.5",
+        version: "0.1.6",
         deploymentMode: "local",
         writeAccess: "read-only",
       });
@@ -711,7 +711,7 @@ describe("MCP tool registration", () => {
         uri: documentAppResource?.uri,
         mimeType: "text/html;profile=mcp-app",
       });
-      expect("text" in resource.contents[0] ? resource.contents[0].text : "").toContain("Tabula.md Session");
+      expect("text" in resource.contents[0] ? resource.contents[0].text : "").toContain("<title>Tabula Session</title>");
     });
   });
 

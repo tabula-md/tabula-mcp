@@ -36,13 +36,15 @@ const avoid = [
   "Do not invent single-document room workflows; use workspace documents even when the workspace contains one document.",
   "Do not rely on MCP resources as the only workflow surface; some clients expose only tools.",
   "Do not ask a model to implement Yjs, Awareness, or RoomWire directly; use the registered Tabula workspace tools.",
+  "Do not describe relay socket counts as collaborator counts; show only Awareness actors to people.",
+  "Do not add a second write-permission switch inside Tabula. Claude Desktop or the MCP host is responsible for approving each mutating tool call.",
 ];
 
 const summaries: Record<TabulaReadMeTopic, string> = {
   overview:
     "Tabula.md MCP is for Markdown-first collaboration with people and agents. Use MCP App document checkpoints for drafting, workspace tools for multi-file Markdown projects, encrypted room tools for live collaboration, and encrypted snapshot export when a workspace should become a Tabula.md handoff link.",
   documents:
-    "For a new draft, call tabula_create_document. To resume a saved checkpoint, call tabula_list_documents, then tabula_open_document. The App editor can save into the MCP document checkpoint store, recover unsaved browser drafts, send compact changes back into model context, and share the saved document as an encrypted snapshot link.",
+    "For a new private draft, call tabula_create_document when Claude is not connected to a Tabula session. If Claude is connected and allowed to edit, the same tool creates the document in that shared session instead. Use tabula_update_document for an existing private draft, or tabula_apply_workspace_changes for a shared session.",
   rooms:
     "For a new live room, create or import a workspace and call tabula_create_workspace_room. Local MCP can create a temporary Room when an active peer stays connected; hosted MCP requires encrypted Room persistence to create a Room. For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. The MCP client joins as an agent actor, loads/saves encrypted live room checkpoints when Firebase is configured, or waits for state from an active peer when it is not. Do not read or edit workspace content until stateReceived is true.",
   sharing:
@@ -53,7 +55,7 @@ const summaries: Record<TabulaReadMeTopic, string> = {
 
 const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
   overview: [
-    "Use tabula_create_document for a new Markdown draft checkpoint.",
+    "Use tabula_create_document for a new private Markdown draft, or for a new document in a connected writable session.",
     "Use tabula_create_workspace or tabula_import_markdown_workspace for multi-file Markdown workspaces; prefer source.files unless the MCP client grants filesystem roots or TABULA_MCP_ALLOWED_IMPORT_ROOTS is configured.",
     "Use tabula_create_workspace_room when the agent should create a new live collaboration room.",
     "Use tabula_list_documents and tabula_open_document to resume a saved checkpoint.",
@@ -63,7 +65,8 @@ const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
   ],
   documents: [
     "Create or open the Tabula.md Session Card for a local draft checkpoint.",
-    "Use Open a copy for an encrypted #json handoff, or Start session when people and agents should work in the same #room.",
+    "Use Open a copy for an encrypted #json handoff, or Start session to create a shared #room and connect Claude as a collaborator.",
+    "Use the MCP host's normal approval mode to approve or stop Claude's changes to shared documents.",
     "People edit in Tabula.md itself; agents read and apply hash-guarded changes through the connected Room tools.",
   ],
   rooms: [

@@ -52,6 +52,7 @@ const requiredFiles = [
 const requiredTools = [
   "tabula_read_me",
   "tabula_create_document",
+  "tabula_update_document",
   "tabula_list_documents",
   "tabula_open_document",
   "tabula_share_document",
@@ -240,7 +241,6 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   for (const expected of [
     "tabulaMark",
     "sessionEyebrow",
-    "sessionTitle",
     "documentMeta",
     "collaborationMeta",
     "openCopyButton",
@@ -249,6 +249,8 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   ]) {
     assert(appHtml.includes(expected), `MCPB ${label} Document App is missing ${expected}`);
   }
+  assert(appHtml.includes(">Tabula<"), `MCPB ${label} Document App must use the Tabula brand`);
+  assert(!appHtml.includes("sessionTitle"), `MCPB ${label} Document App must not present a document title in its chrome`);
   assert(!appHtml.includes("TabulaEmbeddedDocumentWorkbench"), `MCPB ${label} must not bundle a second Tabula editor`);
   assert(!appHtml.includes("dev-only-not-a-real-key"), `MCPB ${label} Document App includes dev-only fixture data`);
   assert(!appHtml.includes("/src/app-dev/"), `MCPB ${label} Document App includes dev harness source paths`);

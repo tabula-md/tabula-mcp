@@ -525,6 +525,7 @@ export const registerRoomTools = (
           identityName,
           identityColor,
           allowTemporary: allowTemporaryRooms,
+          writeAccess: writeEnabled,
         });
         server.sendResourceListChanged();
         return started;
