@@ -8,8 +8,9 @@
 
 Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.
 
-An agent can start with a private Markdown draft, join a live encrypted room,
-or export a fixed encrypted copy for handoff.
+Draft in Claude, Codex, or the local filesystem. Tabula receives Markdown only
+when an agent joins or starts a live encrypted session, or exports a fixed
+encrypted copy for handoff.
 
 ## Choose a connection
 
@@ -66,10 +67,12 @@ change. The browser sees the update immediately.
 
 ## What agents can do
 
-- **Draft** — create and revise a private Markdown draft.
-- **Live session** — collaborate with people or other clients in a shared
-  Tabula.md room.
-- **Copy** — create an encrypted `#json` copy for a fixed handoff.
+- **Live session** — start from one or more Markdown files, or join an existing
+  Tabula.md room and collaborate with people or other clients.
+- **Copy** — export one or more Markdown files as an encrypted `#json` snapshot
+  for a fixed handoff.
+- **Workspace files** — list, read, search, and atomically write files and
+  nested folders in a connected session.
 
 Use a live session when work should continue. Use a copy when the recipient
 needs a snapshot instead of an ongoing workspace.

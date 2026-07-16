@@ -48,14 +48,13 @@ const requiredFiles = [
 ];
 
 const requiredTools = [
-  "tabula_create_draft",
-  "tabula_update_draft",
   "tabula_start_session",
   "tabula_join_room",
   "tabula_list_files",
   "tabula_read_file",
   "tabula_search_files",
   "tabula_write_file",
+  "tabula_write_files",
   "tabula_export_copy",
 ];
 
@@ -249,17 +248,18 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   assert(icon.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")), `MCPB ${label} icon must be a PNG file`);
   for (const expected of [
     "tabulaMark",
-    "sessionEyebrow",
-    "documentMeta",
-    "collaborationMeta",
-    "openCopyButton",
-    "startSessionButton",
-    "openSessionButton",
+    "handoffEyebrow",
+    "handoffSummary",
+    "handoffMeta",
+    "openButton",
   ]) {
     assert(appHtml.includes(expected), `MCPB ${label} Document App is missing ${expected}`);
   }
   assert(appHtml.includes(">Tabula<"), `MCPB ${label} Document App must use the Tabula brand`);
   assert(!appHtml.includes("sessionTitle"), `MCPB ${label} Document App must not present a document title in its chrome`);
+  for (const toolName of ["tabula_start_session", "tabula_export_copy"]) {
+    assert(!appHtml.includes(toolName), `MCPB ${label} Document App must not embed a stateful tool call to ${toolName}`);
+  }
   assert(!appHtml.includes("TabulaEmbeddedDocumentWorkbench"), `MCPB ${label} must not bundle a second Tabula editor`);
   assert(!appHtml.includes("dev-only-not-a-real-key"), `MCPB ${label} Document App includes dev-only fixture data`);
   assert(!appHtml.includes("/src/app-dev/"), `MCPB ${label} Document App includes dev harness source paths`);

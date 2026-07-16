@@ -1,8 +1,8 @@
-export const documentFixture = {
-  draftId: "123e4567-e89b-42d3-a456-426614174000",
-  title: "Launch Brief",
-  textLength: 167,
-  revision: "9b8f4c2d1a6e7f309b8f4c2d1a6e7f309b8f4c2d1a6e7f309b8f4c2d1a6e7f30",
+export const copyFixture = {
+  copyUrl: "http://localhost:5173/#json=dev-share-snapshot,dev-only-not-a-real-key",
+  fileCount: 3,
+  encrypted: true,
+  createdAt: "2026-07-17T00:00:00.000Z",
 };
 
 export const roomFixture = {

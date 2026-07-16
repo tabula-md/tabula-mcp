@@ -451,28 +451,40 @@ const run = async () => {
 
     await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, async (client) => {
       const expectedTools = [
-        "tabula_create_draft", "tabula_update_draft", "tabula_start_session", "tabula_join_room",
-        "tabula_list_files", "tabula_read_file", "tabula_search_files", "tabula_write_file", "tabula_export_copy",
+        "tabula_start_session", "tabula_join_room", "tabula_list_files", "tabula_read_file",
+        "tabula_search_files", "tabula_write_file", "tabula_write_files", "tabula_export_copy",
       ];
       assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), expectedTools);
 
-      const draft = await callTool(client, "tabula_create_draft", {
-        title: "README.md",
-        content: "# MCP Local E2E\n\nInitial from MCP.\n",
+      const inlineCopy = await callTool(client, "tabula_export_copy", {
+        source: {
+          kind: "files",
+          title: "Research handoff",
+          files: [
+            { path: "brief.md", content: "# Brief\n\nThree-file browser handoff.\n" },
+            { path: "research/notes.md", content: "# Notes\n\nNested Markdown file.\n" },
+            { path: "decision.md", content: "# Decision\n\nReady for review.\n" },
+          ],
+        },
       });
-      const draftCopy = await callTool(client, "tabula_export_copy", {
-        source: { kind: "draft", draftId: draft.draftId },
-      });
-      assert.match(draftCopy.copyUrl, new RegExp(`^${appOrigin.replaceAll(".", "\\.")}/#json=`));
-      const openedDraftCopy = await openJsonCopy({
+      assert.equal(inlineCopy.fileCount, 3);
+      const openedInlineCopy = await openJsonCopy({
         browser,
-        copyUrl: draftCopy.copyUrl,
-        expectedText: "Initial from MCP.",
+        copyUrl: inlineCopy.copyUrl,
+        expectedText: "Three-file browser handoff.",
       });
-      assert(openedDraftCopy.markdown.includes("# MCP Local E2E"));
-      await openedDraftCopy.context.close();
+      const inlineCopyTabs = await tabTitles(openedInlineCopy.page);
+      assert.equal(inlineCopyTabs.length, 3, "Inline Export Copy should open all three Markdown files");
+      assert(
+        inlineCopyTabs.some((tab) => tab.title === "notes.md"),
+        "Inline Export Copy should preserve the nested Markdown file",
+      );
+      await openedInlineCopy.context.close();
 
-      const session = await callTool(client, "tabula_start_session", { draftId: draft.draftId });
+      const session = await callTool(client, "tabula_start_session", {
+        title: "MCP Local E2E",
+        files: [{ path: "README.md", content: "# MCP Local E2E\n\nInitial from MCP.\n" }],
+      });
       assert.match(session.sessionUrl, new RegExp(`^${appOrigin.replaceAll(".", "\\.")}/#room=`));
       assert.equal(session.ready, true);
       assert.equal(session.canWrite, true);
@@ -491,16 +503,20 @@ const run = async () => {
         content: nextContent,
         expectedRevision: readme.revision,
       });
-      await callTool(client, "tabula_write_file", {
+      const batchWrite = await callTool(client, "tabula_write_files", {
         sessionId: session.sessionId,
-        path: "Agent Notes.md",
-        content: "# Agent Notes\n\nCreated by MCP local E2E.\n",
+        files: [
+          { path: "Agent Notes.md", content: "# Agent Notes\n\nCreated by MCP local E2E.\n" },
+          { path: "research/sources.md", content: "# Sources\n\nImported as a nested local file.\n" },
+        ],
       });
+      assert.deepEqual({ createdCount: batchWrite.createdCount, changedCount: batchWrite.changedCount }, { createdCount: 2, changedCount: 2 });
 
       const browserAfterMcpText = await waitForEditorText(page, "Edited by tabula-mcp local E2E.");
       const tabsAfterMcp = await tabTitles(page);
       await page.keyboard.press(process.platform === "darwin" ? "Meta+Alt+f" : "Control+Alt+f");
       await page.locator(".right-file-tree").getByText("Agent Notes", { exact: false }).waitFor();
+      await page.locator(".right-file-tree").getByText("research", { exact: false }).waitFor();
 
       await page.locator(".cm-content").click();
       await page.keyboard.press(process.platform === "darwin" ? "Meta+End" : "Control+End");
@@ -517,7 +533,7 @@ const run = async () => {
       const sessionCopy = await callTool(client, "tabula_export_copy", {
         source: { kind: "session", sessionId: session.sessionId },
       });
-      assert.equal(sessionCopy.fileCount, 2);
+      assert.equal(sessionCopy.fileCount, 3);
       const openedSessionCopy = await openJsonCopy({
         browser,
         copyUrl: sessionCopy.copyUrl,
@@ -525,6 +541,7 @@ const run = async () => {
       });
       const copyTabs = await tabTitles(openedSessionCopy.page);
       assert(copyTabs.some((tab) => tab.title === "Agent Notes.md"), "Session Copy should preserve all exported files");
+      assert(copyTabs.some((tab) => tab.title === "sources.md"), "Session Copy should preserve nested batch files");
 
       const postExportContent = `${afterHumanEdit.content}\nChanged after Export Copy.\n`;
       await callTool(client, "tabula_write_file", {
@@ -547,11 +564,10 @@ const run = async () => {
       );
       await openedSessionCopy.context.close();
 
-      const peerDraft = await callTool(client, "tabula_create_draft", {
+      const peerSession = await callTool(client, "tabula_start_session", {
         title: "README.md",
-        content: "# Peer-only recovery\n\nLoaded from the live MCP participant.\n",
+        files: [{ path: "README.md", content: "# Peer-only recovery\n\nLoaded from the live MCP participant.\n" }],
       });
-      const peerSession = await callTool(client, "tabula_start_session", { draftId: peerDraft.draftId });
       const peerOnlyPage = await context.newPage();
       await peerOnlyPage.goto(peerSession.sessionUrl.replace(appOrigin, peerOnlyAppOrigin));
       const peerOnlyBrowserText = await waitForEditorText(peerOnlyPage, "Loaded from the live MCP participant.");
@@ -578,7 +594,7 @@ const run = async () => {
         browserAfterMcpText,
         afterHumanEditMarkdown: afterHumanEdit.content,
         tabsAfterMcp,
-        draftCopyOpened: true,
+        inlineCopyOpened: true,
         sessionCopyImmutable: true,
         peerOnlyBrowserText,
       }, null, 2));

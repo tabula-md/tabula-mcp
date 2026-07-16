@@ -57,11 +57,10 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   });
 
   registerDocumentAppResource(server, documentAppResource);
-  registerFileResources(server, registry, documents);
+  registerFileResources(server, registry);
 
-  registerCoreTools(server, registry, documents, {
+  registerCoreTools(server, registry, {
     allowTemporaryRooms: allowRoomTools && allowTemporaryRooms,
-    deploymentMode,
     env,
     resourceUri: documentAppResource.uri,
     writeEnabled: allowRoomTools && writeEnabled,

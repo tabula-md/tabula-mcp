@@ -1,37 +1,47 @@
-import type { DocumentRegistry } from "./documents/registry.js";
+import { assertMarkdownSize } from "./documents/snapshot.js";
 import type { RuntimeEnvironment } from "./env.js";
 import type { SessionRegistry } from "./registry.js";
-import { shareMarkdownDocument, shareMarkdownWorkspace } from "./share.js";
+import { shareMarkdownWorkspace } from "./share.js";
 import { readSessionExportSnapshot } from "./workspace-file-service.js";
 
+export type ExportCopyFile = {
+  path: string;
+  content: string;
+};
+
 export type ExportCopySource =
-  | { kind: "draft"; draftId: string }
+  | { kind: "files"; title?: string; files: readonly ExportCopyFile[] }
   | { kind: "session"; sessionId: string; paths?: readonly string[] };
 
 export const exportCopy = async ({
   source,
-  documents,
   registry,
   env,
 }: {
   source: ExportCopySource;
-  documents: DocumentRegistry;
   registry: SessionRegistry;
   env?: RuntimeEnvironment;
 }) => {
   const createdAt = new Date();
-  if (source.kind === "draft") {
-    const draft = await documents.get(source.draftId);
-    const shared = await shareMarkdownDocument({
-      title: draft.title,
-      markdown: draft.markdown,
+  if (source.kind === "files") {
+    for (const file of source.files) {
+      assertMarkdownSize(file.content);
+    }
+    const shared = await shareMarkdownWorkspace({
+      title: source.title,
+      files: source.files.map((file, index) => ({
+        id: `inline-${index + 1}`,
+        path: file.path,
+        title: file.path.split("/").at(-1) || "Untitled.md",
+        text: file.content,
+      })),
       appOrigin: env?.TABULA_APP_ORIGIN?.trim() || "https://tabula.md",
       env,
       now: () => createdAt,
     });
     return {
       copyUrl: shared.shareUrl,
-      fileCount: 1,
+      fileCount: source.files.length,
       encrypted: true as const,
       createdAt: createdAt.toISOString(),
     };

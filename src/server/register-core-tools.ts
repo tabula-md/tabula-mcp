@@ -1,26 +1,27 @@
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { coreErrorContent, TabulaCoreError } from "../core-errors.js";
-import type { DocumentRegistry } from "../documents/registry.js";
-import { inferDocumentTitle } from "../documents/snapshot.js";
-import type { DocumentStoreDeploymentMode } from "../documents/store.js";
+import { coreErrorContent } from "../core-errors.js";
 import type { RuntimeEnvironment } from "../env.js";
-import { exportCopy } from "../export-copy-service.js";
+import { exportCopy, type ExportCopySource } from "../export-copy-service.js";
 import type { SessionRegistry } from "../registry.js";
-import { joinRoomSession, startDraftSession } from "../session-service.js";
+import { joinRoomSession, startWorkspaceSession } from "../session-service.js";
 import { createWorkspaceFromFiles } from "../workspaces.js";
 import {
   listSessionFiles,
   readSessionFile,
   searchSessionFiles,
   writeSessionFile,
+  writeSessionFiles,
 } from "../workspace-file-service.js";
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 const sessionIdSchema = z.string().uuid();
-const draftIdSchema = z.string().uuid();
 const filePathSchema = z.string().min(1);
+const markdownFileSchema = z.object({
+  path: filePathSchema,
+  content: z.string(),
+});
 
 const annotations = (readOnly: boolean, openWorld = false) => ({
   readOnlyHint: readOnly,
@@ -57,10 +58,8 @@ const registerCoreAppTool = (
 export const registerCoreTools = (
   server: McpServer,
   registry: SessionRegistry,
-  documents: DocumentRegistry,
   options: {
     allowTemporaryRooms: boolean;
-    deploymentMode: DocumentStoreDeploymentMode;
     env?: RuntimeEnvironment;
     resourceUri: string;
     writeEnabled: boolean;
@@ -69,89 +68,14 @@ export const registerCoreTools = (
   registerCoreAppTool(
     server,
     options.resourceUri,
-    "tabula_create_draft",
-    {
-      title: "Create Draft",
-      description: "Create a private Markdown draft and show its Tabula card. Use this when the user wants a new document but has not provided a room URL.",
-      inputSchema: {
-        title: z.string().min(1).max(120).optional(),
-        content: z.string().default(""),
-      },
-      outputSchema: {
-        draftId: z.string().uuid(),
-        title: z.string(),
-        revision: sha256Schema,
-        textLength: z.number().int().nonnegative(),
-      },
-      annotations: annotations(false),
-    },
-    async ({ title, content }: { title?: string; content: string }) => run(async () => {
-      const draft = await documents.create({ title, markdown: content });
-      return {
-        value: { draftId: draft.documentId, title: draft.title, revision: draft.sha256, textLength: draft.textLength },
-        text: `Created private draft "${draft.title}".`,
-      };
-    }),
-  );
-
-  registerCoreAppTool(
-    server,
-    options.resourceUri,
-    "tabula_update_draft",
-    {
-      title: "Update Draft",
-      description: "Replace the content of a private Tabula draft and show its updated card. This tool does not edit a live session.",
-      inputSchema: {
-        draftId: draftIdSchema,
-        title: z.string().min(1).max(120).optional(),
-        content: z.string(),
-        expectedRevision: sha256Schema.optional(),
-      },
-      outputSchema: {
-        draftId: z.string().uuid(),
-        title: z.string(),
-        changed: z.boolean(),
-        revision: sha256Schema,
-        textLength: z.number().int().nonnegative(),
-      },
-      annotations: annotations(false),
-    },
-    async ({ draftId, title, content, expectedRevision }: {
-      draftId: string;
-      title?: string;
-      content: string;
-      expectedRevision?: string;
-    }) => run(async () => {
-      const current = await documents.get(draftId);
-      if (expectedRevision && expectedRevision !== current.sha256) {
-        throw new TabulaCoreError("stale_revision", "The draft changed before the update could be applied.", {
-          details: { draftId, expectedRevision, currentRevision: current.sha256 },
-          retry: "Use the latest draft revision and retry.",
-        });
-      }
-      const nextTitle = inferDocumentTitle(title ?? current.title, content);
-      if (current.markdown === content && current.title === nextTitle) {
-        return {
-          value: { draftId, title: current.title, changed: false, revision: current.sha256, textLength: current.textLength },
-          text: `Draft "${current.title}" was already up to date.`,
-        };
-      }
-      const updated = await documents.update({ documentId: draftId, title, markdown: content });
-      return {
-        value: { draftId, title: updated.title, changed: true, revision: updated.sha256, textLength: updated.textLength },
-        text: `Updated private draft "${updated.title}".`,
-      };
-    }),
-  );
-
-  registerCoreAppTool(
-    server,
-    options.resourceUri,
     "tabula_start_session",
     {
       title: "Start Session",
-      description: "Turn a private Tabula draft into an encrypted live session, connect the agent as a collaborator, and return the private session link.",
-      inputSchema: { draftId: draftIdSchema },
+      description: "Create an encrypted live session from one or more Markdown files, connect the agent as a collaborator, and return the private session link.",
+      inputSchema: {
+        title: z.string().min(1).max(120).optional(),
+        files: z.array(markdownFileSchema).min(1).max(100),
+      },
       outputSchema: {
         sessionId: z.string().uuid(),
         ready: z.boolean(),
@@ -162,14 +86,12 @@ export const registerCoreTools = (
       },
       annotations: annotations(false, true),
     },
-    async ({ draftId }: { draftId: string }) => run(async () => {
-      const draft = await documents.get(draftId);
-      const fileName = draft.title.toLocaleLowerCase().endsWith(".md") ? draft.title : `${draft.title}.md`;
+    async ({ title, files }: { title?: string; files: Array<{ path: string; content: string }> }) => run(async () => {
       const workspace = await createWorkspaceFromFiles({
-        title: draft.title,
-        files: [{ path: fileName, title: fileName, markdown: draft.markdown }],
+        title,
+        files: files.map((file) => ({ path: file.path, markdown: file.content })),
       });
-      const session = await startDraftSession({
+      const session = await startWorkspaceSession({
         registry,
         workspace,
         env: options.env,
@@ -180,9 +102,7 @@ export const registerCoreTools = (
     }),
   );
 
-  registerCoreAppTool(
-    server,
-    options.resourceUri,
+  server.registerTool(
     "tabula_join_room",
     {
       title: "Join Session",
@@ -307,13 +227,48 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
+    "tabula_write_files",
+    {
+      title: "Write Files",
+      description: "Create or replace multiple Markdown files in one live Tabula session transaction. Missing folders are created. Read existing files first and include each revision.",
+      inputSchema: {
+        sessionId: sessionIdSchema,
+        files: z.array(markdownFileSchema.extend({ expectedRevision: sha256Schema.optional() })).min(1).max(100),
+      },
+      outputSchema: {
+        sessionId: z.string().uuid(),
+        files: z.array(z.object({
+          path: z.string(),
+          created: z.boolean(),
+          changed: z.boolean(),
+          revision: sha256Schema,
+          textLength: z.number().int().nonnegative(),
+        })),
+        createdCount: z.number().int().nonnegative(),
+        changedCount: z.number().int().nonnegative(),
+      },
+      annotations: annotations(false, true),
+    },
+    async ({ sessionId, files }) => run(async () => ({
+      value: await writeSessionFiles({ registry, sessionId, files }),
+      text: `Wrote ${files.length} Markdown file${files.length === 1 ? "" : "s"} in the Tabula session.`,
+    })),
+  );
+
+  registerCoreAppTool(
+    server,
+    options.resourceUri,
     "tabula_export_copy",
     {
       title: "Export Copy",
-      description: "Export a private draft or the current state of a live session as an encrypted #json copy link. Use this for a fixed handoff; use Start Session for continued collaboration.",
+      description: "Create an encrypted #json handoff from one or more Markdown files or the current state of a live session. Use one files call for a multi-file Tabula workspace.",
       inputSchema: {
         source: z.discriminatedUnion("kind", [
-          z.object({ kind: z.literal("draft"), draftId: draftIdSchema }),
+          z.object({
+            kind: z.literal("files"),
+            title: z.string().min(1).max(120).optional(),
+            files: z.array(markdownFileSchema).min(1).max(100),
+          }),
           z.object({
             kind: z.literal("session"),
             sessionId: sessionIdSchema,
@@ -329,11 +284,11 @@ export const registerCoreTools = (
       },
       annotations: annotations(false, true),
     },
-    async ({ source }) => run(async () => {
-      const exported = await exportCopy({ source, documents, registry, env: options.env });
+    async ({ source }: { source: ExportCopySource }) => run(async () => {
+      const exported = await exportCopy({ source, registry, env: options.env });
       return {
         value: exported,
-        text: `${exported.copyUrl}\nTreat this encrypted #json URL as a bearer secret.`,
+        text: `Created an encrypted Tabula copy containing ${exported.fileCount} Markdown file${exported.fileCount === 1 ? "" : "s"}. Keep the copy URL private.`,
       };
     }),
   );

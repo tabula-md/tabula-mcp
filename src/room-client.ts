@@ -605,6 +605,17 @@ export class TabulaRoomClient {
     const appliedChanges: WorkspaceChange[] = [];
     try {
       for (const input of changes) {
+        if (input.type === "folder.create") {
+          if (!createWorkspaceRoomFolder(draftRoom, {
+            id: input.folderId,
+            parentId: input.parentId ?? WORKSPACE_ROOM_ROOT_ID,
+            title: input.title,
+            order: this.nextOrder(draftRoom),
+            createdAt: new Date().toISOString(),
+          })) throw new TabulaMcpError("Workspace folder could not be created.");
+          appliedChanges.push(input);
+          continue;
+        }
         if (input.type === "document.patch") {
           const text = draftRoom.documents.get(input.documentId);
           if (!text) throw new TabulaMcpError(`Workspace document ${input.documentId} was not found.`);

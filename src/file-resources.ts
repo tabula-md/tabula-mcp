@@ -1,5 +1,4 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DocumentRegistry } from "./documents/registry.js";
 import type { SessionRegistry } from "./registry.js";
 import { listSessionFiles, readSessionFile } from "./workspace-file-service.js";
 import { normalizeWorkspaceFilePath } from "./workspace-paths.js";
@@ -18,9 +17,6 @@ const decodeVariable = (value: string | string[] | undefined, label: string) => 
     throw new Error(`Invalid ${label} in Tabula resource URI.`);
   }
 };
-
-export const draftResourceUri = (draftId: string) =>
-  `${scheme}://draft/${encodePart(draftId)}`;
 
 export const sessionResourceUri = (sessionId: string) =>
   `${scheme}://session/${encodePart(sessionId)}`;
@@ -59,40 +55,7 @@ const listSessionFileResources = async (registry: SessionRegistry) => {
 export const registerFileResources = (
   server: McpServer,
   registry: SessionRegistry,
-  documents: DocumentRegistry,
 ) => {
-  server.registerResource(
-    "tabula-draft",
-    new ResourceTemplate(`${scheme}://draft/{draftId}`, {
-      // Draft storage can be shared by multiple hosted MCP sessions. A caller
-      // must already know the draftId returned by a tool; never enumerate all
-      // stored drafts through resources/list.
-      list: undefined,
-    }),
-    {
-      title: "Tabula Draft",
-      description: "Read-only Markdown from a private Tabula draft.",
-      mimeType: markdownMimeType,
-    },
-    async (uri, variables) => {
-      const draftId = decodeVariable(variables.draftId, "draftId");
-      const draft = await documents.get(draftId);
-      return {
-        contents: [{
-          uri: uri.toString(),
-          mimeType: markdownMimeType,
-          text: draft.markdown,
-          _meta: {
-            draftId,
-            title: draft.title,
-            revision: draft.sha256,
-            textLength: draft.textLength,
-          },
-        }],
-      };
-    },
-  );
-
   server.registerResource(
     "tabula-session",
     new ResourceTemplate(`${scheme}://session/{sessionId}`, {

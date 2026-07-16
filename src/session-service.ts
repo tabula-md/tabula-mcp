@@ -58,7 +58,7 @@ export const joinRoomSession = async ({
   return session;
 };
 
-export const startDraftSession = async ({
+export const startWorkspaceSession = async ({
   registry,
   workspace,
   env,

@@ -9,14 +9,13 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const coreTools = [
-  "tabula_create_draft",
-  "tabula_update_draft",
   "tabula_start_session",
   "tabula_join_room",
   "tabula_list_files",
   "tabula_read_file",
   "tabula_search_files",
   "tabula_write_file",
+  "tabula_write_files",
   "tabula_export_copy",
 ];
 const uiCapabilities = {
@@ -94,39 +93,26 @@ const run = async () => {
     TABULA_MCP_ALLOWED_JSON_SERVER_URLS: shareServer.url,
   };
   try {
-    let draft;
     await withClient({ options, env, mcpApps: false }, async (client) => {
       const tools = await client.listTools();
       assert.deepEqual(tools.tools.map((tool) => tool.name), coreTools);
       assert(tools.tools.every((tool) => tool.outputSchema), "every core tool should declare outputSchema");
       assert(client.getInstructions()?.includes("Export Copy"));
 
-      const created = await client.callTool({
-        name: "tabula_create_draft",
-        arguments: { title: "Stdio Smoke", content: "# Stdio Smoke\n\nPrivate plaintext.\n" },
-      });
-      draft = created.structuredContent;
-      assert.match(draft?.draftId || "", /^[0-9a-f-]{36}$/i);
-      assert.match(draft?.revision || "", /^[a-f0-9]{64}$/);
-
-      const updated = await client.callTool({
-        name: "tabula_update_draft",
-        arguments: {
-          draftId: draft.draftId,
-          content: "# Stdio Smoke\n\nUpdated private plaintext.\n",
-          expectedRevision: draft.revision,
-        },
-      });
-      assert.equal(updated.structuredContent?.changed, true);
-
       const exported = await client.callTool({
         name: "tabula_export_copy",
-        arguments: { source: { kind: "draft", draftId: draft.draftId } },
+        arguments: {
+          source: {
+            kind: "files",
+            title: "Stdio Smoke",
+            files: [{ path: "stdio-smoke.md", content: "# Stdio Smoke\n\nHost-native plaintext.\n" }],
+          },
+        },
       });
       assert.match(exported.structuredContent?.copyUrl || "", /^https:\/\/tabula\.md\/#json=[^,]+,/);
       assert.equal(exported.structuredContent?.fileCount, 1);
       const upload = shareServer.uploads.at(-1)?.toString("utf8") ?? "";
-      assert(!upload.includes("Updated private plaintext"));
+      assert(!upload.includes("Host-native plaintext"));
       assert(!upload.includes((exported.structuredContent?.copyUrl || "").split(",")[1] || "missing-key"));
     });
 
@@ -134,27 +120,17 @@ const run = async () => {
       assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), coreTools);
       const resources = await client.listResources();
       const uri = resources.resources.find((resource) => resource.uri.startsWith("ui://tabula/document-"))?.uri;
-      assert(uri, "Tabula Session MCP App resource should be present");
+      assert(uri, "Tabula Handoff MCP App resource should be present");
       const resource = await client.readResource({ uri });
       assert.equal(resource.contents[0]?.mimeType, "text/html;profile=mcp-app");
-      const draftUri = `tabula://draft/${draft.draftId}`;
       assert(
         resources.resources.every((candidate) => !candidate.uri.startsWith("tabula://draft/")),
-        "resources/list must not enumerate drafts from a potentially shared store",
+        "resources/list must not expose removed draft resources",
       );
       assert(
         resources.resources.every((candidate) => !candidate.uri.startsWith("tabula://workspace/")),
         "legacy workspace resources must not be exposed",
       );
-      const draftResource = await client.readResource({ uri: draftUri });
-      assert.equal(draftResource.contents[0]?.text, "# Stdio Smoke\n\nUpdated private plaintext.\n");
-
-      const restored = await client.callTool({
-        name: "tabula_update_draft",
-        arguments: { draftId: draft.draftId, content: "# Restored\n" },
-      });
-      assert.equal(restored.isError, undefined);
-      assert.equal(restored.structuredContent?.draftId, draft.draftId);
     });
   } finally {
     await shareServer.close();

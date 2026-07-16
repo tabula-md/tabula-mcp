@@ -21,14 +21,14 @@ The model must not echo a Room URL after joining. Exported Copy URLs should be p
 
 The MCP server is writable by default. Claude Desktop, Claude Code, Codex, or another MCP host controls approval for mutating calls.
 
-`tabula_write_file` requires the revision returned by `tabula_read_file` for replacements. The server checks that revision immediately before applying the collaboration change and rejects stale writes.
+`tabula_write_file` and `tabula_write_files` require revisions returned by `tabula_read_file` for replacements. The server validates every existing file before applying a collaboration transaction and rejects a stale batch without partially applying it.
 
 The model never supplies Yjs updates, document IDs, or text patch offsets.
 
 ## Export
 
-Draft and Session export use one `exportCopy()` service and the official `@tabula-md/tabula` schema-v2 serializer. This prevents the MCP App and model tool from producing incompatible `#json` payloads.
+File and Session export use one `exportCopy()` service and the official `@tabula-md/tabula` schema-v2 serializer. This prevents the MCP App and model tool from producing incompatible `#json` payloads.
 
 ## MCP resources
 
-Tabula registers read-only Draft, Session manifest, and Session file resource templates. Resource URIs contain only local draft or session handles and encoded file paths. Draft resources require a previously returned `draftId` and are not enumerable, preventing a hosted MCP session from listing a shared Draft store. Resources never contain `#room` or `#json` URLs, room keys, relay URLs, CRDT node identifiers, or checkpoint metadata. Resource reads share the same plaintext trust boundary as the corresponding MCP read tools, while all mutations remain tool calls governed by the MCP host.
+Tabula registers read-only Session manifest and Session file resource templates. Resource URIs contain only session handles and encoded file paths. Resources never contain `#room` or `#json` URLs, room keys, relay URLs, CRDT node identifiers, or checkpoint metadata. Resource reads share the same plaintext trust boundary as the corresponding MCP read tools, while all mutations remain tool calls governed by the MCP host.

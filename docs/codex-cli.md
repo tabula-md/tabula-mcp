@@ -12,11 +12,11 @@ Join and edit a session:
 tabula_join_room
 → tabula_list_files
 → tabula_read_file
-→ tabula_write_file
+→ tabula_write_file / tabula_write_files
 ```
 
 `tabula_write_file` receives complete Markdown. The server validates the revision and computes the Yjs patch. Codex should never construct text offsets or low-level workspace changes.
 
-Use `tabula_export_copy` to produce a fixed encrypted `#json` copy. Use `tabula_start_session` when collaborators should continue editing together.
+Codex can read local Markdown files with its filesystem tools, then pass them to `tabula_export_copy` for a fixed encrypted `#json` copy, `tabula_start_session` for a new live workspace, or `tabula_write_files` for an existing Session.
 
 Keep all `#room` and `#json` URLs private unless the user explicitly asks to share them.

@@ -20,6 +20,12 @@ export type WorkspaceRoomState = {
 
 export type WorkspaceChange =
   | {
+      type: "folder.create";
+      folderId: string;
+      parentId: string | null;
+      title: string;
+    }
+  | {
       type: "document.patch";
       documentId: string;
       baseSha256: string;
@@ -62,6 +68,11 @@ const isTextPatch = (value: unknown): value is TextPatch =>
 
 export const isWorkspaceChange = (value: unknown): value is WorkspaceChange => {
   if (!isRecord(value)) return false;
+  if (value.type === "folder.create") {
+    return typeof value.folderId === "string" &&
+      (value.parentId === null || typeof value.parentId === "string") &&
+      typeof value.title === "string";
+  }
   if (value.type === "document.patch") {
     return typeof value.documentId === "string" &&
       typeof value.baseSha256 === "string" &&

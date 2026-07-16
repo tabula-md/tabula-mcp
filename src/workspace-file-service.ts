@@ -1,7 +1,10 @@
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getTextPatchesForChange } from "@tabula-md/tabula";
 import { TabulaCoreError } from "./core-errors.js";
+import { assertMarkdownSize } from "./documents/snapshot.js";
 import type { SessionRegistry } from "./registry.js";
+import type { WorkspaceChange } from "./workspace-contract.js";
 import { buildWorkspacePathIndex, normalizeWorkspaceFilePath } from "./workspace-paths.js";
 
 const requireSession = (registry: SessionRegistry, sessionId: string) => {
@@ -35,6 +38,21 @@ const writeFailed = (path: string) => new TabulaCoreError(
     retry: "Read the latest file state and retry once.",
   },
 );
+
+const writeFilesFailed = (paths: readonly string[]) => new TabulaCoreError(
+  "write_failed",
+  "Tabula could not apply the file changes to the live session.",
+  {
+    details: { paths },
+    retry: "Read the latest file states and retry once.",
+  },
+);
+
+export type SessionFileWrite = {
+  path: string;
+  content: string;
+  expectedRevision?: string;
+};
 
 export const listSessionFiles = async ({
   registry,
@@ -145,10 +163,164 @@ export const searchSessionFiles = async ({
   return { sessionId, matches, truncated: false };
 };
 
+export const writeSessionFiles = async ({
+  registry,
+  sessionId,
+  files,
+}: {
+  registry: SessionRegistry;
+  sessionId: string;
+  files: readonly SessionFileWrite[];
+}) => {
+  if (files.length === 0) {
+    throw new TabulaCoreError("invalid_input", "At least one Markdown file is required.");
+  }
+  const normalizedFiles = files.map((file) => ({
+    ...file,
+    path: normalizeWorkspaceFilePath(file.path),
+  }));
+  const requestedPaths = new Set<string>();
+  for (const file of normalizedFiles) {
+    if (requestedPaths.has(file.path)) {
+      throw new TabulaCoreError("invalid_path", "Each file path must be unique within one write.", {
+        details: { path: file.path },
+      });
+    }
+    requestedPaths.add(file.path);
+    assertMarkdownSize(file.content);
+  }
+
+  const { session, snapshot } = await readReadySnapshot(registry, sessionId);
+  if (!session.writeAccess) {
+    throw new TabulaCoreError("write_disabled", "This Tabula MCP connection is read-only.", {
+      retry: "Reconnect using a writable Tabula MCP configuration.",
+    });
+  }
+  const index = buildWorkspacePathIndex(snapshot.workspace);
+  const changes: WorkspaceChange[] = [];
+  const plannedFolderIds = new Map<string, string>();
+  const outcomes = new Map<string, { created: boolean; changed: boolean; textLength: number }>();
+
+  const ensureFolder = (folderPath: string): string | null => {
+    if (!folderPath) return null;
+    const existing = index.byPath.get(folderPath);
+    if (existing) {
+      if (existing.node.type !== "folder") {
+        throw new TabulaCoreError("invalid_path", "A Markdown file blocks a requested folder path.", {
+          details: { path: folderPath },
+        });
+      }
+      return existing.node.id;
+    }
+    if (requestedPaths.has(folderPath)) {
+      throw new TabulaCoreError("invalid_path", "A requested file also needs to be a parent folder.", {
+        details: { path: folderPath },
+      });
+    }
+    const planned = plannedFolderIds.get(folderPath);
+    if (planned) return planned;
+    const parentPath = path.posix.dirname(folderPath) === "." ? "" : path.posix.dirname(folderPath);
+    const folderId = randomUUID();
+    changes.push({
+      type: "folder.create",
+      folderId,
+      parentId: ensureFolder(parentPath),
+      title: path.posix.basename(folderPath),
+    });
+    plannedFolderIds.set(folderPath, folderId);
+    return folderId;
+  };
+
+  for (const file of normalizedFiles) {
+    const existing = index.byPath.get(file.path);
+    if (existing) {
+      if (existing.node.type !== "document") {
+        throw new TabulaCoreError("invalid_path", "A folder already exists at the requested file path.", {
+          details: { path: file.path },
+        });
+      }
+      const currentContent = snapshot.documents[existing.node.id] ?? "";
+      const currentRevision = existing.node.sha256;
+      if (!file.expectedRevision) {
+        throw new TabulaCoreError("stale_revision", "An expected revision is required when replacing an existing file.", {
+          details: { path: file.path, currentRevision },
+          retry: "Read the file, then pass its revision to Write File or Write Files.",
+        });
+      }
+      if (file.expectedRevision !== currentRevision) {
+        throw new TabulaCoreError("stale_revision", "The file changed before the write could be applied.", {
+          details: { path: file.path, expectedRevision: file.expectedRevision, currentRevision },
+          retry: "Read the file again, merge the changes, and retry.",
+        });
+      }
+      const changed = currentContent !== file.content;
+      if (changed) {
+        changes.push({
+          type: "document.patch",
+          documentId: existing.node.id,
+          baseSha256: currentRevision,
+          patches: getTextPatchesForChange(currentContent, file.content),
+        });
+      }
+      outcomes.set(file.path, { created: false, changed, textLength: file.content.length });
+      continue;
+    }
+
+    const parentPath = path.posix.dirname(file.path) === "." ? "" : path.posix.dirname(file.path);
+    changes.push({
+      type: "document.create",
+      parentId: ensureFolder(parentPath),
+      title: path.posix.basename(file.path),
+      markdown: file.content,
+    });
+    outcomes.set(file.path, { created: true, changed: true, textLength: file.content.length });
+  }
+
+  try {
+    if (changes.length > 0) {
+      await session.applyWorkspaceChanges({ changes });
+    }
+    await session.flushCheckpoint();
+  } catch (error) {
+    if (error instanceof Error && /changed before/i.test(error.message)) {
+      throw new TabulaCoreError("stale_revision", "A file changed before the batch write could be applied.", {
+        details: { paths: normalizedFiles.map((file) => file.path) },
+        retry: "Read the existing files again, merge the changes, and retry the whole batch.",
+      });
+    }
+    if (error instanceof TabulaCoreError) throw error;
+    throw writeFilesFailed(normalizedFiles.map((file) => file.path));
+  }
+
+  let updated;
+  try {
+    updated = await session.readWorkspaceSnapshot();
+  } catch {
+    throw writeFilesFailed(normalizedFiles.map((file) => file.path));
+  }
+  const updatedIndex = buildWorkspacePathIndex(updated.workspace);
+  const results = normalizedFiles.map((file) => {
+    const node = updatedIndex.byPath.get(file.path)?.node;
+    const outcome = outcomes.get(file.path);
+    if (!node || node.type !== "document" || !outcome) throw writeFilesFailed([file.path]);
+    return {
+      path: file.path,
+      ...outcome,
+      revision: node.sha256,
+    };
+  });
+  return {
+    sessionId,
+    files: results,
+    createdCount: results.filter((file) => file.created).length,
+    changedCount: results.filter((file) => file.changed).length,
+  };
+};
+
 export const writeSessionFile = async ({
   registry,
   sessionId,
-  path: requestedPath,
+  path: filePath,
   content,
   expectedRevision,
 }: {
@@ -158,111 +330,22 @@ export const writeSessionFile = async ({
   content: string;
   expectedRevision?: string;
 }) => {
-  const filePath = normalizeWorkspaceFilePath(requestedPath);
-  const { session, snapshot } = await readReadySnapshot(registry, sessionId);
-  if (!session.writeAccess) {
-    throw new TabulaCoreError("write_disabled", "This Tabula MCP connection is read-only.", {
-      retry: "Reconnect using a writable Tabula MCP configuration.",
-    });
-  }
-  const index = buildWorkspacePathIndex(snapshot.workspace);
-  const existing = index.byPath.get(filePath);
-
-  if (existing) {
-    if (existing.node.type !== "document") {
-      throw new TabulaCoreError("invalid_path", "A folder already exists at the requested file path.", {
-        details: { path: filePath },
-      });
-    }
-    const currentContent = snapshot.documents[existing.node.id] ?? "";
-    const currentRevision = existing.node.sha256;
-    if (!expectedRevision) {
-      throw new TabulaCoreError("stale_revision", "An expected revision is required when replacing an existing file.", {
-        details: { path: filePath, currentRevision },
-        retry: "Read the file, then pass its revision to Write File.",
-      });
-    }
-    if (expectedRevision !== currentRevision) {
-      throw new TabulaCoreError("stale_revision", "The file changed before the write could be applied.", {
-        details: { path: filePath, expectedRevision, currentRevision },
-        retry: "Read the file again, merge the changes, and retry.",
-      });
-    }
-    if (currentContent === content) {
-      try {
-        await session.flushCheckpoint();
-      } catch {
-        throw writeFailed(filePath);
-      }
-      return { sessionId, path: filePath, created: false, changed: false, revision: currentRevision, textLength: content.length };
-    }
-    try {
-      await session.applyWorkspaceChanges({
-        changes: [{
-          type: "document.patch",
-          documentId: existing.node.id,
-          baseSha256: currentRevision,
-          patches: getTextPatchesForChange(currentContent, content),
-        }],
-      });
-      await session.flushCheckpoint();
-    } catch (error) {
-      if (error instanceof Error && /changed before/i.test(error.message)) {
-        const latest = await session.readWorkspaceSnapshot();
-        const latestNode = latest.workspace.nodes.find(
-          (node) => node.id === existing.node.id && node.type === "document",
-        );
-        throw new TabulaCoreError("stale_revision", "The file changed before the write could be applied.", {
-          details: {
-            path: filePath,
-            expectedRevision,
-            ...(latestNode?.type === "document" ? { currentRevision: latestNode.sha256 } : {}),
-          },
-          retry: "Read the file again, merge the changes, and retry.",
-        });
-      }
-      if (error instanceof TabulaCoreError) throw error;
-      throw writeFailed(filePath);
-    }
-    let updated;
-    try {
-      updated = await session.readWorkspaceSnapshot();
-    } catch {
-      throw writeFailed(filePath);
-    }
-    const updatedNode = updated.workspace.nodes.find((node) => node.id === existing.node.id && node.type === "document");
-    if (!updatedNode || updatedNode.type !== "document") throw writeFailed(filePath);
-    return { sessionId, path: filePath, created: false, changed: true, revision: updatedNode.sha256, textLength: content.length };
-  }
-
-  const parentPath = path.posix.dirname(filePath) === "." ? "" : path.posix.dirname(filePath);
-  const parent = parentPath ? index.byPath.get(parentPath) : undefined;
-  if (parentPath && (!parent || parent.node.type !== "folder")) {
-    throw new TabulaCoreError("parent_folder_not_found", "The parent folder does not exist in the Tabula session.", {
-      details: { path: parentPath },
-      retry: "Choose an existing folder or write the file at the session root.",
-    });
-  }
-  let changed;
+  let result;
   try {
-    changed = await session.applyWorkspaceChanges({
-      changes: [{ type: "document.create", parentId: parent?.node.id ?? null, title: path.posix.basename(filePath), markdown: content }],
+    result = await writeSessionFiles({
+      registry,
+      sessionId,
+      files: [{ path: filePath, content, expectedRevision }],
     });
-    await session.flushCheckpoint();
-  } catch {
-    throw writeFailed(filePath);
+  } catch (error) {
+    if (error instanceof TabulaCoreError && error.code === "write_failed") {
+      throw writeFailed(normalizeWorkspaceFilePath(filePath));
+    }
+    throw error;
   }
-  const documentId = changed.changedDocumentIds[0];
-  if (!documentId) throw writeFailed(filePath);
-  let created;
-  try {
-    created = await session.readWorkspaceSnapshot();
-  } catch {
-    throw writeFailed(filePath);
-  }
-  const createdNode = created.workspace.nodes.find((node) => node.id === documentId && node.type === "document");
-  if (!createdNode || createdNode.type !== "document") throw writeFailed(filePath);
-  return { sessionId, path: filePath, created: true, changed: true, revision: createdNode.sha256, textLength: content.length };
+  const written = result.files[0];
+  if (!written) throw writeFailed(filePath);
+  return { sessionId, ...written };
 };
 
 export const readSessionExportSnapshot = async ({

@@ -112,14 +112,13 @@ describe("Tabula MCP HTTP server", () => {
       const tools = await client.listTools();
 
       expect(tools.tools.map((tool) => tool.name)).toEqual([
-        "tabula_create_draft",
-        "tabula_update_draft",
         "tabula_start_session",
         "tabula_join_room",
         "tabula_list_files",
         "tabula_read_file",
         "tabula_search_files",
         "tabula_write_file",
+        "tabula_write_files",
         "tabula_export_copy",
       ]);
     } finally {

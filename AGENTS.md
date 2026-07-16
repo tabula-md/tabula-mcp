@@ -2,16 +2,16 @@
 
 ## Project Overview
 
-Tabula.md MCP is a local stdio MCP server and MCP App for drafting Markdown
-documents, handing document context back to agents, and joining encrypted
-Tabula.md live rooms from agent clients.
+Tabula.md MCP is a local stdio MCP server and MCP App for handing host-native
+Markdown files to encrypted Tabula.md copies and live rooms, then collaborating
+on those files from agent clients.
 
 ## Product Direction
 
 - Keep the product Markdown-document-first. Do not turn the MCP App into a
-  dashboard or database.
-- Keep local App documents local unless the user explicitly shares them as an
-  encrypted Tabula.md room link.
+  dashboard, database, or hosted plaintext processor.
+- Do not duplicate host-native writing or filesystem draft features. Accept
+  Markdown files only when the user explicitly requests a Copy or Session.
 - Preserve the Tabula.md room security model.
 - Treat room URLs with `#room=...` as bearer secrets because the fragment
   contains the room key.
@@ -43,8 +43,8 @@ Tabula.md live rooms from agent clients.
 ## Code Style
 
 - Keep protocol, crypto, text patching, and MCP tool registration separate.
-- Keep MCP App resource/tools, document registry/store/snapshot, room tools,
-  and CLI entrypoint in their existing separated modules.
+- Keep MCP App resources, Session resources, room tools, and the CLI entrypoint
+  in their existing separated modules.
 - Use structured parsers and schemas for external input.
 - Do not log room URLs, room keys, plaintext Markdown, decrypted envelopes, or
   generated encrypted share links.

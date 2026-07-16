@@ -78,7 +78,12 @@ const roomMock = vi.hoisted(() => {
     async applyWorkspaceChanges({ changes }: { changes: Array<any> }) {
       const changedDocumentIds: string[] = [];
       for (const change of changes) {
-        if (change.type === "document.patch") {
+        if (change.type === "folder.create") {
+          this.workspace.nodes.push({
+            id: change.folderId, type: "folder", parentId: change.parentId ?? this.workspace.rootId, title: change.title,
+            order: this.workspace.nodes.length, createdAt: "2026-07-17T00:00:00.000Z", updatedAt: "2026-07-17T00:00:00.000Z",
+          });
+        } else if (change.type === "document.patch") {
           let content = this.documents[change.documentId] ?? "";
           for (const patch of [...change.patches].sort((a, b) => b.from - a.from)) {
             content = `${content.slice(0, patch.from)}${patch.insert}${content.slice(patch.to)}`;
@@ -89,7 +94,7 @@ const roomMock = vi.hoisted(() => {
             : node);
           changedDocumentIds.push(change.documentId);
         } else if (change.type === "document.create") {
-          const id = "created";
+          const id = `created-${this.workspace.nodes.length}`;
           this.documents[id] = change.markdown;
           this.workspace.nodes.push({
             id, type: "document", parentId: change.parentId ?? this.workspace.rootId, title: change.title,
@@ -198,21 +203,38 @@ describe("core MCP workflows", () => {
 
       const reread = await client.callTool({ name: "tabula_read_file", arguments: { sessionId: session.sessionId, path: "shared.md" } });
       expect(reread.structuredContent).toMatchObject({ content });
+
+      const writtenFiles = await client.callTool({
+        name: "tabula_write_files",
+        arguments: {
+          sessionId: session.sessionId,
+          files: [
+            { path: "research/notes.md", content: "# Notes\n" },
+            { path: "decision.md", content: "# Decision\n" },
+          ],
+        },
+      });
+      expect(writtenFiles.isError).not.toBe(true);
+      expect(writtenFiles.structuredContent).toMatchObject({ createdCount: 2, changedCount: 2 });
     });
   });
 
-  it("creates a draft and starts a writable live session", async () => {
+  it("starts a writable live session directly from host-native files", async () => {
     await withClient(async (client) => {
-      const created = await client.callTool({
-        name: "tabula_create_draft",
-        arguments: { title: "Research", content: "# Research\n" },
+      const started = await client.callTool({
+        name: "tabula_start_session",
+        arguments: {
+          title: "Research",
+          files: [
+            { path: "research.md", content: "# Research\n" },
+            { path: "sources/notes.md", content: "# Notes\n" },
+          ],
+        },
       });
-      const draftId = (created.structuredContent as { draftId: string }).draftId;
-      const started = await client.callTool({ name: "tabula_start_session", arguments: { draftId } });
       expect(started.structuredContent).toMatchObject({
         ready: true,
         canWrite: true,
-        fileCount: 1,
+        fileCount: 2,
         sessionUrl: expect.stringMatching(/^https:\/\/tabula\.md\/#room=/),
       });
     });
