@@ -258,10 +258,13 @@ const run = async () => {
   const options = parseArgs(process.argv.slice(2));
   const roomPort = await getFreePort();
   const appPort = await getFreePort();
+  const peerOnlyAppPort = await getFreePort();
   const roomUrl = `http://127.0.0.1:${roomPort}`;
   const appOrigin = `http://127.0.0.1:${appPort}`;
+  const peerOnlyAppOrigin = `http://127.0.0.1:${peerOnlyAppPort}`;
   let roomServer;
   let appServer;
+  let peerOnlyAppServer;
   let firebaseServer;
   let browser;
   const firebaseConfig = JSON.stringify({
@@ -279,7 +282,7 @@ const run = async () => {
       cwd: options.roomRepoDir,
       env: {
         PORT: String(roomPort),
-        TABULA_ROOM_ALLOWED_ORIGINS: appOrigin,
+        TABULA_ROOM_ALLOWED_ORIGINS: `${appOrigin},${peerOnlyAppOrigin}`,
         TABULA_ROOM_MAX_PAYLOAD_BYTES: String(4 * 1024 * 1024),
       },
       label: "tabula-room",
@@ -312,12 +315,32 @@ const run = async () => {
     });
     await waitForHttp(appOrigin, { label: "tabula-md dev server" });
 
+    peerOnlyAppServer = spawnLogged({
+      command: "npm",
+      args: ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(peerOnlyAppPort)],
+      cwd: options.tabulaMdRepoDir,
+      env: {
+        VITE_TABULA_ROOM_URL: roomUrl,
+        VITE_TABULA_JSON_URL: "http://127.0.0.1:9",
+      },
+      label: "tabula-md-peer-only",
+    });
+    await waitForHttp(peerOnlyAppOrigin, { label: "tabula-md peer-only dev server" });
+
     browser = await chromium.launch({ headless: !options.headed });
     const context = await browser.newContext();
     const page = await context.newPage();
     const pageDiagnostics = [];
     page.on("console", (message) => pageDiagnostics.push(`[console:${message.type()}] ${message.text()}`));
     page.on("pageerror", (error) => pageDiagnostics.push(`[pageerror] ${error.message}`));
+    page.on("requestfailed", (request) =>
+      pageDiagnostics.push(`[requestfailed] ${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`),
+    );
+    page.on("response", (response) => {
+      if (response.status() >= 400) {
+        pageDiagnostics.push(`[response:${response.status()}] ${response.request().method()} ${response.url()}`);
+      }
+    });
 
     await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, firebaseConfig }, async (client) => {
       const tools = await client.listTools();
@@ -354,6 +377,11 @@ const run = async () => {
         identityColor: "#2563eb",
       });
       assert.match(room.roomUrl, new RegExp(`^${appOrigin.replaceAll(".", "\\.")}/#room=`));
+      assert.equal(
+        room.published?.checkpointStatus?.status,
+        "saved",
+        `MCP-created room must persist before a browser joins: ${JSON.stringify(room.published?.checkpointStatus)}`,
+      );
       const roomStatusBeforeBrowser = await callTool(client, "tabula_room_status", {
         sessionId: room.sessionId,
       });
@@ -369,6 +397,7 @@ const run = async () => {
           socketConnected: roomStatusBeforeBrowser.socketConnected,
           peerCount: roomStatusBeforeBrowser.peerCount,
           hydrationStatus: roomStatusBeforeBrowser.hydrationStatus,
+          checkpointStatus: roomStatusBeforeBrowser.checkpointStatus,
           lastError: roomStatusBeforeBrowser.lastError,
         });
         throw new Error(`${error.message}\nMCP room state: ${roomState}\nBrowser body:\n${body}\nBrowser diagnostics:\n${pageDiagnostics.join("\n")}\nRoom server stdout:\n${roomServer.stdout.join("")}\nRoom server stderr:\n${roomServer.stderr.join("")}`);
@@ -428,8 +457,7 @@ const run = async () => {
         !tabsAfterMcp.some((tab) => tab.title.includes("Agent Notes.md")),
         "a remote document creation must not disrupt the human's open tabs",
       );
-      await page.getByRole("button", { name: "Open Project Context" }).click();
-      await page.getByRole("button", { name: "Files" }).click();
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+Alt+f" : "Control+Alt+f");
       await page.locator(".right-file-tree").getByText("Agent Notes", { exact: false }).waitFor();
       assert(
         await page.locator(".right-file-tree").innerText().then((text) => text.includes("Agent Notes")),
@@ -459,6 +487,37 @@ const run = async () => {
       });
       assert(afterHumanEdit.markdown.includes("Human browser edit."), "MCP should read browser-originated text");
 
+      const peerOnlyWorkspace = await callTool(client, "tabula_create_workspace", {
+        title: "Peer-only recovery",
+        files: [{
+          path: "README.md",
+          markdown: "# Peer-only recovery\n\nLoaded from the live MCP participant.\n",
+        }],
+      });
+      const peerOnlyRoom = await callTool(client, "tabula_create_workspace_room", {
+        workspaceId: peerOnlyWorkspace.workspaceId,
+        appOrigin: peerOnlyAppOrigin,
+        roomServerUrl: roomUrl,
+        identityName: "Peer-only E2E Agent",
+        identityColor: "#7c3aed",
+      });
+      const peerOnlyPage = await context.newPage();
+      await peerOnlyPage.goto(peerOnlyRoom.roomUrl);
+      const peerOnlyBrowserText = await waitForEditorText(
+        peerOnlyPage,
+        "Loaded from the live MCP participant.",
+      );
+      assert(
+        peerOnlyBrowserText.includes("# Peer-only recovery"),
+        "browser without checkpoint access should hydrate from the live MCP peer",
+      );
+      await peerOnlyPage.close();
+
+      const peerOnlyDisconnected = await callTool(client, "tabula_disconnect_room", {
+        sessionId: peerOnlyRoom.sessionId,
+      });
+      assert.equal(peerOnlyDisconnected.disconnectedSessionId, peerOnlyRoom.sessionId);
+
       const disconnected = await callTool(client, "tabula_disconnect_room", {
         sessionId: room.sessionId,
       });
@@ -478,6 +537,7 @@ const run = async () => {
             browserAfterMcpText,
             afterHumanEditMarkdown: afterHumanEdit.markdown,
             tabsAfterMcp,
+            peerOnlyBrowserText,
           },
           null,
           2,
@@ -486,6 +546,7 @@ const run = async () => {
     });
   } finally {
     await browser?.close();
+    await stopProcess(peerOnlyAppServer);
     await stopProcess(appServer);
     await stopProcess(firebaseServer);
     await stopProcess(roomServer);

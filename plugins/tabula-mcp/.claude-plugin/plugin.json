@@ -1,6 +1,6 @@
 {
   "name": "tabula-mcp",
-  "description": "Tabula.md workspace rooms for Claude Code.",
+  "description": "Shared Markdown workspaces for people and Claude through Tabula.md rooms.",
   "version": "0.1.1",
   "author": {
     "name": "Tabula.md"

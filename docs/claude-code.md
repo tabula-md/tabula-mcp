@@ -1,10 +1,19 @@
 # Claude Code
 
-Tabula.md ships a Claude Code plugin that installs the published Tabula MCP
-server. The plugin is a distribution wrapper for the cross-client MCP server;
-it does not add Tabula-specific Skills, agents, hooks, or slash commands.
+Tabula.md MCP can be installed directly from npm or through the repository's
+Claude Code plugin marketplace.
 
-## Install
+## Direct install
+
+```sh
+claude mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+```
+
+Omit `--enable-write`, or replace it with `--read-only`, for inspection-only
+room access. Restart Claude Code if the server does not appear immediately,
+then run `/mcp` to verify it.
+
+## Plugin install
 
 Add the Tabula.md marketplace, then install its plugin:
 

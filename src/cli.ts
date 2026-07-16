@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 
-import { realpathSync } from "node:fs";
+import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createTabulaMcpServer, type TabulaMcpServerInstance } from "./server/create-server.js";
-import { createTabulaMcpHttpServer, type TabulaMcpHttpServer } from "./server/http.js";
+import type { TabulaMcpServerInstance } from "./server/create-server.js";
+import type { TabulaMcpHttpServer } from "./server/http.js";
 
 export type CliTransportMode = "stdio" | "http";
 
 export type CliOptions = {
+  action: "doctor" | "help" | "serve" | "version";
   host?: string;
   mode: CliTransportMode;
   port?: number;
@@ -24,6 +25,13 @@ const positiveIntegerArg = (value: string | undefined) => {
 
 export const parseCliOptions = (argv: readonly string[] = process.argv.slice(2)): CliOptions => {
   const options: CliOptions = {
+    action: argv.includes("--help") || argv.includes("-h")
+      ? "help"
+      : argv.includes("--version") || argv.includes("-v")
+        ? "version"
+        : argv.includes("--doctor")
+          ? "doctor"
+          : "serve",
     mode: argv.includes("--http") ? "http" : "stdio",
   };
 
@@ -42,7 +50,105 @@ export const parseCliOptions = (argv: readonly string[] = process.argv.slice(2))
   return options;
 };
 
+const packageJsonPath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+
+export const getPackageVersion = () => {
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
+  return typeof packageJson.version === "string" ? packageJson.version : "unknown";
+};
+
+export const CLI_HELP = `Tabula MCP
+
+Local MCP server and MCP App for shared Markdown workspaces.
+
+Usage:
+  tabula-mcp [--stdio]
+  tabula-mcp --http [--host <host>] [--port <port>]
+  tabula-mcp --doctor
+  tabula-mcp --version
+
+Install for Codex:
+  codex mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+
+Install for Claude Code:
+  claude mcp add tabula -- npx -y @tabula-md/mcp@latest --enable-write
+
+Options:
+  --stdio          Run the local stdio MCP server (default for MCP clients)
+  --http           Run a Streamable HTTP MCP server
+  --host <host>    HTTP listen host
+  --port <port>    HTTP listen port
+  --enable-write   Allow hash-guarded workspace changes
+  --read-only      Disable workspace changes
+  --doctor         Check the local runtime without printing secrets
+  -h, --help       Show this help
+  -v, --version    Show the package version
+
+Room URLs contain bearer secrets. Pass them through MCP tool calls, not CLI arguments.`;
+
+export type DoctorCheck = {
+  detail: string;
+  label: string;
+  status: "pass" | "warn";
+};
+
+const nodeVersionSupported = () => {
+  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+  return major > 22 || (major === 22 && minor >= 12) || (major === 20 && minor >= 19);
+};
+
+export const collectDoctorChecks = (): DoctorCheck[] => {
+  const checks: DoctorCheck[] = [
+    {
+      label: "Node.js",
+      status: nodeVersionSupported() ? "pass" : "warn",
+      detail: `${process.versions.node} (requires ^20.19.0 or >=22.12.0)`,
+    },
+    {
+      label: "Package",
+      status: "pass",
+      detail: `@tabula-md/mcp ${getPackageVersion()}`,
+    },
+    {
+      label: "Default transport",
+      status: "pass",
+      detail: "local stdio; room keys and decrypted Markdown stay in this MCP process",
+    },
+  ];
+
+  const configuredStore = process.env.TABULA_MCP_DOCUMENT_STORE_DIR?.trim();
+  if (configuredStore) {
+    try {
+      accessSync(configuredStore, constants.R_OK | constants.W_OK);
+      checks.push({ label: "Document store", status: "pass", detail: "configured directory is readable and writable" });
+    } catch {
+      checks.push({ label: "Document store", status: "warn", detail: "configured directory is not readable and writable" });
+    }
+  } else {
+    checks.push({ label: "Document store", status: "pass", detail: "using the platform-local default" });
+  }
+
+  checks.push({
+    label: "Room writes",
+    status: "pass",
+    detail: "workspace changes are hash-guarded; destructive operations remain visible to the MCP host",
+  });
+  return checks;
+};
+
+export const formatDoctorReport = (checks = collectDoctorChecks()) => [
+  `Tabula MCP ${getPackageVersion()} doctor`,
+  "",
+  ...checks.map((check) => `${check.status === "pass" ? "PASS" : "WARN"}  ${check.label}: ${check.detail}`),
+  "",
+  "No room URLs, keys, Markdown, tokens, or share links were inspected or printed.",
+].join("\n");
+
 export const runStdioServer = async () => {
+  const [{ StdioServerTransport }, { createTabulaMcpServer }] = await Promise.all([
+    import("@modelcontextprotocol/sdk/server/stdio.js"),
+    import("./server/create-server.js"),
+  ]);
   const instance = createTabulaMcpServer();
   const transport = new StdioServerTransport();
   await instance.server.connect(transport);
@@ -50,6 +156,7 @@ export const runStdioServer = async () => {
 };
 
 export const runHttpServer = async ({ host, port }: Pick<CliOptions, "host" | "port"> = {}) => {
+  const { createTabulaMcpHttpServer } = await import("./server/http.js");
   const httpServer = createTabulaMcpHttpServer({ host, port });
   await httpServer.listen();
   console.error(
@@ -73,10 +180,26 @@ export const isDirectRun = (importMetaUrl: string, argv: readonly string[] = pro
   }
 };
 
-export const runCli = () => {
+export const runCli = (
+  argv: readonly string[] = process.argv.slice(2),
+  stdinIsTty = Boolean(process.stdin.isTTY),
+) => {
   let instance: TabulaMcpServerInstance | null = null;
   let httpServer: TabulaMcpHttpServer | null = null;
-  const options = parseCliOptions();
+  const options = parseCliOptions(argv);
+
+  if (options.action === "help" || (options.action === "serve" && argv.length === 0 && stdinIsTty)) {
+    console.log(CLI_HELP);
+    return;
+  }
+  if (options.action === "version") {
+    console.log(getPackageVersion());
+    return;
+  }
+  if (options.action === "doctor") {
+    console.log(formatDoctorReport());
+    return;
+  }
 
   (options.mode === "http" ? runHttpServer(options) : runStdioServer())
     .then((started) => {

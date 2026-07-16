@@ -226,9 +226,28 @@ export const errorMessageForClient = (error: unknown, production: boolean) => {
   return production ? "Internal server error." : error instanceof Error ? error.message : "Internal server error.";
 };
 
+const sensitiveLogKeyPattern = /(authorization|bearer|token|secret|roomkey|snapshotkey|roomurl|shareurl)/i;
+
+export const redactOperationalText = (value: string) => value
+  .replace(/Bearer\s+[-._~+/=A-Za-z0-9]+/gi, "Bearer [redacted]")
+  .replace(/#(room|json)=[^\s"'<>]+/gi, "#$1=[redacted]")
+  .replace(/%23(room|json)%3D[^\s"'<>]+/gi, "%23$1%3D[redacted]");
+
+export const sanitizeOperationalLogEntry = (entry: OperationalLogEntry): OperationalLogEntry =>
+  Object.fromEntries(
+    Object.entries(entry).map(([key, value]) => [
+      key,
+      sensitiveLogKeyPattern.test(key)
+        ? "[redacted]"
+        : typeof value === "string"
+          ? redactOperationalText(value).slice(0, 500)
+          : value,
+    ]),
+  );
+
 export const errorMessageForLog = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/Bearer\s+[-._~+/=A-Za-z0-9]+/gi, "Bearer [redacted]").slice(0, 500);
+  return redactOperationalText(message).slice(0, 500);
 };
 
 export const logOperationalError = (
@@ -240,7 +259,7 @@ export const logOperationalError = (
     return;
   }
 
-  console.error(JSON.stringify({ event, ...entry }));
+  console.error(JSON.stringify({ event, ...sanitizeOperationalLogEntry(entry) }));
 };
 
 export const logRequest = (policy: OperationalPolicy, entry: RequestLogEntry) => {
