@@ -27,19 +27,20 @@ content you would not trust to that service.
 Download the latest [Tabula.md MCP extension](https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb),
 install it, then restart Claude Desktop.
 
-### Claude Code or Codex CLI
+### Claude Code
 
-Configure the local stdio server:
+Add the local stdio server:
 
-```json
-{
-  "mcpServers": {
-    "tabula": {
-      "command": "npx",
-      "args": ["-y", "@tabula-md/mcp@latest"]
-    }
-  }
-}
+```sh
+claude mcp add tabula -- npx -y @tabula-md/mcp@latest
+```
+
+### Codex
+
+Add the local stdio server:
+
+```sh
+codex mcp add tabula -- npx -y @tabula-md/mcp@latest
 ```
 
 ### Hosted MCP
