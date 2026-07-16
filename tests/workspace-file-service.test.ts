@@ -6,6 +6,7 @@ import {
   readSessionFile,
   searchSessionFiles,
   writeSessionFile,
+  writeSessionFiles,
 } from "../src/workspace-file-service.js";
 import { buildWorkspacePathIndex } from "../src/workspace-paths.js";
 import { describe, expect, it } from "vitest";
@@ -59,7 +60,12 @@ const createHarness = async () => {
     async applyWorkspaceChanges({ changes }: { changes: WorkspaceChange[] }) {
       const changedDocumentIds: string[] = [];
       for (const change of changes) {
-        if (change.type === "document.patch") {
+        if (change.type === "folder.create") {
+          workspace.nodes.push({
+            id: change.folderId, type: "folder", parentId: change.parentId ?? "root", title: change.title,
+            order: workspace.nodes.length, createdAt: now, updatedAt: now,
+          });
+        } else if (change.type === "document.patch") {
           let text = docs[change.documentId] ?? "";
           for (const patch of [...change.patches].sort((a, b) => b.from - a.from)) {
             text = `${text.slice(0, patch.from)}${patch.insert}${text.slice(patch.to)}`;
@@ -126,7 +132,7 @@ describe("workspace file service", () => {
     expect(checkpoint.flushes).toBe(1);
   });
 
-  it("returns no-op, stale, and missing-parent outcomes deterministically", async () => {
+  it("returns no-op and stale outcomes and creates missing parent folders", async () => {
     const { checkpoint, registry } = await createHarness();
     const current = await readSessionFile({ registry, sessionId, path: "README.md" });
     await expect(writeSessionFile({
@@ -138,7 +144,7 @@ describe("workspace file service", () => {
     })).rejects.toMatchObject({ code: "stale_revision" });
     await expect(writeSessionFile({
       registry, sessionId, path: "missing/new.md", content: "new",
-    })).rejects.toMatchObject({ code: "parent_folder_not_found" });
+    })).resolves.toMatchObject({ created: true, path: "missing/new.md" });
     await expect(writeSessionFile({
       registry, sessionId, path: "/absolute.md", content: "new",
     })).rejects.toMatchObject({ code: "invalid_path" });
@@ -158,6 +164,66 @@ describe("workspace file service", () => {
     expect(listed.files).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "notes.md" }),
       expect.objectContaining({ path: "docs/plan.md" }),
+    ]));
+  });
+
+  it("writes multiple files and missing folders in one workspace transaction", async () => {
+    const { checkpoint, registry, docs, session } = await createHarness();
+    const current = await readSessionFile({ registry, sessionId, path: "README.md" });
+    let transactionCount = 0;
+    const apply = session.applyWorkspaceChanges.bind(session);
+    session.applyWorkspaceChanges = async (input) => {
+      transactionCount += 1;
+      return apply(input);
+    };
+
+    const written = await writeSessionFiles({
+      registry,
+      sessionId,
+      files: [
+        { path: "README.md", content: `${current.content}\nUpdated in batch.\n`, expectedRevision: current.revision },
+        { path: "research/notes.md", content: "# Notes\n" },
+        { path: "research/nested/findings.md", content: "# Findings\n" },
+      ],
+    });
+
+    expect(written).toMatchObject({ createdCount: 2, changedCount: 3 });
+    expect(written.files).toHaveLength(3);
+    expect(transactionCount).toBe(1);
+    expect(checkpoint.flushes).toBe(1);
+    expect(docs.readme).toContain("Updated in batch.");
+    const listed = await listSessionFiles({ registry, sessionId });
+    expect(listed.files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "research", type: "folder" }),
+      expect.objectContaining({ path: "research/nested", type: "folder" }),
+      expect.objectContaining({ path: "research/notes.md", type: "file" }),
+      expect.objectContaining({ path: "research/nested/findings.md", type: "file" }),
+    ]));
+  });
+
+  it("rejects a stale multi-file write before applying any file", async () => {
+    const { checkpoint, registry, session } = await createHarness();
+    let transactionCount = 0;
+    const apply = session.applyWorkspaceChanges.bind(session);
+    session.applyWorkspaceChanges = async (input) => {
+      transactionCount += 1;
+      return apply(input);
+    };
+
+    await expect(writeSessionFiles({
+      registry,
+      sessionId,
+      files: [
+        { path: "new.md", content: "# New\n" },
+        { path: "README.md", content: "stale", expectedRevision: "0".repeat(64) },
+      ],
+    })).rejects.toMatchObject({ code: "stale_revision" });
+
+    expect(transactionCount).toBe(0);
+    expect(checkpoint.flushes).toBe(0);
+    const listed = await listSessionFiles({ registry, sessionId });
+    expect(listed.files).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "new.md" }),
     ]));
   });
 

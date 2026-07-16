@@ -1,11 +1,10 @@
 :root {
   color-scheme: light;
-  --tabula-bg: var(--app-background, var(--color-background-primary, #ffffff));
-  --tabula-surface: var(--surface-workbench, var(--color-background-secondary, #ffffff));
-  --tabula-subtle: var(--surface-muted, #f7f7f8);
-  --tabula-text: var(--text-primary, var(--color-text-primary, #1f1f1f));
-  --tabula-muted: var(--text-muted, var(--color-text-secondary, #67676b));
-  --tabula-border: var(--line-subtle, var(--color-border-primary, #eeeeef));
+  --tabula-bg: #ffffff;
+  --tabula-subtle: #f7f7f8;
+  --tabula-text: #1f1f1f;
+  --tabula-muted: #67676b;
+  --tabula-border: #e8e8ea;
   --tabula-warning: #9a6700;
   --tabula-error: #b42318;
   font-family: "Geist Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -13,12 +12,11 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --tabula-bg: var(--app-background, var(--color-background-primary, #111111));
-  --tabula-surface: var(--surface-workbench, var(--color-background-secondary, #111111));
-  --tabula-subtle: var(--surface-muted, #232325);
-  --tabula-text: var(--text-primary, var(--color-text-primary, #ededee));
-  --tabula-muted: var(--text-muted, var(--color-text-secondary, #9a9aa0));
-  --tabula-border: var(--line-subtle, var(--color-border-primary, #333337));
+  --tabula-bg: #111111;
+  --tabula-subtle: #232325;
+  --tabula-text: #ededee;
+  --tabula-muted: #9a9aa0;
+  --tabula-border: #333337;
 }
 
 * {
@@ -33,144 +31,102 @@ body {
   color: var(--tabula-text);
 }
 
-.session-card {
+.handoff-card {
   display: grid;
   min-width: 0;
+  padding: 14px 16px 12px;
   background: var(--tabula-bg);
+  text-align: center;
 }
 
-.session-card-header {
+.handoff-header {
   display: flex;
-  min-height: 72px;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  padding: 18px 16px 10px;
+  gap: 8px;
   color: var(--tabula-text);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.025em;
 }
 
-.session-card-mark {
-  width: 23px;
-  height: 23px;
+.handoff-mark {
+  width: 22px;
+  height: 22px;
   object-fit: contain;
 }
 
-.session-card-body {
+.handoff-body {
   display: grid;
-  gap: 12px;
-  padding: 12px 16px 20px;
-  text-align: center;
+  justify-items: center;
+  gap: 7px;
+  padding-top: 12px;
 }
 
-.session-eyebrow {
+.handoff-eyebrow,
+.handoff-summary,
+.handoff-meta {
   margin: 0;
-  color: var(--tabula-muted);
-  font-size: 12px;
+}
+
+.handoff-eyebrow {
+  color: var(--tabula-text);
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.4;
 }
 
-.session-summary {
-  max-width: 500px;
-  margin: 0 auto;
+.handoff-summary {
+  max-width: 520px;
   color: var(--tabula-muted);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
-.session-details {
-  display: grid;
-  gap: 8px;
-  max-width: 500px;
-  width: 100%;
-  margin: 4px auto 0;
-  text-align: left;
-}
-
-.session-details div {
-  display: grid;
-  grid-template-columns: minmax(92px, 0.28fr) minmax(0, 1fr);
-  gap: 12px;
-  min-width: 0;
-  padding: 9px 10px;
-  border-radius: 8px;
+.handoff-meta {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--tabula-muted);
   background: var(--tabula-subtle);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
-.session-details dt,
-.session-details dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.session-details dt {
-  color: var(--tabula-muted);
-  font-size: 12px;
-}
-
-.session-details dd {
-  color: var(--tabula-text);
-  font-size: 12px;
-}
-
-.session-actions {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 2px;
-}
-
-.session-action {
+.handoff-action {
   min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--tabula-border);
+  margin-top: 3px;
+  padding: 0 13px;
+  border: 1px solid var(--tabula-text);
   border-radius: 8px;
-  color: var(--tabula-text);
-  background: transparent;
+  color: var(--tabula-bg);
+  background: var(--tabula-text);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
 }
 
-.session-action:hover:not(:disabled) {
-  background: var(--tabula-subtle);
-}
-
-.session-action-primary {
-  border-color: var(--tabula-text);
-  color: var(--tabula-bg);
-  background: var(--tabula-text);
-}
-
-.session-action-primary:hover:not(:disabled) {
+.handoff-action:hover:not(:disabled) {
   opacity: 0.88;
-  background: var(--tabula-text);
 }
 
-.session-action:disabled {
+.handoff-action:disabled {
   cursor: default;
   opacity: 0.42;
 }
 
-.session-action:focus-visible {
+.handoff-action:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--tabula-text) 30%, transparent);
   outline-offset: 2px;
 }
 
 .message {
-  width: 100%;
-  max-width: 500px;
+  max-width: 520px;
   min-height: 0;
   margin: 0 auto;
-  padding: 0 16px 16px;
+  padding-top: 8px;
   color: var(--tabula-muted);
-  font-size: 12px;
-  line-height: 1.45;
-  text-align: center;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .message:empty {
@@ -186,16 +142,11 @@ body {
 }
 
 @media (max-width: 420px) {
-  .session-card-body {
-    padding: 18px 14px;
+  .handoff-card {
+    padding-inline: 12px;
   }
 
-  .session-details div {
-    grid-template-columns: 1fr;
-    gap: 3px;
-  }
-
-  .session-action {
-    flex: 1 1 auto;
+  .handoff-action {
+    width: 100%;
   }
 }

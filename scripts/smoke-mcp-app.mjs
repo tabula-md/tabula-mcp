@@ -22,29 +22,30 @@ const main = async () => {
 
   for (const expected of [
     "tabulaMark",
-    "sessionEyebrow",
-    "documentMeta",
-    "collaborationMeta",
-    "openCopyButton",
-    "startSessionButton",
-    "openSessionButton",
+    "handoffEyebrow",
+    "handoffSummary",
+    "handoffMeta",
+    "openButton",
   ]) {
     assertIncludes(appHtml, expected, "session card source");
     assertIncludes(devHtml, expected, "dev harness");
     assertIncludes(builtHtml, expected, "built session card");
   }
 
-  for (const expected of ["tabula_export_copy", "tabula_start_session", "openLink"]) {
+  for (const expected of ["copyFixture", "roomFixture", "openLink"]) {
     assertIncludes(mockApp, expected, "mock app bridge");
   }
-  assertIncludes(await readText("src/app/document-app.js"), "pendingSessionUrl", "session handoff state");
+  const appSource = await readText("src/app/document-app.js");
+  if (appSource.includes("callServerTool")) {
+    throw new Error("handoff App must not call server tools from a host-specific MCP context");
+  }
 
   assertIncludes(devHtml, "/src/app-dev/main.js", "dev harness");
   assertIncludes(builtHtml, ">Tabula<", "built session card");
   if (builtHtml.includes("Tabula.md</span>") || builtHtml.includes("sessionTitle")) {
     throw new Error("built session card must use the centered Tabula brand without a document title header");
   }
-  assertIncludes(builtHtml, "Private draft", "built session card");
+  assertIncludes(builtHtml, "Encrypted copy", "built handoff card");
   if (builtHtml.includes("TabulaEmbeddedDocumentWorkbench") || builtHtml.includes("data-tabula-document-workbench")) {
     throw new Error("built session card must not bundle a second Tabula editor");
   }

@@ -4,7 +4,7 @@
   "display_name": "Tabula.md MCP",
   "version": "0.2.2",
   "description": "Let Claude work with people in shared Tabula.md Markdown workspaces.",
-  "long_description": "Let Claude work with people in shared Tabula.md Markdown workspaces. Claude can create private drafts, join encrypted live sessions, list, read, search, and write Markdown files, and export fixed encrypted copies. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
+  "long_description": "Turn Markdown created in Claude or local files into shared Tabula.md workspaces. Claude can start or join encrypted live sessions, list, read, search, and write one or many Markdown files, and export fixed encrypted copies. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
   "author": {
     "name": "Tabula.md",
     "url": "https://tabula.md"
@@ -36,16 +36,8 @@
   },
   "tools": [
     {
-      "name": "tabula_create_draft",
-      "description": "Create a private Markdown draft and show its Tabula card."
-    },
-    {
-      "name": "tabula_update_draft",
-      "description": "Replace the content of a private Markdown draft."
-    },
-    {
       "name": "tabula_start_session",
-      "description": "Turn a private draft into an encrypted live Tabula session."
+      "description": "Start an encrypted live Tabula session from one or more Markdown files."
     },
     {
       "name": "tabula_join_room",
@@ -68,8 +60,12 @@
       "description": "Create or replace a Markdown file while the server computes the collaboration patch."
     },
     {
+      "name": "tabula_write_files",
+      "description": "Create or replace multiple Markdown files and their folders in one live session transaction."
+    },
+    {
       "name": "tabula_export_copy",
-      "description": "Export a draft or live session state as an encrypted fixed #json copy."
+      "description": "Create an encrypted fixed #json copy from Markdown files or a live session."
     }
   ],
   "tools_generated": true,

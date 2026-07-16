@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Removed Tabula's private-draft tools and resources. Claude, Codex, and local
+  filesystems remain the writing surface; Tabula now receives Markdown only
+  when creating an encrypted Copy or live Session.
+- Added atomic multi-file Session writes, including nested folder creation and
+  preflight revision checks that prevent partial updates.
+- Reduced the default MCP surface to eight high-level tools centered on live
+  Session files and encrypted handoff.
+
 ## 0.2.2
 
 - Made `tabula_write_file` flush the encrypted room checkpoint before returning

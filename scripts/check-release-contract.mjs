@@ -32,7 +32,7 @@ assert.deepEqual(
   "Claude Code must pin the package version being released.",
 );
 assert.match(sourceVersion, new RegExp(`TABULA_MCP_VERSION = ["']${version.replaceAll(".", "\\.")}["']`));
-assert.match(appSource, new RegExp(`name: ["']Tabula Session["'], version: ["']${version.replaceAll(".", "\\.")}["']`));
+assert.match(appSource, new RegExp(`name: ["']Tabula Handoff["'], version: ["']${version.replaceAll(".", "\\.")}["']`));
 assert.match(changelog, new RegExp(`^## ${version.replaceAll(".", "\\.")}$`, "m"), "Changelog must contain the release version.");
 assert.equal(packageJson.publishConfig?.access, "public", "npm package must remain public.");
 assert.equal(packageJson.publishConfig?.provenance, true, "npm provenance must remain enabled.");

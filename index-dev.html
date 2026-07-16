@@ -3,35 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tabula Session Dev Harness</title>
+    <title>Tabula Handoff Dev Harness</title>
   </head>
   <body>
-    <main class="session-card" aria-label="Tabula session controls">
-      <header class="session-card-header" aria-label="Tabula">
-        <img id="tabulaMark" class="session-card-mark" alt="" />
+    <main class="handoff-card" aria-label="Tabula handoff">
+      <header class="handoff-header" aria-label="Tabula">
+        <img id="tabulaMark" class="handoff-mark" alt="" />
         <span>Tabula</span>
       </header>
 
-      <section class="session-card-body">
-        <p id="sessionEyebrow" class="session-eyebrow">Preparing session</p>
-        <p id="sessionSummary" class="session-summary">Tabula is preparing a collaboration handoff.</p>
-
-        <dl class="session-details">
-          <div>
-            <dt>Workspace</dt>
-            <dd id="documentMeta">Waiting for content</dd>
-          </div>
-          <div>
-            <dt>Session</dt>
-            <dd id="collaborationMeta">Not shared</dd>
-          </div>
-        </dl>
-
-        <div class="session-actions">
-          <button id="openCopyButton" class="session-action" type="button" hidden>Open a copy</button>
-          <button id="startSessionButton" class="session-action session-action-primary" type="button" hidden>Start session</button>
-          <button id="openSessionButton" class="session-action session-action-primary" type="button" hidden>Open session</button>
-        </div>
+      <section class="handoff-body">
+        <p id="handoffEyebrow" class="handoff-eyebrow">Preparing handoff</p>
+        <p id="handoffSummary" class="handoff-summary">Tabula is preparing a secure handoff.</p>
+        <p id="handoffMeta" class="handoff-meta">Waiting for workspace</p>
+        <button id="openButton" class="handoff-action" type="button" hidden>Open</button>
       </section>
 
       <p id="message" class="message" role="status" aria-live="polite"></p>

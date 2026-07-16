@@ -16,10 +16,10 @@ Open the generated `dist/tabula-mcp-*.mcpb`, install it, and restart Claude Desk
 
 ## Use
 
-Ask Claude to create a private draft:
+Ask Claude to turn its current writing into a live workspace:
 
 ```text
-Create a Tabula draft with a short project brief.
+Write a short project brief, then start a Tabula session with it.
 ```
 
 Ask Claude to join a session:
@@ -33,14 +33,15 @@ https://tabula.md/#room=...
 The expected write flow is:
 
 ```text
-Join Session → List Files → Read File → Write File
+Join Session → List Files → Read File → Write File / Write Files
 ```
 
 Claude Desktop's approval setting governs mutating MCP calls. A writable Tabula MCP connection does not require a second in-product agent permission.
 
-The compact MCP App card offers:
+The compact MCP App appears only after Claude finishes **Start Session** or
+**Export Copy**. It offers **Open session** or **Open copy**, respectively.
+Writing documents and joining an existing Session do not render redundant App cards.
 
-- Draft: **Open a copy**, **Start session**
-- Session: **Open session**, **Export copy**
-
-The card is a handoff surface. Editing continues in Tabula.md.
+The card is a presentation-only handoff surface. It does not call MCP tools or
+depend on the App sharing Claude's in-memory Room session. Editing continues in
+Tabula.md.

@@ -6,10 +6,6 @@ const host = "127.0.0.1";
 const desktopViewport = { width: 1280, height: 720 };
 const mobileViewport = { width: 390, height: 844 };
 
-const waitForMessage = async (page, text) => {
-  await page.locator("#message", { hasText: text }).waitFor({ state: "attached" });
-};
-
 const getDevEvents = (page) =>
   page.evaluate(() => ({
     toolCalls: window.__TABULA_DEV_TOOL_CALLS__ || [],
@@ -53,7 +49,7 @@ const assertNoHorizontalOverflow = async (page, label) => {
     viewportWidth: window.innerWidth,
     rootScrollWidth: document.documentElement.scrollWidth,
     bodyScrollWidth: document.body.scrollWidth,
-    cardScrollWidth: document.querySelector(".session-card")?.scrollWidth ?? 0,
+    cardScrollWidth: document.querySelector(".handoff-card")?.scrollWidth ?? 0,
   }));
   const tolerance = 2;
   assert(overflow.rootScrollWidth <= overflow.viewportWidth + tolerance, `${label} root should not overflow horizontally`);
@@ -61,41 +57,70 @@ const assertNoHorizontalOverflow = async (page, label) => {
   assert(overflow.cardScrollWidth <= overflow.viewportWidth + tolerance, `${label} card should not overflow horizontally`);
 };
 
-const assertSessionCardPresentation = async (page, label) => {
-  await page.locator(".session-card").waitFor({ state: "visible" });
-  assert.equal(await page.locator("textarea").count(), 0, `${label} must not render a second Markdown editor`);
+const assertHandoffPresentation = async (page, label) => {
+  await page.locator(".handoff-card").waitFor({ state: "visible" });
+  assert.equal(await page.locator("textarea").count(), 0, `${label} must not render a Markdown editor`);
   assert.equal(await page.locator("[data-tabula-document-workbench]").count(), 0, `${label} must not embed the Tabula workbench`);
-  assert.equal(await page.getByRole("button", { name: /^Edit$/ }).count(), 0, `${label} must not offer a second editing mode`);
+  assert.equal(await page.getByRole("button", { name: /^Edit$/ }).count(), 0, `${label} must not offer an editing mode`);
 };
 
-const runDocumentFlow = async (baseUrl, browser) => {
+const runCopyFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
-  await waitForMessage(page, "Tabula.md draft is ready.");
-  await page.getByText("Tabula", { exact: true }).waitFor({ state: "visible" });
-  await page.getByRole("button", { name: "Open a copy" }).waitFor({ state: "visible" });
-  await page.getByRole("button", { name: "Start session" }).waitFor({ state: "visible" });
-  await assertSessionCardPresentation(page, "document handoff");
+  await page.getByText("Encrypted copy", { exact: true }).waitFor({ state: "visible" });
+  await page.getByText("3 Markdown files · encrypted #json handoff", { exact: true }).waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Open copy" }).waitFor({ state: "visible" });
+  await assertHandoffPresentation(page, "copy handoff");
 
-  await page.getByRole("button", { name: "Open a copy" }).click();
-  await waitForMessage(page, "Opened a Tabula.md copy.");
-  let events = await getDevEvents(page);
-  assert(events.toolCalls.some((call) => call?.name === "tabula_export_copy"), "Open a copy should create an encrypted JSON snapshot");
-  assert(events.openLinks.some((request) => String(request?.url).includes("#json=")), "Open a copy should open the Tabula.md snapshot link");
+  await page.getByRole("button", { name: "Open copy" }).click();
+  await page.locator("#message", { hasText: "Opened in Tabula.md." }).waitFor({ state: "visible" });
+  const events = await getDevEvents(page);
+  assert.equal(events.toolCalls.length, 0, "copy handoff must not call another server tool");
+  assert(events.openLinks.some((request) => String(request?.url).includes("#json=")), "copy handoff should open the prepared #json link");
 
-  await page.getByRole("button", { name: "Start session" }).click();
-  await waitForMessage(page, "Shared session is ready. Claude is connected to it.");
+  assertNoPageErrors(consoleErrors, pageErrors);
+  await page.close();
+};
+
+const runSessionFlow = async (baseUrl, browser) => {
+  const { page, consoleErrors, pageErrors } = await createPage(browser);
+  await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=session`);
+  await page.getByText("Live session", { exact: true }).waitFor({ state: "visible" });
+  await page.getByText("2 Markdown files · encrypted live room", { exact: true }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
-  await page.getByText("Claude is connected · 0 other collaborators", { exact: true }).waitFor({ state: "visible" });
-  assert.equal(await page.getByRole("button", { name: "Open a copy" }).isVisible(), false);
-  await page.getByRole("button", { name: "Export copy" }).waitFor({ state: "visible" });
-  assert.equal(await page.getByRole("button", { name: "Start session" }).isVisible(), false);
+  await assertHandoffPresentation(page, "session handoff");
 
   await page.getByRole("button", { name: "Open session" }).click();
-  events = await getDevEvents(page);
-  assert(events.toolCalls.some((call) => call?.name === "tabula_start_session"), "Start session should create a Room from the local draft");
-  assert(events.openLinks.some((request) => String(request?.url).includes("#room=")), "Open session should open the encrypted Room link");
+  await page.locator("#message", { hasText: "Opened in Tabula.md." }).waitFor({ state: "visible" });
+  const events = await getDevEvents(page);
+  assert.equal(events.toolCalls.length, 0, "session handoff must not call another server tool");
+  assert(events.openLinks.some((request) => String(request?.url).includes("#room=")), "session handoff should open the prepared #room link");
 
+  assertNoPageErrors(consoleErrors, pageErrors);
+  await page.close();
+};
+
+const runDeniedLinkFlow = async (baseUrl, browser) => {
+  const { page, consoleErrors, pageErrors } = await createPage(browser);
+  await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=session&open-links=deny`);
+  await page.getByRole("button", { name: "Open session" }).click();
+  const message = page.locator("#message");
+  await message.filter({ hasText: "The link was not approved." }).waitFor({ state: "visible" });
+  assert.equal(await message.getAttribute("data-tone"), "warning");
+  assert.equal((await message.textContent())?.includes("blocked by this MCP host"), false);
+  assert.equal((await message.textContent())?.startsWith("{"), false, "host denial must not render raw JSON");
+  assert.equal((await getDevEvents(page)).toolCalls.length, 0);
+  assertNoPageErrors(consoleErrors, pageErrors);
+  await page.close();
+};
+
+const runUnsupportedLinkFlow = async (baseUrl, browser) => {
+  const { page, consoleErrors, pageErrors } = await createPage(browser);
+  await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&open-links=unsupported`);
+  const button = page.getByRole("button", { name: "Open copy" });
+  await button.waitFor({ state: "visible" });
+  assert.equal(await button.isDisabled(), true);
+  await page.locator("#message", { hasText: "cannot open external links" }).waitFor({ state: "visible" });
   assertNoPageErrors(consoleErrors, pageErrors);
   await page.close();
 };
@@ -103,33 +128,9 @@ const runDocumentFlow = async (baseUrl, browser) => {
 const runMobileFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser, mobileViewport);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
-  await waitForMessage(page, "Tabula.md draft is ready.");
-  await assertSessionCardPresentation(page, "mobile document handoff");
-  await assertNoHorizontalOverflow(page, "mobile document handoff");
-
-  await page.getByRole("button", { name: "Start session" }).click();
-  await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
-  await assertNoHorizontalOverflow(page, "mobile session handoff");
-
-  assertNoPageErrors(consoleErrors, pageErrors);
-  await page.close();
-};
-
-const runRoomFlow = async (baseUrl, browser) => {
-  const { page, consoleErrors, pageErrors } = await createPage(browser);
-  await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=room`);
-  await waitForMessage(page, "Tabula.md session is ready.");
-  assert.equal(await page.getByText("Research Review", { exact: true }).count(), 0, "room handoff must not present a document title as a session title");
-  await page.getByText("Claude is connected to this shared workspace. Claude Desktop asks before it applies changes.").waitFor({ state: "visible" });
-  await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
-  await assertSessionCardPresentation(page, "room handoff");
-
-  await page.getByRole("button", { name: "Open session" }).click();
-  assert(
-    (await getDevEvents(page)).openLinks.some((request) => String(request?.url).includes("#room=")),
-    "room handoff should open the encrypted Room link",
-  );
-
+  await page.getByRole("button", { name: "Open copy" }).waitFor({ state: "visible" });
+  await assertHandoffPresentation(page, "mobile handoff");
+  await assertNoHorizontalOverflow(page, "mobile handoff");
   assertNoPageErrors(consoleErrors, pageErrors);
   await page.close();
 };
@@ -147,9 +148,11 @@ const main = async () => {
     const baseUrl = server.resolvedUrls?.local?.[0]?.replace(/\/$/, "");
     assert(baseUrl, "Vite dev server did not expose a local URL");
     browser = await chromium.launch({ headless: true });
-    await runDocumentFlow(baseUrl, browser);
+    await runCopyFlow(baseUrl, browser);
+    await runSessionFlow(baseUrl, browser);
+    await runDeniedLinkFlow(baseUrl, browser);
+    await runUnsupportedLinkFlow(baseUrl, browser);
     await runMobileFlow(baseUrl, browser);
-    await runRoomFlow(baseUrl, browser);
   } catch (error) {
     if (String(error?.message || error).includes("Executable doesn't exist")) {
       throw new Error("Playwright Chromium is not installed. Run `npx playwright install chromium`.");
@@ -160,7 +163,7 @@ const main = async () => {
     await server.close();
   }
 
-  console.log("MCP App browser flow smoke passed");
+  console.log("MCP App handoff browser flow passed");
 };
 
 main().catch((error) => {

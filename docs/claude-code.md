@@ -14,6 +14,10 @@ Keep the room URL private.
 https://tabula.md/#room=...
 ```
 
-Claude should call `tabula_join_room`, list and read the relevant file, then call `tabula_write_file` once with the latest revision.
+Claude should call `tabula_join_room`, list and read relevant files, then call
+`tabula_write_file` or `tabula_write_files` with the latest revisions. It can
+pass Markdown read from the local filesystem directly to Start Session, Export
+Copy, or Write Files.
 
-Restart Claude Code after upgrading so it reloads the current tool definitions.
+Version 0.2 has no legacy tool adapter. Restart Claude Code after upgrading so
+it reloads the eight core tool definitions.

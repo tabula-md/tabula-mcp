@@ -1,5 +1,6 @@
 export type TabulaCoreErrorCode =
   | "file_not_found"
+  | "invalid_input"
   | "invalid_path"
   | "parent_folder_not_found"
   | "session_not_found"
