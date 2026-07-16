@@ -31,6 +31,9 @@ const rootsFromEnvironment = (env: RuntimeEnvironment | undefined): ImportRoot[]
     source: "env" as const,
   }));
 
+export const hasExplicitImportRoots = (env: RuntimeEnvironment | undefined) =>
+  rootsFromEnvironment(env).length > 0;
+
 const rootsFromClient = async (server: McpServer): Promise<ImportRoot[]> => {
   if (!server.server.getClientCapabilities()?.roots) {
     return [];

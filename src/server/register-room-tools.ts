@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { assertLocalImportRootAllowed } from "../import-roots.js";
+import { assertLocalImportRootAllowed, hasExplicitImportRoots } from "../import-roots.js";
 import { jsonContent, errorContent } from "../json.js";
 import { parseRoomShareUrl, resolveRoomServerUrl } from "../protocol.js";
 import type { SessionRegistry } from "../registry.js";
@@ -45,6 +45,21 @@ const workspaceFileInputSchema = z.object({
   path: z.string().min(1).describe("Workspace-relative Markdown path, for example docs/README.md."),
   title: z.string().min(1).max(200).optional().describe("Optional display title. Defaults to the file basename."),
   markdown: z.string().describe("Markdown content for this workspace document."),
+});
+
+const localPathImportSourceSchema = z.object({
+  type: z.literal("local-path"),
+  rootPath: z.string().min(1).describe("Directory path visible to the MCP server."),
+  maxFiles: z.number().int().min(1).max(1000).default(200),
+  excludeDirectories: z
+    .array(z.string().min(1))
+    .optional()
+    .describe("Directory names to skip. Defaults include node_modules, .git, dist, build, and cache folders."),
+});
+
+const inlineImportSourceSchema = z.object({
+  type: z.literal("files"),
+  files: z.array(workspaceFileInputSchema).min(1).describe("Inline Markdown files supplied by the MCP client."),
 });
 
 const textPatchInputSchema = z.object({
@@ -359,12 +374,18 @@ export const registerRoomTools = (
     deploymentMode: DocumentStoreDeploymentMode;
   },
 ) => {
+  const filesystemImportAvailable = deploymentMode === "local" || hasExplicitImportRoots(env);
   const workspaceLocation = deploymentMode === "local"
     ? "this local MCP process"
     : "this hosted MCP session";
   const importDescription = deploymentMode === "local"
     ? "Import Markdown into a private workspace from inline files or an allowed directory on this device."
-    : "Import Markdown into a private workspace in this hosted MCP session. Use inline files for user content; local-path reads the hosted server's filesystem, not the user's device.";
+    : filesystemImportAvailable
+      ? "Import Markdown into a private workspace in this hosted MCP session from inline files or an operator-approved server directory. Server paths never refer to the user's device."
+      : "Import inline Markdown files supplied by the client into a private workspace in this hosted MCP session.";
+  const importSourceSchema = filesystemImportAvailable
+    ? z.discriminatedUnion("type", [localPathImportSourceSchema, inlineImportSourceSchema])
+    : inlineImportSourceSchema;
   const createSessionDescription = deploymentMode === "local"
     ? "Start an encrypted Tabula.md live session from a private workspace and return its invite URL. The session may be temporary when encrypted recovery is not configured."
     : "Start an encrypted Tabula.md live session from a private hosted workspace and return its invite URL. Hosted session creation requires encrypted room recovery to be configured.";
@@ -409,21 +430,7 @@ export const registerRoomTools = (
       inputSchema: {
         title: z.string().min(1).max(120).optional().describe("Optional workspace title."),
         detail: workspaceDetailSchema,
-        source: z.discriminatedUnion("type", [
-          z.object({
-            type: z.literal("local-path"),
-            rootPath: z.string().min(1).describe("Directory path visible to the MCP server."),
-            maxFiles: z.number().int().min(1).max(1000).default(200),
-            excludeDirectories: z
-              .array(z.string().min(1))
-              .optional()
-              .describe("Directory names to skip. Defaults include node_modules, .git, dist, build, and cache folders."),
-          }),
-          z.object({
-            type: z.literal("files"),
-            files: z.array(workspaceFileInputSchema).min(1).describe("Inline Markdown files for hosted or local MCP clients."),
-          }),
-        ]),
+        source: importSourceSchema,
       },
       annotations: {
         readOnlyHint: false,
