@@ -56,6 +56,9 @@ describe("CLI options", () => {
   });
 
   it("provides installable client commands in help", () => {
+    expect(CLI_HELP).toContain("Tabula.md MCP");
+    expect(CLI_HELP).toContain("Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.");
+    expect(CLI_HELP).toContain("Local stdio is the default");
     expect(CLI_HELP).toContain("codex mcp add tabula -- npx -y @tabula-md/mcp@latest");
     expect(CLI_HELP).toContain("claude mcp add tabula -- npx -y @tabula-md/mcp@latest");
     expect(getPackageVersion()).toMatch(/^\d+\.\d+\.\d+/);

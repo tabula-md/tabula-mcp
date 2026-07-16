@@ -1,7 +1,7 @@
 {
   "name": "@tabula-md/mcp",
   "version": "0.1.6",
-  "description": "Shared Markdown workspaces for people and AI agents through Tabula.md rooms.",
+  "description": "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
   "license": "MIT",
   "author": {
     "name": "Tabula.md",
@@ -92,6 +92,7 @@
     "test:e2e:local-collab": "npm run build && node scripts/e2e-local-collab.mjs",
     "test:stdio": "npm run build && node scripts/smoke-stdio-server.mjs",
     "check:directory-readiness": "node scripts/check-directory-readiness.mjs",
+    "capture:directory-assets": "node scripts/capture-directory-assets.mjs",
     "release:pack": "node scripts/pack-release.mjs && npm run check:claude-plugin && npm run check:directory-readiness",
     "release:verify": "npm run typecheck && npm test && npm run test:app && npm run test:stdio && npm run check:context-budget && npm run check:deploy-targets && npm run release:pack && npm run check:exports && npm run check:pack && npm audit --json && git diff --check",
     "release:verify:full": "npm run release:verify && npm run test:e2e:local-collab",

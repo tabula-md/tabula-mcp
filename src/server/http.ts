@@ -33,6 +33,7 @@ import {
   type OriginPolicy,
 } from "./origin-policy.js";
 import { resolveWriteEnabled } from "./write-access.js";
+import { TABULA_MCP_PRODUCT_DESCRIPTION } from "../public-copy.js";
 
 export type TabulaMcpHttpServerOptions = {
   allowedOrigins?: string[] | null;
@@ -467,7 +468,7 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
         service: "tabula-mcp",
         version: TABULA_MCP_VERSION,
         writeAccess,
-        description: "Tabula.md MCP App and document checkpoint server.",
+        description: TABULA_MCP_PRODUCT_DESCRIPTION,
         mcp: "/mcp",
         health: "/health",
         ready: "/ready",

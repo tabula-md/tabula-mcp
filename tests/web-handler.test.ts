@@ -13,6 +13,18 @@ const uiCapabilities = {
 };
 
 describe("Tabula MCP Web handler", () => {
+  it("describes the hosted product at the service root", async () => {
+    const handler = createTabulaMcpWebHandler({
+      deploymentMode: "remote",
+      documentStore: new MemoryDocumentStore(),
+    });
+    const response = await handler.fetch(new Request("https://mcp.example.com/"));
+
+    await expect(response.json()).resolves.toMatchObject({
+      description: "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
+    });
+  });
+
   it("serves health metadata for serverless deployment targets", async () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",

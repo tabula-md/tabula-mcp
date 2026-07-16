@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { DocumentRegistry } from "../documents/registry.js";
 import { inferDocumentTitle } from "../documents/snapshot.js";
 import type { RuntimeEnvironment } from "../env.js";
+import type { DocumentStoreDeploymentMode } from "../documents/store.js";
 import { errorContent } from "../json.js";
 import type { SessionRegistry } from "../registry.js";
 import { startWorkspaceRoom } from "../room-session.js";
@@ -52,6 +53,7 @@ export const registerDocumentAppTools = (
   options: {
     allowRoomTools?: boolean;
     allowTemporaryRooms?: boolean;
+    deploymentMode: DocumentStoreDeploymentMode;
     writeEnabled?: boolean;
     env?: RuntimeEnvironment;
     resourceUri: string;
@@ -60,6 +62,12 @@ export const registerDocumentAppTools = (
   const allowRoomTools = options.allowRoomTools ?? true;
   const writeEnabled = options.writeEnabled ?? true;
   const resourceUri = options.resourceUri;
+  const privateDraftDescription = options.deploymentMode === "local"
+    ? "a private draft stored by this local MCP server"
+    : "a private draft stored for this hosted MCP session";
+  const createdDraftLabel = options.deploymentMode === "local"
+    ? "local Tabula.md draft"
+    : "private Tabula.md draft in this hosted MCP session";
 
   const roomCard = (
     room: Record<string, unknown>,
@@ -85,7 +93,7 @@ export const registerDocumentAppTools = (
     {
       title: "Create Tabula Document",
       description:
-        "Create a Markdown document in the current writable Tabula session, or a private local draft when Claude is not connected to a session. Open a compact handoff card.",
+        `Create a Markdown document in the current writable Tabula.md live session, or ${privateDraftDescription} when no session is connected. Open a compact handoff card.`,
       inputSchema: {
         title: z.string().min(1).max(120).optional().describe("Optional document title. Defaults to the first H1 or Untitled Document."),
         markdown: z.string().default("").describe("Initial Markdown content for the document checkpoint."),
@@ -135,7 +143,7 @@ export const registerDocumentAppTools = (
             ...documentSnapshotContent(document),
             resourceUri,
           },
-          text: `Created local Tabula.md draft "${document.title}".`,
+          text: `Created ${createdDraftLabel} "${document.title}".`,
         };
       }),
   );
@@ -146,7 +154,7 @@ export const registerDocumentAppTools = (
     {
       title: "Update Tabula Document",
       description:
-        "Update the latest or selected private Tabula Markdown draft. To change a connected shared session, use tabula_apply_workspace_changes.",
+        "Update the latest or selected private Tabula.md draft in this MCP runtime. To change a connected live session, use tabula_apply_workspace_changes.",
       inputSchema: {
         ...optionalDocumentSchema,
         title: z.string().min(1).max(120).optional().describe("Optional new document title."),
@@ -238,7 +246,7 @@ export const registerDocumentAppTools = (
     {
       title: "List Tabula Documents",
       description:
-        "List Tabula.md MCP App document checkpoints saved in this MCP server's document checkpoint store, newest first.",
+        "List private Tabula.md draft checkpoints saved by this MCP runtime, newest first.",
       inputSchema: {},
       annotations: {
         readOnlyHint: true,
@@ -271,7 +279,7 @@ export const registerDocumentAppTools = (
     {
       title: "Open Tabula Document",
       description:
-        "Open a compact Tabula.md handoff card for the latest or selected local checkpoint. The actual editing surface opens in Tabula.md.",
+        "Open a compact Tabula.md handoff card for the latest or selected private draft. Continue editing in Tabula.md.",
       inputSchema: optionalDocumentSchema,
       annotations: {
         readOnlyHint: true,
@@ -304,9 +312,9 @@ export const registerDocumentAppTools = (
     server,
     "tabula_open_room_view",
     {
-        title: "Open Tabula Room View",
+        title: "Open Tabula Live Session",
         description:
-          "Open a compact handoff card for a connected Tabula.md room. Open session to continue in the actual Tabula.md collaboration surface.",
+          "Open a compact handoff card for a connected Tabula.md live session, then continue in Tabula.md.",
         inputSchema: optionalSessionSchema,
         annotations: {
           readOnlyHint: true,

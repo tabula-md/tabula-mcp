@@ -42,6 +42,27 @@ describe("Tabula MCP HTTP server", () => {
     }
   });
 
+  it("describes the hosted product at the service root", async () => {
+    const httpServer = createTabulaMcpHttpServer({
+      deploymentMode: "remote",
+      documentStore: new MemoryDocumentStore(),
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    try {
+      await httpServer.listen();
+      const address = httpServer.server.address() as AddressInfo;
+      const response = await fetch(serverUrl(address.address, address.port, "/"));
+
+      await expect(response.json()).resolves.toMatchObject({
+        description: "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
+      });
+    } finally {
+      await httpServer.close();
+    }
+  });
+
   it("serves readiness metadata after checking the checkpoint store", async () => {
     let checked = false;
     const documentStore = new MemoryDocumentStore();

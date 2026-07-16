@@ -17,6 +17,7 @@ import { SessionRegistry } from "../registry.js";
 import { registerWorkspaceResources } from "../workspace-resources.js";
 import { WorkspaceRegistry } from "../workspaces.js";
 import { TABULA_MCP_VERSION } from "../version.js";
+import { createTabulaMcpInstructions } from "../public-copy.js";
 import { registerRoomTools } from "./register-room-tools.js";
 import { resolveWriteEnabled } from "./write-access.js";
 
@@ -114,6 +115,8 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const server = new McpServer({
     name: "tabula-mcp",
     version: TABULA_MCP_VERSION,
+  }, {
+    instructions: createTabulaMcpInstructions({ deploymentMode, writeEnabled }),
   });
 
   registerDocumentAppResource(server, documentAppResource);
@@ -124,6 +127,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
     registerDocumentAppTools(server, registry, documents, {
       allowRoomTools,
       allowTemporaryRooms,
+      deploymentMode,
       writeEnabled,
       env,
       resourceUri: documentAppResource.uri,
@@ -146,7 +150,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
 
   registerReadMeTool(server, { deploymentMode, writeEnabled });
   if (allowRoomTools) {
-    registerRoomTools(server, registry, workspaces, { env, writeEnabled, allowTemporaryRooms });
+    registerRoomTools(server, registry, workspaces, { env, writeEnabled, allowTemporaryRooms, deploymentMode });
   }
 
   return {
