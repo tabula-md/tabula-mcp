@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "tabula-mcp",
   "display_name": "Tabula.md MCP",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Work with people and AI agents in shared Tabula.md Markdown workspaces.",
   "long_description": "Tabula.md MCP lets Claude join a shared multi-file Markdown workspace as an agent collaborator. It can inspect bounded context, read documents, publish presence, and apply hash-guarded workspace changes. Local documents are checkpointed as plaintext on this machine for local recovery. Room keys from invite URL fragments stay local, while the Tabula Room server receives only encrypted envelopes.",
   "author": {
@@ -37,7 +37,7 @@
   "tools": [
     {
       "name": "tabula_create_document",
-      "description": "Create a local Tabula.md Markdown document and open the interactive MCP App editor."
+      "description": "Create a local Tabula.md Markdown checkpoint and open a compact handoff card for a copy or live session."
     },
     {
       "name": "tabula_list_documents",
@@ -45,7 +45,7 @@
     },
     {
       "name": "tabula_open_document",
-      "description": "Open the latest or selected local Tabula.md document checkpoint in the MCP App editor."
+      "description": "Open the latest or selected local Tabula.md document checkpoint in a compact Tabula handoff card."
     },
     {
       "name": "tabula_read_me",
@@ -101,7 +101,7 @@
     },
     {
       "name": "tabula_open_room_view",
-      "description": "Open a connected room inside the Tabula.md MCP App for status, outline, Markdown preview, refresh, fullscreen, and selection handoff."
+      "description": "Open a compact handoff card for a connected Tabula.md room, then continue in the actual Tabula.md session."
     },
     {
       "name": "tabula_set_presence",

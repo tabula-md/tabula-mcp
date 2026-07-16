@@ -21,29 +21,31 @@ const main = async () => {
   ]);
 
   for (const expected of [
-    "titleInput",
-    "mcp-chrome",
-    "mcp-document-title",
-    "room-handoff-action",
-    "markdownPreview",
-    "data-view-mode",
-    "shareDocumentButton",
-    "openTabulaButton",
-    "tabulaWorkbench",
+    "tabulaMark",
+    "sessionEyebrow",
+    "sessionTitle",
+    "documentMeta",
+    "collaborationMeta",
+    "openCopyButton",
+    "startSessionButton",
+    "openSessionButton",
   ]) {
-    assertIncludes(appHtml, expected, "document app source");
+    assertIncludes(appHtml, expected, "session card source");
     assertIncludes(devHtml, expected, "dev harness");
-    assertIncludes(builtHtml, expected, "built document app");
+    assertIncludes(builtHtml, expected, "built session card");
   }
 
-  for (const expected of ["tabula_app_save_document", "tabula_share_document", "updateModelContext"]) {
+  for (const expected of ["tabula_share_document", "tabula_app_start_room_from_document", "openLink"]) {
     assertIncludes(mockApp, expected, "mock app bridge");
   }
 
   assertIncludes(devHtml, "/src/app-dev/main.js", "dev harness");
-  assertIncludes(builtHtml, "No Markdown content", "built document app");
+  assertIncludes(builtHtml, "Private draft", "built session card");
+  if (builtHtml.includes("TabulaEmbeddedDocumentWorkbench") || builtHtml.includes("data-tabula-document-workbench")) {
+    throw new Error("built session card must not bundle a second Tabula editor");
+  }
   if (builtHtml.includes("dev-only-not-a-real-key")) {
-    throw new Error("built document app includes dev-only share fixture");
+    throw new Error("built session card includes dev-only share fixture");
   }
 
   console.log("MCP App smoke passed");

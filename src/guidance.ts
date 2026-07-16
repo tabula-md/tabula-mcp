@@ -43,7 +43,7 @@ const summaries: Record<TabulaReadMeTopic, string> = {
   rooms:
     "For a new live room, create or import a workspace and call tabula_create_workspace_room. Local MCP can create a temporary Room when an active peer stays connected; hosted MCP requires encrypted Room persistence to create a Room. For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. The MCP client joins as an agent actor, loads/saves encrypted live room checkpoints when Firebase is configured, or waits for state from an active peer when it is not. Do not read or edit workspace content until stateReceived is true.",
   sharing:
-    "To share an MCP App document, call tabula_share_document or use the App Share control. To share a multi-file workspace, call tabula_share_workspace. The MCP process creates a snapshot key, encrypts a Tabula JSON snapshot, uploads only encrypted bytes, and returns a #json share URL.",
+    "To share an MCP App document, call tabula_share_document or use Open a copy in the Session Card. To share a multi-file workspace, call tabula_share_workspace. The MCP process creates a snapshot key, encrypts a Tabula JSON snapshot, uploads only encrypted bytes, and returns a #json share URL.",
   security:
     "Tabula.md room keys live in URL fragments and must remain client-side. The MCP process may decrypt locally because the user supplied the secret, but the room server should only see encrypted envelopes.",
 };
@@ -59,9 +59,9 @@ const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
     "Use tabula_read_me with topic=security before changing room links, write mode, or sharing behavior.",
   ],
   documents: [
-    "Create or open the document App before asking the user to edit Markdown interactively.",
-    "Use Send Changes after App edits when the model needs updated context.",
-    "Use Save before treating the MCP checkpoint copy as current.",
+    "Create or open the Tabula.md Session Card for a local draft checkpoint.",
+    "Use Open a copy for an encrypted #json handoff, or Start session when people and agents should work in the same #room.",
+    "People edit in Tabula.md itself; agents read and apply hash-guarded changes through the connected Room tools.",
   ],
   rooms: [
     "Use tabula_create_workspace_room to create a new encrypted workspace room from an imported or inline workspace; hosted MCP needs encrypted Room persistence configured first.",

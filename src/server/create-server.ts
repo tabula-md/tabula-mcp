@@ -1,7 +1,7 @@
 import { getUiCapability, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { registerDocumentAppResource } from "../app/resource.js";
+import { createDocumentAppResource, registerDocumentAppResource } from "../app/resource.js";
 import { registerDocumentAppTools } from "../app/tools.js";
 import { DocumentRegistry } from "../documents/registry.js";
 import type { RuntimeEnvironment } from "../env.js";
@@ -31,6 +31,7 @@ export type TabulaMcpServerOptions = {
 
 export type TabulaMcpServerInstance = {
   server: McpServer;
+  documentAppResourceUri: string;
   registry: SessionRegistry;
   workspaces: WorkspaceRegistry;
   documents: DocumentRegistry;
@@ -85,17 +86,23 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const registry = new SessionRegistry();
   const workspaces = new WorkspaceRegistry();
   const documents = new DocumentRegistry(documentStore);
+  const documentAppResource = createDocumentAppResource({ documentAppHtml: options.documentAppHtml });
   const server = new McpServer({
     name: "tabula-mcp",
-    version: "0.1.4",
+    version: "0.1.5",
   });
 
-  registerDocumentAppResource(server, { documentAppHtml: options.documentAppHtml });
+  registerDocumentAppResource(server, documentAppResource);
   registerWorkspaceResources(server, registry, workspaces);
 
   let documentAppToolsRegistered = false;
   const registerAppTools = () => {
-    registerDocumentAppTools(server, registry, documents, { allowRoomTools, allowTemporaryRooms, env });
+    registerDocumentAppTools(server, registry, documents, {
+      allowRoomTools,
+      allowTemporaryRooms,
+      env,
+      resourceUri: documentAppResource.uri,
+    });
     documentAppToolsRegistered = true;
   };
   if (options.forceDocumentAppTools) {
@@ -117,5 +124,14 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
     registerRoomTools(server, registry, workspaces, { env, writeEnabled, allowTemporaryRooms });
   }
 
-  return { server, registry, workspaces, documents, writeEnabled, deploymentMode, documentStoreKind: documentStore.kind };
+  return {
+    server,
+    documentAppResourceUri: documentAppResource.uri,
+    registry,
+    workspaces,
+    documents,
+    writeEnabled,
+    deploymentMode,
+    documentStoreKind: documentStore.kind,
+  };
 };

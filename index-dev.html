@@ -3,90 +3,39 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tabula.md Document Dev Harness</title>
+    <title>Tabula.md Session Dev Harness</title>
   </head>
   <body>
-    <main class="shell mcp-shell">
-      <header class="toolbar mcp-chrome">
-        <div class="identity mcp-document-tab">
-          <input id="titleInput" class="title-input mcp-document-title" type="text" value="Document" maxlength="120" aria-label="Document name" disabled />
-        </div>
-        <div class="actions mcp-chrome-actions">
-          <button id="openTabulaButton" class="handoff-action" type="button" disabled>Open a copy</button>
-          <button id="startSessionButton" class="handoff-action primary-action" type="button" disabled hidden>Start session</button>
-          <button id="saveDocumentButton" class="fullscreen-only" type="button" disabled>Save</button>
-          <button id="sendChangesButton" class="fullscreen-only" type="button" disabled>Send Changes</button>
-          <button id="shareDocumentButton" class="fullscreen-only" type="button" disabled>Share</button>
-          <button id="refreshButton" class="fullscreen-only" type="button">Refresh</button>
-          <button id="sendSelectionButton" class="fullscreen-only" type="button">Send Selection</button>
-          <button id="displayModeButton" type="button">Edit</button>
-        </div>
+    <main class="session-card" aria-labelledby="sessionTitle">
+      <header class="session-card-header">
+        <img id="tabulaMark" class="session-card-mark" alt="" />
+        <span>Tabula.md</span>
       </header>
 
-      <section class="status-grid" aria-label="Document status">
-        <div>
-          <span class="label">Source</span>
-          <strong id="connectionStatus">Waiting</strong>
-        </div>
-        <div>
-          <span class="label">Mode</span>
-          <strong id="writeMode">Read-only</strong>
-        </div>
-        <div>
-          <span class="label">Hash</span>
-          <strong id="shaValue">-</strong>
-        </div>
-        <div>
-          <span class="label">Scope</span>
-          <strong id="peerCount">0</strong>
-        </div>
-        <div>
-          <span class="label">Draft</span>
-          <strong id="draftStatus">None</strong>
+      <section class="session-card-body">
+        <p id="sessionEyebrow" class="session-eyebrow">Preparing session</p>
+        <h1 id="sessionTitle">Untitled document</h1>
+        <p id="sessionSummary" class="session-summary">Tabula.md is preparing a collaboration handoff.</p>
+
+        <dl class="session-details">
+          <div>
+            <dt>Document</dt>
+            <dd id="documentMeta">Waiting for content</dd>
+          </div>
+          <div>
+            <dt>Collaboration</dt>
+            <dd id="collaborationMeta">Not shared</dd>
+          </div>
+        </dl>
+
+        <div class="session-actions">
+          <button id="openCopyButton" class="session-action" type="button" hidden>Open a copy</button>
+          <button id="startSessionButton" class="session-action session-action-primary" type="button" hidden>Start session</button>
+          <button id="openSessionButton" class="session-action session-action-primary" type="button" hidden>Open session</button>
         </div>
       </section>
 
-      <section id="message" class="message" aria-live="polite"></section>
-
-      <section id="roomHandoff" class="room-handoff" aria-live="polite">
-        <div class="room-handoff-content">
-          <img id="roomHandoffMark" class="room-handoff-mark" alt="" />
-          <p class="room-handoff-eyebrow">Live session</p>
-          <h1 id="roomHandoffTitle">Untitled session</h1>
-          <p id="roomHandoffSummary" class="room-handoff-summary"></p>
-          <p id="roomHandoffMeta" class="room-handoff-meta"></p>
-          <button id="openSessionCardButton" class="room-handoff-action" type="button">Open session</button>
-        </div>
-      </section>
-
-      <section class="mcp-workspace">
-        <section class="markdown-pane">
-          <div class="pane-heading">
-            <h2>Document</h2>
-            <div class="pane-tools">
-              <div class="segmented-control" role="group" aria-label="View mode">
-                <button type="button" data-view-mode="editor" aria-pressed="false">Editor</button>
-                <button type="button" data-view-mode="split" aria-pressed="true">Split</button>
-                <button type="button" data-view-mode="preview" aria-pressed="false">Preview</button>
-              </div>
-              <span id="textLength" class="meta">0 chars</span>
-            </div>
-          </div>
-          <div class="document-surface">
-            <textarea id="markdownEditor" class="mcp-markdown-editor" spellcheck="false" readonly></textarea>
-            <article id="markdownPreview" class="markdown-preview" aria-label="Markdown preview"></article>
-          </div>
-        </section>
-
-        <aside id="contextPane" class="context-pane" data-context-view="outline">
-          <div class="pane-heading">
-            <h2>Outline</h2>
-          </div>
-          <ol id="outlineList" class="outline-list"></ol>
-        </aside>
-      </section>
-
-      <section id="tabulaWorkbench" class="tabula-workbench-host" aria-label="Tabula.md editor"></section>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
     </main>
 
     <script type="module" src="/src/app-dev/main.js"></script>

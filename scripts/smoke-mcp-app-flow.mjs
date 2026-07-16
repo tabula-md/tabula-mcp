@@ -3,50 +3,31 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 
 const host = "127.0.0.1";
+const desktopViewport = { width: 1280, height: 720 };
+const mobileViewport = { width: 390, height: 844 };
 
 const waitForMessage = async (page, text) => {
   await page.locator("#message", { hasText: text }).waitFor({ state: "attached" });
 };
 
-const waitForInputValue = async (page, selector, value) => {
-  await page.waitForFunction(
-    ({ selector: fieldSelector, expectedValue }) =>
-      document.querySelector(fieldSelector)?.value === expectedValue,
-    { selector, expectedValue: value },
-  );
-};
-
 const getDevEvents = (page) =>
   page.evaluate(() => ({
     toolCalls: window.__TABULA_DEV_TOOL_CALLS__ || [],
-    modelContexts: window.__TABULA_DEV_MODEL_CONTEXTS__ || [],
-    displayModes: window.__TABULA_DEV_DISPLAY_MODES__ || [],
     openLinks: window.__TABULA_DEV_OPEN_LINKS__ || [],
   }));
 
 const installDevEventCapture = async (page) => {
   await page.addInitScript(() => {
     window.__TABULA_DEV_TOOL_CALLS__ = [];
-    window.__TABULA_DEV_MODEL_CONTEXTS__ = [];
-    window.__TABULA_DEV_DISPLAY_MODES__ = [];
     window.__TABULA_DEV_OPEN_LINKS__ = [];
     window.addEventListener("tabula-dev:tool-call", (event) => {
       window.__TABULA_DEV_TOOL_CALLS__.push(event.detail);
-    });
-    window.addEventListener("tabula-dev:model-context", (event) => {
-      window.__TABULA_DEV_MODEL_CONTEXTS__.push(event.detail);
-    });
-    window.addEventListener("tabula-dev:display-mode", (event) => {
-      window.__TABULA_DEV_DISPLAY_MODES__.push(event.detail);
     });
     window.addEventListener("tabula-dev:open-link", (event) => {
       window.__TABULA_DEV_OPEN_LINKS__.push(event.detail);
     });
   });
 };
-
-const desktopViewport = { width: 1280, height: 720 };
-const mobileViewport = { width: 390, height: 844 };
 
 const createPage = async (browser, viewport = desktopViewport) => {
   const page = await browser.newPage({ viewport });
@@ -62,261 +43,71 @@ const createPage = async (browser, viewport = desktopViewport) => {
   return { page, consoleErrors, pageErrors };
 };
 
-const assertNoHorizontalOverflow = async (page, label) => {
-  const overflow = await page.evaluate(() => {
-    const root = document.documentElement;
-    const body = document.body;
-    const shell = document.querySelector(".shell");
-
-    return {
-      viewportWidth: window.innerWidth,
-      rootScrollWidth: root.scrollWidth,
-      bodyScrollWidth: body.scrollWidth,
-      shellScrollWidth: shell?.scrollWidth ?? 0,
-      visibleButtons: [...document.querySelectorAll("button")]
-        .filter((button) => button.offsetParent !== null)
-        .map((button) => {
-          const rect = button.getBoundingClientRect();
-          return {
-            text: button.textContent?.trim() ?? "",
-            left: rect.left,
-            right: rect.right,
-            width: rect.width,
-          };
-        }),
-    };
-  });
-
-  const tolerance = 2;
-  assert(
-    overflow.rootScrollWidth <= overflow.viewportWidth + tolerance,
-    `${label} root should not overflow horizontally: ${JSON.stringify(overflow)}`,
-  );
-  assert(
-    overflow.bodyScrollWidth <= overflow.viewportWidth + tolerance,
-    `${label} body should not overflow horizontally: ${JSON.stringify(overflow)}`,
-  );
-  assert(
-    overflow.shellScrollWidth <= overflow.viewportWidth + tolerance,
-    `${label} shell should not overflow horizontally: ${JSON.stringify(overflow)}`,
-  );
-
-  for (const button of overflow.visibleButtons) {
-    assert(button.width > 0, `${label} visible button should have a stable width: ${button.text}`);
-    assert(
-      button.left >= -tolerance && button.right <= overflow.viewportWidth + tolerance,
-      `${label} visible button should stay inside the viewport: ${JSON.stringify(button)}`,
-    );
-  }
-};
-
 const assertNoPageErrors = (consoleErrors, pageErrors) => {
   assert.deepEqual(pageErrors, [], "dev harness should not throw page errors");
   assert.deepEqual(consoleErrors, [], "dev harness should not log browser console errors");
 };
 
-const assertInlineDocumentPresentation = async (page, label) => {
-  const presentation = await page.evaluate(() => {
-    const preview = document.querySelector(".markdown-preview");
-    const status = document.querySelector(".status-grid");
-    const context = document.querySelector(".context-pane");
-    const shell = document.querySelector(".shell");
-    const toolbar = document.querySelector(".toolbar");
-
-    return {
-      contextDisplay: context ? window.getComputedStyle(context).display : "missing",
-      previewHeight: preview?.getBoundingClientRect().height ?? 0,
-      previewMaxHeight: preview ? window.getComputedStyle(preview).maxHeight : "missing",
-      shellMinHeight: shell ? window.getComputedStyle(shell).minHeight : "missing",
-      statusDisplay: status ? window.getComputedStyle(status).display : "missing",
-      toolbarHeight: toolbar?.getBoundingClientRect().height ?? 0,
-    };
-  });
-
-  assert.equal(presentation.statusDisplay, "none", `${label} should hide MCP implementation status`);
-  assert.equal(presentation.contextDisplay, "none", `${label} should show the document, not a fake side panel`);
-  assert.equal(presentation.previewMaxHeight, "420px", `${label} should bound the inline preview`);
-  assert(presentation.previewHeight <= 420, `${label} preview should not consume the host viewport`);
-  assert.notEqual(presentation.shellMinHeight, "100vh", `${label} should not reserve a desktop-sized inline app`);
-  assert(presentation.toolbarHeight <= 48, `${label} should keep continuation controls compact`);
+const assertNoHorizontalOverflow = async (page, label) => {
+  const overflow = await page.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    rootScrollWidth: document.documentElement.scrollWidth,
+    bodyScrollWidth: document.body.scrollWidth,
+    cardScrollWidth: document.querySelector(".session-card")?.scrollWidth ?? 0,
+  }));
+  const tolerance = 2;
+  assert(overflow.rootScrollWidth <= overflow.viewportWidth + tolerance, `${label} root should not overflow horizontally`);
+  assert(overflow.bodyScrollWidth <= overflow.viewportWidth + tolerance, `${label} body should not overflow horizontally`);
+  assert(overflow.cardScrollWidth <= overflow.viewportWidth + tolerance, `${label} card should not overflow horizontally`);
 };
 
-const getWorkbenchEditor = (page) =>
-  page.locator("[data-tabula-document-workbench] .cm-content[contenteditable='true']").first();
+const assertSessionCardPresentation = async (page, label) => {
+  await page.locator(".session-card").waitFor({ state: "visible" });
+  assert.equal(await page.locator("textarea").count(), 0, `${label} must not render a second Markdown editor`);
+  assert.equal(await page.locator("[data-tabula-document-workbench]").count(), 0, `${label} must not embed the Tabula workbench`);
+  assert.equal(await page.getByRole("button", { name: "Edit" }).count(), 0, `${label} must not offer a second editing mode`);
+};
 
 const runDocumentFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
-  await waitForMessage(page, "Tabula.md document is ready.");
+  await waitForMessage(page, "Tabula.md draft is ready.");
+  await page.getByRole("heading", { name: "Launch Brief" }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Open a copy" }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Start session" }).waitFor({ state: "visible" });
-  await assertInlineDocumentPresentation(page, "inline document");
-  await page.getByRole("button", { name: "Edit" }).click();
-  await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
-  await page.getByRole("region", { name: "Tabula.md editor" }).waitFor({ state: "visible" });
+  await assertSessionCardPresentation(page, "document handoff");
 
-  const markdown = [
-    "# Flow Smoke",
-    "",
-    "Edited from browser smoke.",
-    "",
-    "## Long Selection",
-    "",
-    `Start ${"large selection body ".repeat(240)}End`,
-    "",
-    "## Next",
-    "",
-    "- Save",
-    "- Share",
-  ].join("\n");
-
-  await page.locator("#titleInput").fill("Flow Smoke");
-  const workbenchEditor = getWorkbenchEditor(page);
-  await workbenchEditor.fill(markdown);
-  await waitForMessage(page, "Document has unsaved changes.");
-  await page.getByRole("button", { name: "Save" }).click();
-  await waitForMessage(page, "Document saved in this MCP session.");
-
-  await page.getByRole("button", { name: "Send Changes" }).click();
-  await waitForMessage(page, "Document changes sent to the model context.");
-
-  await workbenchEditor.click();
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
-  await page.getByRole("button", { name: "Send Selection" }).click();
-  await waitForMessage(page, "Selection sent to the model context.");
-
-  const shareMarkdown = `${markdown}\n\n## Shared Update\n\nReady for encrypted handoff.`;
-  await workbenchEditor.fill(shareMarkdown);
-  await waitForMessage(page, "Document has unsaved changes.");
-  await page.getByRole("button", { name: "Share" }).click();
-  await waitForMessage(page, "Encrypted share link sent to the model context.");
-  assert.equal(
-    await page.getByRole("button", { name: "Send Changes" }).isVisible(),
-    false,
-    "share should include unsent edits and clear the model context baseline",
-  );
-
-  const events = await getDevEvents(page);
-  const toolNames = events.toolCalls.map((call) => call?.name);
-  assert(toolNames.includes("tabula_app_save_document"), "document flow should save through the App bridge");
-  assert(toolNames.includes("tabula_share_document"), "document flow should share through the App bridge");
-
-  const documentChange = events.modelContexts.find((payload) => payload?.structuredContent?.tabulaDocumentChange);
-  assert(documentChange, "document flow should send compact change context");
-  assert.equal(documentChange.structuredContent.tabulaDocumentChange.summary.changed, true);
-  assert(
-    !JSON.stringify(documentChange).includes(`${markdown}\n`),
-    "document change context should not include the full Markdown body",
-  );
-
-  assert(
-    !events.modelContexts.some((payload) => payload?.structuredContent?.tabulaComment),
-    "document flow should not expose default comment marker context handoff",
-  );
-
-  const selection = events.modelContexts.find((payload) => payload?.structuredContent?.tabulaSelection);
-  assert(selection, "document flow should send selected text context");
-  assert.equal(selection.structuredContent.tabulaSelection.truncated, true);
-  assert(
-    selection.structuredContent.tabulaSelection.originalLength >
-      selection.structuredContent.tabulaSelection.excerptLength,
-    "selection context should report truncation lengths",
-  );
-  assert(
-    selection.structuredContent.tabulaSelection.text.includes("[truncated selection]"),
-    "selection context should include an explicit truncation marker",
-  );
-  assert(
-    !JSON.stringify(selection).includes("large selection body ".repeat(120)),
-    "selection context should not include the full selected text",
-  );
-
-  const share = events.modelContexts.find((payload) => payload?.structuredContent?.tabulaShare);
-  assert(share, "document flow should send encrypted share context");
-  assert.equal(share.structuredContent.tabulaShare.encrypted, true);
-  assert.equal(share.structuredContent.tabulaShare.linkKind, "json-snapshot");
-  assert.match(share.structuredContent.tabulaShare.shareUrl, /#json=[^,]+,/);
-  assert(
-    share.structuredContent.tabulaDocumentChange,
-    "share context should include any unsent compact document change summary",
-  );
-  assert.equal(share.structuredContent.tabulaDocumentChange.summary.changed, true);
-  assert(
-    share.structuredContent.tabulaDocumentChange.summary.currentExcerpt.includes("Shared Update"),
-    "share change summary should describe the unsent edit",
-  );
-  assert(
-    !JSON.stringify(share).includes(`${shareMarkdown}\n`),
-    "share change context should not include the full Markdown body",
-  );
-
-  await page.getByRole("button", { name: "Inline" }).click();
-  await page.getByRole("button", { name: "Edit" }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Open a copy" }).click();
   await waitForMessage(page, "Opened a Tabula.md copy.");
-  assert(
-    (await getDevEvents(page)).toolCalls.some((call) => call?.name === "tabula_share_document"),
-    "Open a copy should explicitly export a JSON snapshot",
-  );
+  let events = await getDevEvents(page);
+  assert(events.toolCalls.some((call) => call?.name === "tabula_share_document"), "Open a copy should create an encrypted JSON snapshot");
+  assert(events.openLinks.some((request) => String(request?.url).includes("#json=")), "Open a copy should open the Tabula.md snapshot link");
 
   await page.getByRole("button", { name: "Start session" }).click();
   await waitForMessage(page, "Tabula.md session is ready.");
   await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
+  assert.equal(await page.getByRole("button", { name: "Open a copy" }).isVisible(), false);
   assert.equal(await page.getByRole("button", { name: "Start session" }).isVisible(), false);
-  assert.equal(await page.locator("#titleInput").inputValue(), "Flow Smoke");
-  assert.equal(await page.getByRole("button", { name: "Edit" }).isVisible(), false);
+
   await page.getByRole("button", { name: "Open session" }).click();
-  assert(
-    (await getDevEvents(page)).openLinks.some((request) => String(request?.url).includes("#room=")),
-    "Open session should ask the host to open the encrypted Room link",
-  );
-  const openedRoom = (await getDevEvents(page)).toolCalls.find((call) => call?.name === "tabula_app_start_room_from_document");
-  assert(openedRoom, "Start session should create a Room from the local document");
+  events = await getDevEvents(page);
+  assert(events.toolCalls.some((call) => call?.name === "tabula_app_start_room_from_document"), "Start session should create a Room from the local draft");
+  assert(events.openLinks.some((request) => String(request?.url).includes("#room=")), "Open session should open the encrypted Room link");
 
   assertNoPageErrors(consoleErrors, pageErrors);
   await page.close();
 };
 
-const runMobileLayoutFlow = async (baseUrl, browser) => {
+const runMobileFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser, mobileViewport);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
-  await waitForMessage(page, "Tabula.md document is ready.");
+  await waitForMessage(page, "Tabula.md draft is ready.");
+  await assertSessionCardPresentation(page, "mobile document handoff");
+  await assertNoHorizontalOverflow(page, "mobile document handoff");
 
-  await assertInlineDocumentPresentation(page, "mobile inline document");
-  await assertNoHorizontalOverflow(page, "mobile initial document layout");
-  await page.getByRole("button", { name: "Edit" }).click();
-  await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
-  await page.getByRole("region", { name: "Tabula.md editor" }).waitFor({ state: "visible" });
-
-  await page.locator("#titleInput").fill("Mobile smoke title");
-  await getWorkbenchEditor(page).fill(
-    [
-      "# Mobile Smoke",
-      "",
-      "This verifies the Tabula.md MCP App controls stay usable on narrow hosts.",
-      "",
-      "## Preview",
-      "",
-      "- Editor",
-      "- Split",
-      "- Context",
-    ].join("\n"),
-  );
-  await waitForMessage(page, "Document has unsaved changes.");
-  await assertNoHorizontalOverflow(page, "mobile edited document layout");
-
-  for (const viewMode of ["Preview", "Edit", "Split"]) {
-    await page.getByRole("button", { name: viewMode }).click();
-    await assertNoHorizontalOverflow(page, `mobile ${viewMode.toLowerCase()} view layout`);
-  }
-
-  await assertNoHorizontalOverflow(page, "mobile fullscreen layout");
-
-  const events = await getDevEvents(page);
-  assert(
-    events.displayModes.some((event) => event?.mode === "fullscreen"),
-    "mobile flow should exercise fullscreen display mode",
-  );
+  await page.getByRole("button", { name: "Start session" }).click();
+  await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
+  await assertNoHorizontalOverflow(page, "mobile session handoff");
 
   assertNoPageErrors(consoleErrors, pageErrors);
   await page.close();
@@ -325,34 +116,16 @@ const runMobileLayoutFlow = async (baseUrl, browser) => {
 const runRoomFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=room`);
-  await waitForInputValue(page, "#titleInput", "Research Review");
-  await assertInlineDocumentPresentation(page, "inline room document");
-  assert.equal(await page.locator("#titleInput").inputValue(), "Research Review");
-  assert.equal(await page.getByRole("button", { name: "Edit" }).isVisible(), false);
+  await waitForMessage(page, "Tabula.md session is ready.");
+  await page.getByRole("heading", { name: "Research Review" }).waitFor({ state: "visible" });
+  await page.getByText("This encrypted session is ready in Tabula.md.").waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
+  await assertSessionCardPresentation(page, "room handoff");
 
   await page.getByRole("button", { name: "Open session" }).click();
   assert(
     (await getDevEvents(page)).openLinks.some((request) => String(request?.url).includes("#room=")),
-    "room handoff should ask the host to open the encrypted Room link",
-  );
-
-  assertNoPageErrors(consoleErrors, pageErrors);
-  await page.close();
-};
-
-const runFullscreenRoomPresentationFlow = async (baseUrl, browser) => {
-  const { page, consoleErrors, pageErrors } = await createPage(browser);
-  await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=room&display=fullscreen`);
-  await page.locator("#roomHandoff").waitFor({ state: "visible" });
-  await page.getByRole("heading", { name: "Research Review" }).waitFor({ state: "visible" });
-  await page.getByText("This encrypted session is live in Tabula.md.").waitFor({ state: "visible" });
-  assert.equal(await page.locator(".mcp-workspace").isVisible(), false);
-  assert.equal(await page.locator("#tabulaWorkbench").isVisible(), false);
-  assert.equal(await page.getByRole("button", { name: "Edit" }).isVisible(), false);
-  await page.locator("#openSessionCardButton").click();
-  assert(
-    (await getDevEvents(page)).openLinks.some((request) => String(request?.url).includes("#room=")),
-    "fullscreen Room handoff should ask the host to open the encrypted Room link",
+    "room handoff should open the encrypted Room link",
   );
 
   assertNoPageErrors(consoleErrors, pageErrors);
@@ -362,11 +135,7 @@ const runFullscreenRoomPresentationFlow = async (baseUrl, browser) => {
 const main = async () => {
   const server = await createServer({
     configFile: "vite.config.dev.mjs",
-    server: {
-      host,
-      port: 0,
-      strictPort: false,
-    },
+    server: { host, port: 0, strictPort: false },
     logLevel: "silent",
   });
 
@@ -377,9 +146,8 @@ const main = async () => {
     assert(baseUrl, "Vite dev server did not expose a local URL");
     browser = await chromium.launch({ headless: true });
     await runDocumentFlow(baseUrl, browser);
-    await runMobileLayoutFlow(baseUrl, browser);
+    await runMobileFlow(baseUrl, browser);
     await runRoomFlow(baseUrl, browser);
-    await runFullscreenRoomPresentationFlow(baseUrl, browser);
   } catch (error) {
     if (String(error?.message || error).includes("Executable doesn't exist")) {
       throw new Error("Playwright Chromium is not installed. Run `npx playwright install chromium`.");

@@ -10,7 +10,6 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultServerEntrypoint = path.join(rootDir, "dist", "index.js");
-const documentAppResourceUri = "ui://tabula/document.html";
 
 const uiCapabilities = {
   extensions: {
@@ -222,10 +221,15 @@ const runAppClientSmoke = async ({ storeDir, jsonServerUrl, uploads, serverCwd, 
     assert(!toolNames.includes("tabula_propose_text_patches"), "MCPB-compatible stdio smoke should not expose legacy single-document patch proposals");
     assert(!toolNames.includes("tabula_apply_text_patches"), "MCPB-compatible stdio smoke should not expose legacy direct text patch writes");
 
+    const resources = await client.listResources();
+    const documentAppResourceUri = resources.resources.find((resource) =>
+      /^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/.test(resource.uri),
+    )?.uri;
+    assert.match(documentAppResourceUri || "", /^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/);
     const resource = await client.readResource({ uri: documentAppResourceUri });
     const appHtml = resource.contents?.[0]?.text || "";
     assert(resource.contents?.[0]?.mimeType === "text/html;profile=mcp-app", "Document App resource must be MCP App HTML");
-    assert(appHtml.includes("Tabula.md Document"), "Document App resource should contain the bundled App HTML");
+    assert(appHtml.includes("Tabula.md Session"), "Session Card resource should contain the bundled App HTML");
     assert(!appHtml.includes("dev-only-not-a-real-key"), "Document App resource must not contain dev share fixture data");
 
     const plaintext = "# Stdio Smoke\n\nPlaintext should stay local.";

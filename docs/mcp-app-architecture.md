@@ -2,33 +2,27 @@
 
 Tabula.md MCP ships one package that contains both the MCP server and the
 bundled MCP App resource. This matches the current product goal: Claude Desktop
-users install one `.mcpb`, then create, preview, edit, and share Markdown
-without manual setup.
+users install one `.mcpb`, then turn agent-created Markdown into an encrypted
+Tabula.md copy or live session without manual setup.
 
 ## Product Shape
 
-The primary product surface is the Tabula.md Document App:
+The MCP App is a compact Tabula.md Session Card:
 
 - local Markdown document creation
-- title editing
-- Markdown editor
-- Editor, Split, and Preview modes
-- outline navigation
-- local draft recovery
 - MCP document checkpointing
-- save into the MCP checkpoint store
-- Send Changes back into model context
-- encrypted share/export to a Tabula.md snapshot link
-- read-only connected room view
+- encrypted export to a Tabula.md snapshot link
+- creation and status handoff for an encrypted live room
+- a single `Open a copy` or `Open session` action into the actual Tabula.md app
 
-The App is not a dashboard and not a database. It should remain document-first.
+The card is not a dashboard, a database, or a second document editor. Tabula.md
+itself is the only visual editing and real-time collaboration surface. Claude
+owns its surrounding conversation chrome; the MCP App intentionally stays
+inline rather than imitating an entire Tabula desktop app inside that host.
 
-When a local document is opened in full screen, the App mounts
-`TabulaEmbeddedDocumentWorkbench` from `@tabula-md/tabula/workbench` and its
-matching stylesheet. The workbench owns the familiar Tabula.md editor,
-preview, and view controls; this package continues to own MCP checkpointing,
-model-context handoff, and encrypted sharing. The compact inline surface and
-read-only room view remain lightweight host-specific presentations.
+The document checkpoint is private, local staging. A `#json` link opens a
+standalone copy; a `#room` link opens the canonical collaboration object where
+people and agent actors meet.
 
 ## Why The App Lives In This Repo
 
@@ -47,8 +41,8 @@ deployed web product surface with a separate release cadence.
 ## MCP Apps And MCP UI
 
 The current target is the official MCP Apps surface through
-`@modelcontextprotocol/ext-apps`. It provides App resources, App-only tools, and
-model context updates for Claude Desktop-style hosts.
+`@modelcontextprotocol/ext-apps`. It provides App resources, App-only tools,
+and host-mediated external-link opening for Claude Desktop-style hosts.
 
 MCP UI can be revisited if Tabula.md needs a broader cross-host UI abstraction.
 For the current Claude Desktop MCPB product, adding MCP UI would add another
@@ -211,36 +205,28 @@ App-only tools:
 - `tabula_app_start_room_from_document`
 - `tabula_app_room_snapshot`
 
-App-only tools are marked with MCP Apps visibility metadata so model-facing
-tool lists stay focused while the App can still load and save state.
+`tabula_app_start_room_from_document` is the Session Card action that turns a
+local draft into a Room. The remaining snapshot and save helpers are retained
+only for already-installed pre-0.1.5 App resources during the transition; the
+Session Card itself does not call them. All App-only tools are marked with MCP
+Apps visibility metadata so model-facing tool lists stay focused.
 
-## Context Sync
+## Collaboration Boundary
 
-The Document App uses `updateModelContext` for explicit model handoff.
+The Session Card never becomes a parallel Markdown editor and does not send
+keystrokes or selections back into the model context. The model works through
+document and workspace tools; people edit in the actual Tabula.md browser app.
 
-The App should not send the full Markdown document on every keystroke. It should
-send bounded summaries, hashes, changed ranges, and short excerpts. Full text
-handoff should remain a deliberate tool or user action.
+A local draft exposes **Open a copy** (encrypted `#json` snapshot) and **Start
+session** (live encrypted `#room`). After a Room starts, the card exposes only
+**Open session**. The connected Room is the sole collaboration object for human
+and agent reads and writes; no later local checkpoint edits are silently
+mirrored into it.
 
-Inline mode is preview-first. A local draft exposes **Open a copy** (encrypted
-`#json` snapshot), **Start session** (live encrypted `#room`), and `Edit`.
-After a Room starts, its view exposes **Open session**, which follows the same
-`#room` URL. Editing and context handoff controls live in fullscreen mode.
-
-The local document checkpoint is staging only once a session starts. The
-connected Room is the sole collaboration object for human and agent reads and
-writes; no later local document edits are silently mirrored into it.
-
-When the user shares an App document with unsent edits, the App saves the
-current document checkpoint, creates the encrypted snapshot link, and includes
-the compact change summary in the same `updateModelContext` payload. This keeps
-the common "edit, then share" flow closed without requiring a separate Send
-Changes click.
-
-Selection handoff is also bounded. If the user selects a large range, the App
-sends a head/tail excerpt plus original and excerpt lengths instead of the full
-selected text. The model can ask the user for a narrower selection when exact
-middle text is needed.
+MCP hosts cache App resources by URI. `resource.ts` fingerprints the bundled
+App HTML into the `ui://tabula/document-<hash>.html` resource URI, so a changed
+local MCPB loads its matching Session Card instead of a stale card from an
+earlier install.
 
 ## Checkpoint Stores
 
@@ -290,9 +276,9 @@ The MCPB checker verifies that dev-only fixtures are not included in the
 production bundled App.
 
 `npm run test:app` also starts the dev harness in a real Playwright Chromium
-session. It verifies the local document edit -> save -> model-context -> share
-loop, bounded selection handoff, the read-only room refresh path, and fullscreen
-display mode requests.
+session. It verifies the local draft -> encrypted copy -> live Room -> actual
+Tabula.md handoff flow on desktop and narrow hosts. It asserts that the card
+does not bundle or expose a second Markdown editor.
 
 ## Release Assets
 

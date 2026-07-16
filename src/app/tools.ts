@@ -14,7 +14,6 @@ import {
   readRoomSnapshot,
   summarizeRoomStatus,
 } from "./snapshots.js";
-import { tabulaDocumentAppResourceUri } from "./types.js";
 
 const optionalSessionSchema = {
   sessionId: z.string().uuid().optional().describe("Session id returned by tabula_connect_room. Defaults to the latest session."),
@@ -49,9 +48,15 @@ export const registerDocumentAppTools = (
   server: McpServer,
   registry: SessionRegistry,
   documents: DocumentRegistry,
-  options: { allowRoomTools?: boolean; allowTemporaryRooms?: boolean; env?: RuntimeEnvironment } = {},
+  options: {
+    allowRoomTools?: boolean;
+    allowTemporaryRooms?: boolean;
+    env?: RuntimeEnvironment;
+    resourceUri: string;
+  },
 ) => {
   const allowRoomTools = options.allowRoomTools ?? true;
+  const resourceUri = options.resourceUri;
 
   registerAppTool(
     server,
@@ -59,7 +64,7 @@ export const registerDocumentAppTools = (
     {
       title: "Create Tabula Document",
       description:
-        "Create a Tabula.md Markdown document checkpoint and open the interactive MCP App editor for drafting, reviewing, and selection handoff.",
+        "Create a local Tabula.md Markdown checkpoint and open a compact handoff card. From the card, open an encrypted copy in Tabula.md or start a live encrypted session.",
       inputSchema: {
         title: z.string().min(1).max(120).optional().describe("Optional document title. Defaults to the first H1 or Untitled Document."),
         markdown: z.string().default("").describe("Initial Markdown content for the document checkpoint."),
@@ -72,7 +77,7 @@ export const registerDocumentAppTools = (
       },
       _meta: {
         ui: {
-          resourceUri: tabulaDocumentAppResourceUri,
+          resourceUri,
         },
       },
     },
@@ -83,9 +88,9 @@ export const registerDocumentAppTools = (
         return {
           value: {
             ...documentSnapshotContent(document),
-            resourceUri: tabulaDocumentAppResourceUri,
+            resourceUri,
           },
-          text: `Opening Tabula.md document "${document.title}".`,
+          text: `Created local Tabula.md draft "${document.title}".`,
         };
       }),
   );
@@ -135,7 +140,7 @@ export const registerDocumentAppTools = (
           return {
             value: {
               ...snapshot,
-              resourceUri: tabulaDocumentAppResourceUri,
+              resourceUri,
             },
             text: `Started Tabula session ${started.roomId}.`,
           };
@@ -182,7 +187,7 @@ export const registerDocumentAppTools = (
     {
       title: "Open Tabula Document",
       description:
-        "Open the latest or selected Tabula.md document checkpoint in the interactive MCP App editor.",
+        "Open a compact Tabula.md handoff card for the latest or selected local checkpoint. The actual editing surface opens in Tabula.md.",
       inputSchema: optionalDocumentSchema,
       annotations: {
         readOnlyHint: true,
@@ -192,7 +197,7 @@ export const registerDocumentAppTools = (
       },
       _meta: {
         ui: {
-          resourceUri: tabulaDocumentAppResourceUri,
+          resourceUri,
         },
       },
     },
@@ -203,7 +208,7 @@ export const registerDocumentAppTools = (
         return {
           value: {
             ...documentSnapshotContent(document),
-            resourceUri: tabulaDocumentAppResourceUri,
+            resourceUri,
           },
           text: `Opening Tabula.md document checkpoint "${document.title}".`,
         };
@@ -212,12 +217,12 @@ export const registerDocumentAppTools = (
 
   if (allowRoomTools) {
     registerAppTool(
-      server,
-      "tabula_open_room_view",
-      {
+    server,
+    "tabula_open_room_view",
+    {
         title: "Open Tabula Room View",
         description:
-          "Open a read-only MCP App view for a connected Tabula.md room, including status, outline, Markdown preview, refresh, and selection handoff.",
+          "Open a compact handoff card for a connected Tabula.md room. Open session to continue in the actual Tabula.md collaboration surface.",
         inputSchema: optionalSessionSchema,
         annotations: {
           readOnlyHint: true,
@@ -227,7 +232,7 @@ export const registerDocumentAppTools = (
         },
         _meta: {
           ui: {
-            resourceUri: tabulaDocumentAppResourceUri,
+            resourceUri,
           },
         },
       },
@@ -240,7 +245,7 @@ export const registerDocumentAppTools = (
             value: {
               mode: "room",
               room,
-              resourceUri: tabulaDocumentAppResourceUri,
+              resourceUri,
             },
             text: `Opening Tabula Room View for room ${status.roomId}.`,
           };
