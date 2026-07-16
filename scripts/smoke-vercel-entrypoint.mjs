@@ -49,12 +49,16 @@ const healthResponse = await fetchImpl(new Request("https://mcp.example.com/heal
 assert(healthResponse.status === 200, `Vercel health returned ${healthResponse.status}`);
 const healthBody = await healthResponse.json();
 assert(healthBody.service === "tabula-mcp", "Vercel health did not identify tabula-mcp");
+assert(healthBody.version === "0.1.5", "Vercel health did not expose the package version");
+assert(healthBody.writeAccess === "read-only", "Vercel health did not expose the write policy");
 assert(healthBody.deploymentMode === "remote", "Vercel health did not use remote deployment mode");
 
 const readyResponse = await fetchImpl(new Request("https://mcp.example.com/ready"));
 assert(readyResponse.status === 200, `Vercel ready returned ${readyResponse.status}`);
 const readyBody = await readyResponse.json();
 assert(readyBody.service === "tabula-mcp", "Vercel ready did not identify tabula-mcp");
+assert(readyBody.version === "0.1.5", "Vercel ready did not expose the package version");
+assert(readyBody.writeAccess === "read-only", "Vercel ready did not expose the write policy");
 
 const client = new Client({ name: "tabula-mcp-vercel-smoke", version: "0.0.0" });
 try {

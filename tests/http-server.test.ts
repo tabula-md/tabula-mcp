@@ -18,6 +18,7 @@ describe("Tabula MCP HTTP server", () => {
       documentStore: new MemoryDocumentStore(),
       host: "127.0.0.1",
       port: 0,
+      writeEnabled: true,
     });
 
     try {
@@ -29,9 +30,13 @@ describe("Tabula MCP HTTP server", () => {
       await expect(response.json()).resolves.toMatchObject({
         ok: true,
         service: "tabula-mcp",
+        version: "0.1.5",
+        writeAccess: "enabled",
         deploymentMode: "remote",
         documentStore: "memory",
       });
+      expect(httpServer.version).toBe("0.1.5");
+      expect(httpServer.writeAccess).toBe("enabled");
     } finally {
       await httpServer.close();
     }
@@ -60,6 +65,8 @@ describe("Tabula MCP HTTP server", () => {
       await expect(response.json()).resolves.toMatchObject({
         ok: true,
         service: "tabula-mcp",
+        version: "0.1.5",
+        writeAccess: "read-only",
         deploymentMode: "remote",
         documentStore: "memory",
       });

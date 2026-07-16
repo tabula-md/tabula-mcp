@@ -16,6 +16,7 @@ import { formatTabulaReadMe, getTabulaReadMe, tabulaReadMeTopics } from "../guid
 import { SessionRegistry } from "../registry.js";
 import { registerWorkspaceResources } from "../workspace-resources.js";
 import { WorkspaceRegistry } from "../workspaces.js";
+import { TABULA_MCP_VERSION } from "../version.js";
 import { registerRoomTools } from "./register-room-tools.js";
 import { resolveWriteEnabled } from "./write-access.js";
 
@@ -42,7 +43,13 @@ export type TabulaMcpServerInstance = {
 
 const tabulaReadMeTopicSchema = z.enum(tabulaReadMeTopics).default("overview");
 
-const registerReadMeTool = (server: McpServer) => {
+const registerReadMeTool = (
+  server: McpServer,
+  runtime: {
+    deploymentMode: DocumentStoreDeploymentMode;
+    writeEnabled: boolean;
+  },
+) => {
   server.registerTool(
     "tabula_read_me",
     {
@@ -61,15 +68,32 @@ const registerReadMeTool = (server: McpServer) => {
     },
     async ({ topic }) => {
       const readMe = getTabulaReadMe(topic);
+      const runtimeSummary = {
+        version: TABULA_MCP_VERSION,
+        deploymentMode: runtime.deploymentMode,
+        writeAccess: runtime.writeEnabled ? "enabled" : "read-only",
+        trustBoundary: runtime.deploymentMode === "local"
+          ? "The Tabula room client runs on this device. The model provider receives content returned by tools."
+          : "This hosted MCP runtime is a trusted plaintext room participant for the active session.",
+      } as const;
       return {
         content: [
           {
             type: "text" as const,
-            text: formatTabulaReadMe(readMe),
+            text: [
+              formatTabulaReadMe(readMe),
+              "",
+              "Runtime:",
+              `- Version: ${runtimeSummary.version}`,
+              `- Deployment: ${runtimeSummary.deploymentMode}`,
+              `- Write access: ${runtimeSummary.writeAccess}`,
+              `- Trust: ${runtimeSummary.trustBoundary}`,
+            ].join("\n"),
           },
         ],
         structuredContent: {
           readMe,
+          runtime: runtimeSummary,
         },
       };
     },
@@ -89,7 +113,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const documentAppResource = createDocumentAppResource({ documentAppHtml: options.documentAppHtml });
   const server = new McpServer({
     name: "tabula-mcp",
-    version: "0.1.5",
+    version: TABULA_MCP_VERSION,
   });
 
   registerDocumentAppResource(server, documentAppResource);
@@ -119,7 +143,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
     server.sendToolListChanged();
   };
 
-  registerReadMeTool(server);
+  registerReadMeTool(server, { deploymentMode, writeEnabled });
   if (allowRoomTools) {
     registerRoomTools(server, registry, workspaces, { env, writeEnabled, allowTemporaryRooms });
   }

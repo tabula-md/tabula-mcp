@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { RuntimeEnvironment } from "../env.js";
+import { TABULA_MCP_VERSION } from "../version.js";
 import {
   checkDocumentStoreReadiness,
   createDefaultDocumentStore,
@@ -29,6 +30,7 @@ import {
   resolveOriginPolicy,
   type OriginPolicy,
 } from "./origin-policy.js";
+import { resolveWriteEnabled } from "./write-access.js";
 
 export type WebEnvironment = RuntimeEnvironment;
 
@@ -54,6 +56,8 @@ export type TabulaMcpWebHandlerOptions = {
 export type TabulaMcpWebHandler = {
   deploymentMode: DocumentStoreDeploymentMode;
   documentStoreKind: DocumentStoreKind;
+  version: string;
+  writeAccess: "enabled" | "read-only";
   fetch(request: Request): Promise<Response>;
 };
 
@@ -235,6 +239,10 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
       env: env as NodeJS.ProcessEnv,
       production: policy.production,
     });
+  const writeEnabled = options.writeEnabled ?? resolveWriteEnabled({
+    env: env as NodeJS.ProcessEnv,
+  });
+  const writeAccess = writeEnabled ? "enabled" : "read-only";
   const sessions = new Map<string, ActiveWebSession>();
   const rateLimiter = new FixedWindowRateLimiter({
     maxRequests: policy.rateLimitMax,
@@ -248,7 +256,7 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
       documentStore,
       allowRoomTools: policy.allowRemoteRoomConnections,
       forceDocumentAppTools: policy.statelessHttp,
-      writeEnabled: options.writeEnabled,
+      writeEnabled,
       env,
     });
 
@@ -378,6 +386,8 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
   return {
     deploymentMode,
     documentStoreKind: documentStore.kind,
+    version: TABULA_MCP_VERSION,
+    writeAccess,
     async fetch(request: Request) {
       const startedAt = Date.now();
       const pathname = requestPathname(request);
@@ -392,6 +402,8 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
           response = jsonResponse(request, originPolicy, 200, {
             ok: true,
             service: "tabula-mcp",
+            version: TABULA_MCP_VERSION,
+            writeAccess,
             deploymentMode,
             documentStore: documentStore.kind,
             publicUnauthenticated: policy.publicUnauthenticated,
@@ -406,6 +418,8 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
             response = jsonResponse(request, originPolicy, 200, {
               ok: true,
               service: "tabula-mcp",
+              version: TABULA_MCP_VERSION,
+              writeAccess,
               deploymentMode,
               documentStore: documentStore.kind,
               publicUnauthenticated: policy.publicUnauthenticated,
@@ -421,6 +435,8 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
             response = jsonResponse(request, originPolicy, 503, {
               ok: false,
               service: "tabula-mcp",
+              version: TABULA_MCP_VERSION,
+              writeAccess,
               deploymentMode,
               documentStore: documentStore.kind,
             });
@@ -432,6 +448,8 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
           response = jsonResponse(request, originPolicy, 200, {
             ok: true,
             service: "tabula-mcp",
+            version: TABULA_MCP_VERSION,
+            writeAccess,
             description: "Tabula.md MCP App and document checkpoint server.",
             mcp: "/mcp",
             health: "/health",

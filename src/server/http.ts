@@ -12,6 +12,7 @@ import {
   type DocumentStoreKind,
 } from "../documents/store.js";
 import { createTabulaMcpServer, type TabulaMcpServerInstance } from "./create-server.js";
+import { TABULA_MCP_VERSION } from "../version.js";
 import {
   authorizeBearerToken,
   errorMessageForLog,
@@ -31,6 +32,7 @@ import {
   resolveOriginPolicy,
   type OriginPolicy,
 } from "./origin-policy.js";
+import { resolveWriteEnabled } from "./write-access.js";
 
 export type TabulaMcpHttpServerOptions = {
   allowedOrigins?: string[] | null;
@@ -58,6 +60,8 @@ export type TabulaMcpHttpServer = {
   listen(): Promise<void>;
   port: number;
   server: http.Server;
+  version: string;
+  writeAccess: "enabled" | "read-only";
 };
 
 type ActiveSession = {
@@ -225,6 +229,8 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
       defaultDeploymentMode: "remote",
       production: policy.production,
     });
+  const writeEnabled = options.writeEnabled ?? resolveWriteEnabled({ env: process.env });
+  const writeAccess = writeEnabled ? "enabled" : "read-only";
   const sessions = new Map<string, ActiveSession>();
   const rateLimiter = new FixedWindowRateLimiter({
     maxRequests: policy.rateLimitMax,
@@ -237,7 +243,7 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
       documentStore: sharedDocumentStore,
       allowRoomTools: policy.allowRemoteRoomConnections,
       forceDocumentAppTools: policy.statelessHttp,
-      writeEnabled: options.writeEnabled,
+      writeEnabled,
       env: process.env,
     });
 
@@ -411,6 +417,8 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
       httpJson(response, 200, {
         ok: true,
         service: "tabula-mcp",
+        version: TABULA_MCP_VERSION,
+        writeAccess,
         deploymentMode: resolved.deploymentMode,
         documentStore: sharedDocumentStore.kind,
         publicUnauthenticated: policy.publicUnauthenticated,
@@ -426,6 +434,8 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
           httpJson(response, 200, {
             ok: true,
             service: "tabula-mcp",
+            version: TABULA_MCP_VERSION,
+            writeAccess,
             deploymentMode: resolved.deploymentMode,
             documentStore: sharedDocumentStore.kind,
             publicUnauthenticated: policy.publicUnauthenticated,
@@ -441,6 +451,8 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
           httpJson(response, 503, {
             ok: false,
             service: "tabula-mcp",
+            version: TABULA_MCP_VERSION,
+            writeAccess,
             deploymentMode: resolved.deploymentMode,
             documentStore: sharedDocumentStore.kind,
           });
@@ -453,6 +465,8 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
       httpJson(response, 200, {
         ok: true,
         service: "tabula-mcp",
+        version: TABULA_MCP_VERSION,
+        writeAccess,
         description: "Tabula.md MCP App and document checkpoint server.",
         mcp: "/mcp",
         health: "/health",
@@ -474,6 +488,8 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
     host: resolved.host,
     deploymentMode: resolved.deploymentMode,
     documentStoreKind: sharedDocumentStore.kind,
+    version: TABULA_MCP_VERSION,
+    writeAccess,
     listen: () =>
       new Promise<void>((resolve, reject) => {
         server.once("error", reject);

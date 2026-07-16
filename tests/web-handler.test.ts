@@ -17,6 +17,7 @@ describe("Tabula MCP Web handler", () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
       documentStore: new MemoryDocumentStore(),
+      writeEnabled: true,
     });
     const response = await handler.fetch(new Request("https://mcp.example.com/health"));
 
@@ -24,9 +25,13 @@ describe("Tabula MCP Web handler", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       service: "tabula-mcp",
+      version: "0.1.5",
+      writeAccess: "enabled",
       deploymentMode: "remote",
       documentStore: "memory",
     });
+    expect(handler.version).toBe("0.1.5");
+    expect(handler.writeAccess).toBe("enabled");
   });
 
   it("serves readiness metadata after checking the checkpoint store", async () => {
@@ -46,6 +51,8 @@ describe("Tabula MCP Web handler", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       service: "tabula-mcp",
+      version: "0.1.5",
+      writeAccess: "read-only",
       deploymentMode: "remote",
       documentStore: "memory",
     });
@@ -66,6 +73,8 @@ describe("Tabula MCP Web handler", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: false,
       service: "tabula-mcp",
+      version: "0.1.5",
+      writeAccess: "read-only",
       deploymentMode: "remote",
       documentStore: "memory",
     });
