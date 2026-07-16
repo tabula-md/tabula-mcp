@@ -584,13 +584,26 @@ describe("MCP tool registration", () => {
           nextActions: string[];
           securityRules: string[];
         };
+        runtime: {
+          version: string;
+          deploymentMode: string;
+          writeAccess: string;
+          trustBoundary: string;
+        };
       };
 
       expect(text).toContain("Tabula.md MCP read_me (sharing)");
       expect(text).toContain("bearer secret");
+      expect(text).toContain("Write access: read-only");
       expect(structured.readMe.topic).toBe("sharing");
       expect(structured.readMe.nextActions.length).toBeGreaterThan(0);
       expect(structured.readMe.securityRules.join("\n")).toContain("#room");
+      expect(structured.runtime).toMatchObject({
+        version: "0.1.5",
+        deploymentMode: "local",
+        writeAccess: "read-only",
+      });
+      expect(structured.runtime.trustBoundary).toContain("model provider");
     });
   });
 

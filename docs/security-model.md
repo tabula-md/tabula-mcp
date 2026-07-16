@@ -34,6 +34,10 @@ The MCP process can decrypt room Markdown because the user gave it a room URL
 containing a `#room` fragment with the room key. Running Tabula MCP as a shared
 hosted service deliberately moves MCP App document checkpoint plaintext, and any
 room plaintext supplied to that MCP service, into the hosted MCP trust boundary.
+The selected model provider also receives Markdown returned by tools. Under a
+prompt-based handoff it receives the room URL as well; local MCP keeps Tabula's
+room client on-device but does not make a hosted model provider blind to its
+prompt or tool results.
 
 ## Room Links
 

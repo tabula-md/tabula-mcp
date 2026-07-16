@@ -101,7 +101,7 @@ Local stdio is the recommended path for private room collaboration.
 
 | Path | Where the MCP runs | Plaintext and room keys | Use it for |
 | --- | --- | --- | --- |
-| Local stdio or MCPB | Your device | Stay in the local MCP process | Private live-room work |
+| Local stdio or MCPB | Your device | Decryption stays local; the model provider receives requested Markdown and any room URL placed in its prompt | Private live-room work |
 | Hosted MCP | Tabula's MCP runtime | Are processed by the hosted runtime for the session | Installation-free compatible clients and MCP Apps |
 | Tabula Room | Tabula relay | Relay receives encrypted envelopes only | Live synchronization |
 | Tabula JSON | Tabula snapshot store | Store receives encrypted snapshot bytes only | Non-live handoff |
@@ -260,8 +260,9 @@ Supported remote checkpoint environment variables:
 - `TABULA_MCP_REDIS_REST_TOKEN` or `UPSTASH_REDIS_REST_TOKEN` or `KV_REST_API_TOKEN`
 - `TABULA_MCP_REDIS_KEY_PREFIX` defaults to `tabula-mcp:documents`
 
-`GET /health` returns process-level service metadata. `GET /ready` checks that
-the active checkpoint store can be reached.
+`GET /health` returns process-level service metadata including the running
+version and `enabled` or `read-only` write policy. `GET /ready` returns the same
+contract after checking that the active checkpoint store can be reached.
 
 `TABULA_MCP_ALLOWED_ORIGINS` can be set to a comma-separated browser origin
 allowlist. In development, unset origins allow custom browser MCP connector
@@ -272,6 +273,7 @@ send `Origin` are still allowed through the Origin gate.
 Production/public endpoint controls:
 
 - `TABULA_MCP_PRODUCTION=1` or Vercel production runtime enables production guardrails.
+- `TABULA_MCP_ENABLE_WRITE=1` enables hash-guarded room edits; the default is read-only.
 - `TABULA_MCP_AUTH_TOKEN` is required in production unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
 - `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes production remote MCP public/no-auth and ignores any stale auth token secret.
 - Production remote mode requires Redis/Upstash REST credentials by default.

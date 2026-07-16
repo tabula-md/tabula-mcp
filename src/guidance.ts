@@ -15,6 +15,8 @@ const securityRules = [
   "Treat any Tabula.md room URL with a #room fragment as a bearer secret because the fragment contains the room key.",
   "Treat any Tabula.md snapshot URL with a #json fragment as a bearer secret because the fragment contains the snapshot key.",
   "Never send room keys or plaintext Markdown to the Tabula Room server.",
+  "An invited model provider receives the Markdown returned by MCP tools. If a room URL is placed in the model prompt, the provider also receives that bearer secret.",
+  "A hosted Tabula MCP runtime is a trusted plaintext room participant; it is separate from the blind Tabula Room relay.",
   "Hosted Tabula MCP document checkpoints may temporarily store plaintext Markdown for agent editing; use encrypted share export for handoff links.",
   "Encrypted live room checkpoints may be saved to Firebase Storage with an opaque Firestore pointer; neither service receives the room key or plaintext Markdown.",
   "A local MCP client may start a temporary Room without encrypted recovery while an active peer remains connected; hosted MCP must have encrypted Room persistence before it starts a Room.",
@@ -33,6 +35,7 @@ const avoid = [
   "Do not treat MCP document checkpoints as Tabula JSON snapshots or live room checkpoints; MCP checkpoints are working state, Firebase room checkpoints are encrypted live recovery, and #json links are encrypted handoff artifacts.",
   "Do not invent single-document room workflows; use workspace documents even when the workspace contains one document.",
   "Do not rely on MCP resources as the only workflow surface; some clients expose only tools.",
+  "Do not ask a model to implement Yjs, Awareness, or RoomWire directly; use the registered Tabula workspace tools.",
 ];
 
 const summaries: Record<TabulaReadMeTopic, string> = {
