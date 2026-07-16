@@ -3,7 +3,7 @@
 Install the Tabula plugin or configure the published stdio server:
 
 ```sh
-claude mcp add tabula -- npx -y @tabula-md/mcp@0.2.0
+claude mcp add tabula -- npx -y @tabula-md/mcp@0.2.1
 ```
 
 Suggested prompt:

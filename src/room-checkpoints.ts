@@ -27,6 +27,10 @@ import type {
   SaveWorkspaceRoomCheckpointResult,
   WorkspaceRoomCheckpointStore,
 } from "@tabula-md/tabula/collaboration";
+import {
+  createFirebaseRestWorkspaceRoomCheckpointStore,
+  type FirebaseRestConfig,
+} from "./room-checkpoints-rest.js";
 
 type FirebaseRoomCheckpointPointer = {
   formatVersion: 2;
@@ -93,18 +97,25 @@ const readPointer = (value: unknown): FirebaseRoomCheckpointPointer => {
   return pointer as FirebaseRoomCheckpointPointer;
 };
 
-export const createFirebaseWorkspaceRoomCheckpointStore = (
-  env: NodeJS.ProcessEnv = process.env,
-): WorkspaceRoomCheckpointStore => {
-  const config = parseFirebaseConfig(env);
-  if (!config) return createDisabledStore();
+const parseFirebaseRestConfig = (config: FirebaseOptions): FirebaseRestConfig | null => {
+  const { apiKey, projectId, storageBucket } = config;
+  return typeof apiKey === "string" && apiKey.length > 0 &&
+    typeof projectId === "string" && projectId.length > 0 &&
+    typeof storageBucket === "string" && storageBucket.length > 0
+    ? { apiKey, projectId, storageBucket }
+    : null;
+};
 
+const createFirebaseSdkWorkspaceRoomCheckpointStore = (
+  config: FirebaseOptions,
+  env: NodeJS.ProcessEnv,
+  emulatorHost: string,
+): WorkspaceRoomCheckpointStore => {
   const app = getApps().find((candidate) => candidate.name === firebaseAppName) ??
     initializeApp(config, firebaseAppName);
   const firestore = getFirestore(app);
   const storage = getStorage(app);
-  const emulatorHost = env.TABULA_MCP_FIREBASE_EMULATOR_HOST ?? env.VITE_TABULA_FIREBASE_EMULATOR_HOST;
-  if (emulatorHost && !connectedEmulators.has(app.name)) {
+  if (!connectedEmulators.has(app.name)) {
     connectFirestoreEmulator(
       firestore,
       emulatorHost,
@@ -207,6 +218,19 @@ export const createFirebaseWorkspaceRoomCheckpointStore = (
       }
     },
   };
+};
+
+export const createFirebaseWorkspaceRoomCheckpointStore = (
+  env: NodeJS.ProcessEnv = process.env,
+): WorkspaceRoomCheckpointStore => {
+  const config = parseFirebaseConfig(env);
+  if (!config) return createDisabledStore();
+  const emulatorHost = env.TABULA_MCP_FIREBASE_EMULATOR_HOST ?? env.VITE_TABULA_FIREBASE_EMULATOR_HOST;
+  if (emulatorHost) {
+    return createFirebaseSdkWorkspaceRoomCheckpointStore(config, env, emulatorHost);
+  }
+  const restConfig = parseFirebaseRestConfig(config);
+  return restConfig ? createFirebaseRestWorkspaceRoomCheckpointStore(restConfig) : createDisabledStore();
 };
 
 export const createMemoryWorkspaceRoomCheckpointStore = (): WorkspaceRoomCheckpointStore & {

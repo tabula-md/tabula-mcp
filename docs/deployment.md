@@ -58,6 +58,10 @@ Live room recovery is a separate encrypted checkpoint path: configure
 Tabula.md. The MCP server encrypts the complete workspace Y.Doc update locally
 with the `#room` key, writes the ciphertext blob to Firebase Storage, and uses
 Firestore only for the generation pointer.
+Production runtimes use the Firebase Storage and Firestore REST APIs through
+standard `fetch`; Firebase emulators continue to use the SDK transport. This
+keeps the checkpoint format identical while avoiding browser-only APIs such as
+`XMLHttpRequest` in Cloudflare Workers.
 Local MCP exposes filesystem workspace import and accepts paths only when the
 client provides filesystem roots or the operator sets
 `TABULA_MCP_ALLOWED_IMPORT_ROOTS` to comma- or newline-separated directories.

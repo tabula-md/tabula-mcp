@@ -1,7 +1,7 @@
 {
   "name": "tabula-mcp",
   "description": "Private Markdown drafts, live Tabula sessions, and encrypted copies for Claude Code.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "Tabula.md"
   }
