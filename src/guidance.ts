@@ -40,7 +40,7 @@ const summaries: Record<TabulaReadMeTopic, string> = {
   documents:
     "For a new draft, call tabula_create_document. To resume a saved checkpoint, call tabula_list_documents, then tabula_open_document. The App editor can save into the MCP document checkpoint store, recover unsaved browser drafts, send compact changes back into model context, and share the saved document as an encrypted snapshot link.",
   rooms:
-    "For a new live room, create or import a workspace and call tabula_create_workspace_room. For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. The MCP client joins as an agent actor, loads/saves encrypted live room checkpoints when Firebase is configured, publishes Awareness, and edits the shared workspace Y.Doc directly.",
+    "For a new live room, create or import a workspace and call tabula_create_workspace_room. For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. The MCP client joins as an agent actor, loads/saves encrypted live room checkpoints when Firebase is configured, or waits for state from an active peer when it is not. Do not read or edit workspace content until stateReceived is true.",
   sharing:
     "To share an MCP App document, call tabula_share_document or use the App Share control. To share a multi-file workspace, call tabula_share_workspace. The MCP process creates a snapshot key, encrypts a Tabula JSON snapshot, uploads only encrypted bytes, and returns a #json share URL.",
   security:

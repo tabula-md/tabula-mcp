@@ -86,6 +86,9 @@ URLs are bearer secrets and the MCP process becomes a trusted plaintext room
 participant after connecting.
 When Firebase room checkpoints are configured, `tabula_connect_room` first tries
 to load encrypted room recovery state and reports that in `checkpointStatus`.
+When no checkpoint is available, the connection remains live and waits for an
+active browser or agent peer to send workspace state. Check `stateReceived`
+before reading or editing workspace content.
 
 For unattended local test automation only, Codex CLI can be run with:
 

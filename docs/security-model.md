@@ -98,6 +98,10 @@ the initial workspace Y.Doc when Firebase is configured.
 `tabula_connect_room` attempts to load and decrypt it before joining the live
 relay. The structured tool output includes `checkpointStatus` so agents can tell
 whether recovery was `loaded`, `saved`, `missing`, `disabled`, or `failed`.
+Missing or disabled checkpoint recovery does not prevent a local MCP client
+from joining an active room. In that case it waits for a live peer to send the
+encrypted workspace state and blocks workspace reads and edits until that state
+arrives.
 
 ## Snapshot Links
 

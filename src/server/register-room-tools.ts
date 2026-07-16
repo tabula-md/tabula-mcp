@@ -576,7 +576,7 @@ export const registerRoomTools = (
     {
       title: "Connect Tabula Room",
       description:
-        "Connect this local MCP process to an encrypted Tabula.md live room URL. The #room fragment contains the room key, is used locally, and is never sent to the room server.",
+        "Join this local MCP process to an encrypted Tabula.md live room URL. The #room fragment contains the room key, is used locally, and is never sent to the room server. Checkpoint recovery is optional when an active peer can send workspace state.",
       inputSchema: {
         roomUrl: z.string().url().describe("Full Tabula room invite URL, including /#room=<roomId>,<roomKey>."),
         roomServerUrl: z
@@ -584,6 +584,13 @@ export const registerRoomTools = (
           .url()
           .optional()
           .describe("Tabula Room service URL. Can also be set with TABULA_ROOM_URL."),
+        waitForStateMs: z
+          .number()
+          .int()
+          .min(0)
+          .max(30_000)
+          .default(3_000)
+          .describe("How long to wait for workspace state from a live peer when no encrypted checkpoint is available."),
         identityName: z.string().min(1).max(40).optional().describe("Presence name shown to collaborators."),
         identityColor: z
           .string()
@@ -598,7 +605,7 @@ export const registerRoomTools = (
         openWorldHint: true,
       },
     },
-    async ({ roomUrl, roomServerUrl, identityName, identityColor }) =>
+    async ({ roomUrl, roomServerUrl, waitForStateMs, identityName, identityColor }) =>
       runTool(async () => {
         const parsedRoom = parseRoomShareUrl(roomUrl);
         const resolvedRoomServerUrl = resolveRoomServerUrl({
@@ -613,21 +620,18 @@ export const registerRoomTools = (
           identityColor,
           roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
         });
-        const recoveryStatus = await client.connect();
+        const recoveryStatus = await client.connect({ waitForStateMs });
         registry.add(client);
         server.sendResourceListChanged();
         const status = await client.getStatus();
-        const hydrationNote =
-          status.hydrationStatus === "ready"
-            ? "Room state has been received."
-            : status.checkpointStatus.status === "missing" || status.checkpointStatus.status === "disabled"
-              ? "No encrypted room checkpoint was loaded, so content may remain empty until a live peer sends workspace state."
-              : "Room content may remain empty until a live peer sends workspace state.";
+        const hydrationNote = status.hydrationStatus === "ready"
+          ? "Room state has been received."
+          : "Connected to the live room, but no workspace state has arrived yet. Do not read or edit workspace content until tabula_wait_for_changes reports stateReceived=true.";
 
         return {
           ...status,
           recoveryStatus,
-          note: `Connected as a Tabula agent actor. ${hydrationNote} Use tabula_read_workspace, tabula_read_workspace_document, and tabula_apply_workspace_changes for hash-guarded direct edits.`,
+          note: `Connected as a Tabula agent actor. ${hydrationNote} Once ready, use tabula_read_workspace, tabula_read_workspace_document, and tabula_apply_workspace_changes for hash-guarded direct edits.`,
         };
       }),
   );

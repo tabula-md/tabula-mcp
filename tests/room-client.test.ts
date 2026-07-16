@@ -5,6 +5,7 @@ import {
   decryptRoomEnvelope,
   type EncryptedEnvelope,
   type WorkspaceRoomSyncAdapters,
+  type WorkspaceRoomCheckpointStore,
 } from "@tabula-md/tabula/collaboration";
 import { describe, expect, it } from "vitest";
 import { importRoomKey, sha256Text } from "../src/crypto.js";
@@ -112,6 +113,16 @@ const createWorkspaceState = async (markdown = "# Draft\n"): Promise<WorkspaceRo
   };
 };
 
+const createDisabledCheckpointStore = (): WorkspaceRoomCheckpointStore => ({
+  enabled: false,
+  async loadEncryptedCheckpoint() {
+    return null;
+  },
+  async saveEncryptedCheckpoint() {
+    throw new Error("Live room persistence is unavailable.");
+  },
+});
+
 const createClient = ({
   relay,
   writeAccess = true,
@@ -120,7 +131,7 @@ const createClient = ({
 }: {
   relay: ReturnType<typeof createMemoryRelay>;
   writeAccess?: boolean;
-  checkpointStore?: ReturnType<typeof createMemoryWorkspaceRoomCheckpointStore>;
+  checkpointStore?: WorkspaceRoomCheckpointStore;
   identityName?: string;
 }) => new TabulaRoomClient({
   parsedRoom: parseRoomShareUrl(roomUrl),
@@ -220,6 +231,60 @@ describe("TabulaRoomClient protocol v2", () => {
       });
     } finally {
       reader.disconnect();
+    }
+  });
+
+  it("joins a live peer without checkpoint persistence and waits for its workspace state", async () => {
+    const relay = createMemoryRelay();
+    const checkpointStore = createMemoryWorkspaceRoomCheckpointStore();
+    const browserPeer = createClient({ relay, checkpointStore, identityName: "Browser Peer" });
+    const mcpClient = createClient({
+      relay,
+      checkpointStore: createDisabledCheckpointStore(),
+      identityName: "Claude",
+    });
+    try {
+      await browserPeer.publishWorkspaceSnapshot({
+        workspace: await createWorkspaceState("# Shared from browser\n"),
+        documents: [{ documentId: "doc_1", title: "Draft.md", markdown: "# Shared from browser\n" }],
+      });
+      await browserPeer.connect();
+
+      await expect(mcpClient.connect({ waitForStateMs: 500 })).resolves.toBe("checkpoint-disabled");
+      await expect(mcpClient.getStatus()).resolves.toMatchObject({
+        status: "connected",
+        hydrationStatus: "ready",
+        checkpointStatus: { enabled: false, status: "disabled" },
+      });
+      await expect(mcpClient.readWorkspaceDocument({ documentId: "doc_1" })).resolves.toMatchObject({
+        markdown: "# Shared from browser\n",
+      });
+    } finally {
+      browserPeer.disconnect();
+      mcpClient.disconnect();
+    }
+  });
+
+  it("keeps an unhydrated room connected but blocks reads and writes", async () => {
+    const relay = createMemoryRelay();
+    const client = createClient({
+      relay,
+      writeAccess: true,
+      checkpointStore: createDisabledCheckpointStore(),
+    });
+    try {
+      await expect(client.connect({ waitForStateMs: 10 })).resolves.toBe("checkpoint-disabled");
+      await expect(client.getStatus()).resolves.toMatchObject({
+        status: "connected",
+        hydrationStatus: "waiting-for-peer-state",
+        stateReceived: false,
+      });
+      await expect(client.readWorkspace()).rejects.toThrow("waiting for workspace state");
+      await expect(client.applyWorkspaceChanges({
+        changes: [{ type: "document.create", parentId: null, title: "Unsafe.md", markdown: "# Unsafe\n" }],
+      })).rejects.toThrow("waiting for workspace state");
+    } finally {
+      client.disconnect();
     }
   });
 });

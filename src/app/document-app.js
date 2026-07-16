@@ -358,6 +358,7 @@ const persistCurrentDraft = () => {
 const renderSnapshot = (snapshot, options = {}) => {
   const { resetContextBaseline = true } = options;
   let markdown = snapshot.markdown || "";
+  const waitingForWorkspaceState = !snapshot.document && snapshot.waitingForWorkspaceState === true;
   const previousContextMarkdown = state.lastContextMarkdown;
   let draftState = {
     title: state.title,
@@ -391,7 +392,7 @@ const renderSnapshot = (snapshot, options = {}) => {
   renderOutline(snapshot.document ? extractOutline(markdown) : snapshot.outline || []);
   updateDocumentActionState();
   renderWorkbench();
-  return draftState;
+  return { ...draftState, waitingForWorkspaceState };
 };
 
 const loadSnapshot = async () => {
@@ -427,8 +428,12 @@ const loadSnapshot = async () => {
 
     const renderResult = renderSnapshot(result.structuredContent);
     setMessage(
-      renderResult.draftRestored ? renderResult.message : "Tabula.md content is current.",
-      renderResult.draftRestored ? "warning" : "neutral",
+      renderResult.draftRestored
+        ? renderResult.message
+        : renderResult.waitingForWorkspaceState
+          ? "Connected to the room. Waiting for workspace state from a live peer..."
+          : "Tabula.md content is current.",
+      renderResult.draftRestored || renderResult.waitingForWorkspaceState ? "warning" : "neutral",
     );
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Refresh failed.", "error");
@@ -736,7 +741,7 @@ const createAppClient = () => {
   }
 
   return new App(
-    { name: "Tabula Document", version: "0.1.1" },
+    { name: "Tabula Document", version: "0.1.2" },
     { availableDisplayModes: ["inline", "fullscreen"] },
   );
 };

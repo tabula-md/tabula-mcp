@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.2
+
+- Let local MCPB clients join active encrypted rooms without Firebase checkpoint
+  persistence, then wait safely for browser or agent workspace state.
+- Block workspace reads and edits until the connected room has received state,
+  preventing empty local CRDT state from being treated as shared content.
+- Added browser-peer-to-no-persistence-MCP end-to-end coverage.
+
 - Reworked public installation around the published `@tabula-md/mcp` package
   for Codex, Claude Code, and generic local MCP clients.
 - Added `--help`, `--version`, and secret-free `--doctor` CLI surfaces.
