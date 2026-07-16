@@ -23,6 +23,13 @@ The primary product surface is the Tabula.md Document App:
 
 The App is not a dashboard and not a database. It should remain document-first.
 
+When a local document is opened in full screen, the App mounts
+`TabulaEmbeddedDocumentWorkbench` from `@tabula-md/tabula/workbench` and its
+matching stylesheet. The workbench owns the familiar Tabula.md editor,
+preview, and view controls; this package continues to own MCP checkpointing,
+model-context handoff, and encrypted sharing. The compact inline surface and
+read-only room view remain lightweight host-specific presentations.
+
 ## Why The App Lives In This Repo
 
 There is no separate `tabula-mcp-app` repository at this stage. Keeping the MCP

@@ -1,4 +1,8 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps/app-with-deps";
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { TabulaEmbeddedDocumentWorkbench } from "@tabula-md/tabula/workbench";
+import "@tabula-md/tabula/workbench.css";
 import { createMarkdownChangeSummary, formatDocumentChangeMessage } from "./change-summary.js";
 import { createSelectionContext, formatSelectionContextMessage } from "./selection-context.js";
 import {
@@ -23,6 +27,7 @@ const elements = {
   markdownEditor: document.getElementById("markdownEditor"),
   markdownPane: document.querySelector(".markdown-pane"),
   markdownPreview: document.getElementById("markdownPreview"),
+  workbench: document.getElementById("tabulaWorkbench"),
   viewModeButtons: document.querySelectorAll("[data-view-mode]"),
   contextTabButtons: document.querySelectorAll("[data-context-tab]"),
   textLength: document.getElementById("textLength"),
@@ -51,6 +56,9 @@ const state = {
   editViewMode: "split",
   viewMode: "split",
   contextView: "outline",
+  markdown: "",
+  selectedText: "",
+  workbenchRoot: null,
 };
 
 const setMessage = (text, tone = "neutral") => {
@@ -87,10 +95,10 @@ const updateTitleInputState = () => {
 
 const updateDocumentActionState = () => {
   const isDocument = state.mode === "document" && Boolean(state.documentId);
-  const hasContextChanges = isDocument && elements.markdownEditor.value !== state.lastContextMarkdown;
+  const hasContextChanges = isDocument && state.markdown !== state.lastContextMarkdown;
   const hasSavedContentChanges =
     isDocument &&
-    (elements.markdownEditor.value !== state.lastSavedMarkdown || currentTitle() !== state.lastSavedTitle);
+    (state.markdown !== state.lastSavedMarkdown || currentTitle() !== state.lastSavedTitle);
 
   elements.saveDocumentButton.disabled = !isDocument || !hasSavedContentChanges;
   elements.sendChangesButton.disabled = !hasContextChanges;
@@ -100,9 +108,54 @@ const updateDocumentActionState = () => {
 };
 
 const renderDocumentContent = (markdown) => {
+  state.markdown = markdown;
+  state.selectedText = "";
   elements.markdownEditor.value = markdown;
   elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
   elements.textLength.textContent = `${markdown.length} chars`;
+};
+
+const renderWorkbench = () => {
+  const showWorkbench =
+    state.mode === "document" && Boolean(state.documentId) && state.displayMode === "fullscreen";
+  document.body.dataset.workbenchActive = showWorkbench ? "true" : "false";
+
+  if (!elements.workbench) {
+    return;
+  }
+
+  if (!state.workbenchRoot) {
+    state.workbenchRoot = createRoot(elements.workbench);
+  }
+
+  if (!showWorkbench) {
+    state.workbenchRoot.render(null);
+    return;
+  }
+
+  state.workbenchRoot.render(
+    createElement(TabulaEmbeddedDocumentWorkbench, {
+      key: state.documentId,
+      documentId: state.documentId,
+      markdown: state.markdown,
+      title: currentTitle(),
+      onMarkdownChange: (markdown) => {
+        if (state.mode !== "document" || markdown === state.markdown) {
+          return;
+        }
+
+        renderDocumentContent(markdown);
+        renderOutline(extractOutline(markdown));
+        persistCurrentDraft();
+        updateDocumentActionState();
+        setMessage("Document has unsaved changes.", "warning");
+        renderWorkbench();
+      },
+      onSelectedTextChange: (selectedText) => {
+        state.selectedText = selectedText;
+      },
+    }),
+  );
 };
 
 const setViewMode = (viewMode) => {
@@ -122,6 +175,7 @@ const setDisplayMode = (displayMode) => {
   elements.displayModeButton.textContent = displayMode === "fullscreen" ? "Inline" : "Edit";
   setViewMode(displayMode === "fullscreen" ? state.editViewMode : "preview");
   updateTitleInputState();
+  renderWorkbench();
 };
 
 const setContextView = (contextView) => {
@@ -275,7 +329,7 @@ const persistCurrentDraft = () => {
   }
 
   const storage = getDraftStorage();
-  const markdown = elements.markdownEditor.value;
+  const markdown = state.markdown;
   const title = currentTitle();
   if (markdown === state.lastSavedMarkdown && title === state.lastSavedTitle) {
     clearDocumentDraft(storage, state.documentId);
@@ -336,6 +390,7 @@ const renderSnapshot = (snapshot, options = {}) => {
   }
   renderOutline(snapshot.document ? extractOutline(markdown) : snapshot.outline || []);
   updateDocumentActionState();
+  renderWorkbench();
   return draftState;
 };
 
@@ -396,7 +451,7 @@ const saveDocument = async () => {
       arguments: {
         documentId: state.documentId,
         title: currentTitle(),
-        markdown: elements.markdownEditor.value,
+        markdown: state.markdown,
       },
     });
     if (result.isError) {
@@ -427,7 +482,7 @@ const shareDocument = async ({ sendModelContext = true, openAfterShare = false }
   elements.openTabulaButton.disabled = true;
   setMessage(openAfterShare ? "Preparing encrypted Tabula.md snapshot..." : "Preparing encrypted Tabula.md share link...");
   try {
-    const currentMarkdown = elements.markdownEditor.value;
+    const currentMarkdown = state.markdown;
     const currentDocumentTitle = currentTitle();
     const baseSha256 = state.sha256;
     const changeSummary = createMarkdownChangeSummary(state.lastContextMarkdown, currentMarkdown);
@@ -548,7 +603,7 @@ const sendChanges = async () => {
     return;
   }
 
-  const currentMarkdown = elements.markdownEditor.value;
+  const currentMarkdown = state.markdown;
   const summary = createMarkdownChangeSummary(state.lastContextMarkdown, currentMarkdown);
   if (!summary.changed) {
     setMessage("No document changes to send.", "warning");
@@ -591,10 +646,11 @@ const sendChanges = async () => {
 };
 
 const getSelectedText = () => {
-  if (
-    document.activeElement === elements.markdownEditor &&
-    elements.markdownEditor.selectionEnd > elements.markdownEditor.selectionStart
-  ) {
+  if (state.selectedText) {
+    return state.selectedText;
+  }
+
+  if (document.activeElement === elements.markdownEditor && elements.markdownEditor.selectionEnd > elements.markdownEditor.selectionStart) {
     return elements.markdownEditor.value
       .slice(elements.markdownEditor.selectionStart, elements.markdownEditor.selectionEnd)
       .trim();
@@ -750,6 +806,7 @@ const boot = async () => {
     persistCurrentDraft();
     updateDocumentActionState();
     setMessage("Document has unsaved changes.", "warning");
+    renderWorkbench();
   });
   elements.markdownEditor.addEventListener("input", () => {
     if (state.mode !== "document") {
@@ -757,6 +814,8 @@ const boot = async () => {
     }
 
     const markdown = elements.markdownEditor.value;
+    state.markdown = markdown;
+    state.selectedText = "";
     elements.textLength.textContent = `${markdown.length} chars`;
     elements.markdownPreview.innerHTML = renderMarkdownPreview(markdown);
     renderOutline(extractOutline(markdown));

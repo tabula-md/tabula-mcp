@@ -170,7 +170,7 @@ body[data-display-mode="inline"] .actions button:hover:not(:disabled) {
   background: var(--tabula-subtle);
 }
 
-body[data-display-mode="inline"] .workspace {
+body[data-display-mode="inline"] .mcp-workspace {
   display: block;
   min-height: 0;
 }
@@ -217,11 +217,33 @@ body[data-display-mode="inline"] .markdown-preview {
   color: var(--tabula-error);
 }
 
-.workspace {
+.mcp-workspace {
   display: grid;
   min-height: 0;
   flex: 1;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+}
+
+.tabula-workbench-host {
+  display: none;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Fullscreen document editing deliberately uses the exact Tabula.md workbench
+ * exported by @tabula-md/tabula. The compact inline preview and read-only room
+ * view retain the lightweight MCP App surface above. */
+body[data-display-mode="fullscreen"][data-workbench-active="true"] .mcp-workspace {
+  display: none;
+}
+
+body[data-display-mode="fullscreen"][data-workbench-active="true"] .tabula-workbench-host {
+  display: flex;
+}
+
+.tabula-workbench-host > .tabula-embedded-workbench {
+  min-height: 0;
 }
 
 .context-pane,
@@ -330,7 +352,7 @@ body[data-display-mode="inline"] .markdown-preview {
   overflow: hidden;
 }
 
-.markdown-editor {
+.mcp-markdown-editor {
   width: 100%;
   min-height: 320px;
   margin: 0;
@@ -346,7 +368,7 @@ body[data-display-mode="inline"] .markdown-preview {
   font: 13px/1.6 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 
-.markdown-editor:focus {
+.mcp-markdown-editor:focus {
   outline: 2px solid color-mix(in srgb, var(--tabula-text) 18%, transparent);
   outline-offset: -2px;
 }
@@ -440,11 +462,11 @@ body[data-display-mode="inline"] .markdown-preview {
 }
 
 .markdown-pane[data-view-mode="editor"] .markdown-preview,
-.markdown-pane[data-view-mode="preview"] .markdown-editor {
+.markdown-pane[data-view-mode="preview"] .mcp-markdown-editor {
   display: none;
 }
 
-.markdown-pane[data-view-mode="editor"] .markdown-editor {
+.markdown-pane[data-view-mode="editor"] .mcp-markdown-editor {
   border-right: 0;
 }
 
@@ -466,7 +488,7 @@ body[data-display-mode="fullscreen"] .shell {
     justify-content: flex-start;
   }
 
-  .workspace {
+  .mcp-workspace {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -491,7 +513,7 @@ body[data-display-mode="fullscreen"] .shell {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .markdown-pane[data-view-mode="split"] .markdown-editor {
+  .markdown-pane[data-view-mode="split"] .mcp-markdown-editor {
     border-right: 0;
     border-bottom: 1px solid var(--tabula-border);
   }

@@ -20,7 +20,7 @@ const main = async () => {
     readText("dist/document-app.html"),
   ]);
 
-  for (const expected of ["titleInput", "markdownPreview", "data-view-mode", "shareDocumentButton", "openTabulaButton"]) {
+  for (const expected of ["titleInput", "markdownPreview", "data-view-mode", "shareDocumentButton", "openTabulaButton", "tabulaWorkbench"]) {
     assertIncludes(appHtml, expected, "document app source");
     assertIncludes(devHtml, expected, "dev harness");
     assertIncludes(builtHtml, expected, "built document app");
