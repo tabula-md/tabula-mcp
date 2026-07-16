@@ -1,6 +1,6 @@
 {
   "name": "@tabula-md/mcp",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
   "license": "MIT",
   "author": {

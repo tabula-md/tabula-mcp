@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0
+
 - Removed Tabula's private-draft tools and resources. Claude, Codex, and local
   filesystems remain the writing surface; Tabula now receives Markdown only
   when creating an encrypted Copy or live Session.
