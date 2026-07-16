@@ -2,12 +2,17 @@
 
 ## Install the local MCPB
 
+Download the latest public bundle from
+[GitHub Releases](https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb).
+
+For a local development build:
+
 ```sh
 npm ci
 npm run build:mcpb
 ```
 
-Open `dist/tabula-mcp-0.2.0.mcpb`, install it, and restart Claude Desktop. When replacing an older build, a full restart is required because Claude Desktop caches MCP App resources and tool definitions.
+Open `dist/tabula-mcp-0.2.0.mcpb`, install it, and restart Claude Desktop. Packaging also creates stable `dist/tabula-mcp.mcpb` and `dist/tabula-mcp.mcpb.sha256` aliases for the latest-release download. When replacing an older build, a full restart is required because Claude Desktop caches MCP App resources and tool definitions.
 
 ## Use
 
