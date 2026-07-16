@@ -1,16 +1,9 @@
 # Codex CLI
 
-Configure Tabula as a stdio MCP server:
+Add Tabula as a local stdio MCP server:
 
-```json
-{
-  "mcpServers": {
-    "tabula": {
-      "command": "npx",
-      "args": ["-y", "@tabula-md/mcp@latest"]
-    }
-  }
-}
+```sh
+codex mcp add tabula -- npx -y @tabula-md/mcp@latest
 ```
 
 Join and edit a session:

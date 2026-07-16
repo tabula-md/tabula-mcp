@@ -9,17 +9,21 @@ Tabula.md live rooms from agent clients.
 ## Product Direction
 
 - Keep the product Markdown-document-first. Do not turn the MCP App into a
-  dashboard, database, or hosted plaintext processor.
+  dashboard or database.
 - Keep local App documents local unless the user explicitly shares them as an
   encrypted Tabula.md room link.
 - Preserve the Tabula.md room security model.
-- Treat room URLs with `#room=...` as bearer secrets because the fragment contains the room key.
+- Treat room URLs with `#room=...` as bearer secrets because the fragment
+  contains the room key.
 - Keep the MCP process local by default.
-- Default room sessions to read-only.
-- Require explicit write access and hash-guarded patches for edits.
+- Treat hosted MCP as an explicitly disclosed trusted plaintext processor, not
+  as an equivalent privacy mode to local stdio or MCPB.
+- Keep writes host-governed and revision-guarded. `--read-only` is the explicit
+  inspection-only mode.
 - Keep Claude Desktop `.mcpb` installation zero-config. Do not add installer
   prompts for room URLs, room keys, tokens, or write mode.
-- Do not add hosted plaintext processing without an architecture decision.
+- Do not weaken the hosted plaintext trust disclosure or its production
+  security controls without an architecture decision.
 
 ## Commands
 
