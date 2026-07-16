@@ -1,4 +1,10 @@
-import { randomBytes, webcrypto } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import {
+  createShareSnapshotPayloadFromData,
+  encodeEncryptedData,
+  generateEncryptionKey,
+  serializeShareSnapshot,
+} from "@tabula-md/tabula";
 import * as Y from "yjs";
 import { assertProductionEgressAllowed, normalizeServiceUrl } from "./egress-policy.js";
 import {
@@ -6,13 +12,7 @@ import {
   importRoomKey,
   sha256Text,
 } from "./crypto.js";
-import {
-  decodeBase64Url,
-  encodeBase64Url,
-  TabulaMcpError,
-  trimTrailingSlash,
-  type EncryptedEnvelope,
-} from "./protocol.js";
+import { encodeBase64Url, TabulaMcpError, trimTrailingSlash, type EncryptedEnvelope } from "./protocol.js";
 
 const defaultTabulaAppOrigin = "https://tabula.md";
 const defaultTabulaJsonServerUrl = "https://json.tabula.md";
@@ -20,30 +20,13 @@ const localJsonServerPort = 3004;
 const jsonServerAllowlistEnv = "TABULA_MCP_ALLOWED_JSON_SERVER_URLS";
 const roomIdBytes = 16;
 const roomKeyBytes = 32;
-const jsonShareKeyBytes = 32;
 const jsonShareApiPrefix = "/api/v2/";
 const jsonSharePostPath = "/api/v2/post/";
-const shareSnapshotSchemaVersion = 1;
 const mainFileId = "main";
-const encryptedDataMagic = new Uint8Array([0x54, 0x42, 0x45, 0x31]);
-const uint32Bytes = 4;
-const aesGcmIvBytes = 12;
-const textEncoder = new TextEncoder();
-const cryptoImpl = globalThis.crypto ?? webcrypto;
+const shareRootFolderIdBase = "tabula-mcp-root";
+const shareRootFolderTitle = "Tabula.md workspace";
 
 type FetchLike = typeof fetch;
-
-type ShareSnapshotPayload = {
-  schemaVersion: typeof shareSnapshotSchemaVersion;
-  createdAt: string;
-  activeFileId: string;
-  files: Array<{
-    id: string;
-    title: string;
-    text: string;
-  }>;
-  commentsByFileId: Record<string, []>;
-};
 
 type JsonShareCreateResponse = {
   id: string;
@@ -113,22 +96,6 @@ export type SharedMarkdownWorkspace = {
 
 const toArrayBuffer = (bytes: Uint8Array) =>
   bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-
-const concatBuffers = (...buffers: Uint8Array[]) => {
-  const output = new Uint8Array(buffers.reduce((total, buffer) => total + buffer.byteLength, 0));
-  let offset = 0;
-  for (const buffer of buffers) {
-    output.set(buffer, offset);
-    offset += buffer.byteLength;
-  }
-  return output;
-};
-
-const writeUint32 = (value: number) => {
-  const bytes = new Uint8Array(uint32Bytes);
-  new DataView(bytes.buffer).setUint32(0, value, false);
-  return bytes;
-};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -209,7 +176,7 @@ export const generateRoomId = () => encodeBase64Url(randomBytes(roomIdBytes));
 
 export const generateRoomKey = () => encodeBase64Url(randomBytes(roomKeyBytes));
 
-export const generateJsonShareKey = () => encodeBase64Url(randomBytes(jsonShareKeyBytes));
+export const generateJsonShareKey = () => generateEncryptionKey();
 
 export const createRoomShareUrl = ({
   appOrigin = defaultTabulaAppOrigin,
@@ -262,7 +229,18 @@ const normalizeShareFile = (file: ShareMarkdownWorkspaceFile) => ({
   text: file.text,
 });
 
-const createShareSnapshotPayload = ({
+const createShareRootFolderId = (files: readonly ShareMarkdownWorkspaceFile[]) => {
+  const fileIds = new Set(files.map((file) => file.id));
+  let rootFolderId = shareRootFolderIdBase;
+  let suffix = 1;
+  while (fileIds.has(rootFolderId)) {
+    rootFolderId = `${shareRootFolderIdBase}-${suffix}`;
+    suffix += 1;
+  }
+  return rootFolderId;
+};
+
+const createMcpShareSnapshotPayload = ({
   files,
   activeFileId,
   now = () => new Date(),
@@ -270,62 +248,26 @@ const createShareSnapshotPayload = ({
   files: readonly ShareMarkdownWorkspaceFile[];
   activeFileId?: string;
   now?: () => Date;
-}): ShareSnapshotPayload => {
+}) => {
   const snapshotFiles = files.map(normalizeShareFile).filter((file) => file.id);
   if (snapshotFiles.length === 0) {
     throw new TabulaMcpError("At least one Markdown file is required for a Tabula.md snapshot link.");
   }
   const activeFile = snapshotFiles.find((file) => file.id === activeFileId) ?? snapshotFiles[0];
+  const rootFolderId = createShareRootFolderId(snapshotFiles);
 
-  return {
-    schemaVersion: shareSnapshotSchemaVersion,
-    createdAt: now().toISOString(),
+  return createShareSnapshotPayloadFromData({
+    files: snapshotFiles.map((file, index) => ({
+      ...file,
+      parentId: rootFolderId,
+      order: index,
+    })),
+    folders: [{ id: rootFolderId, title: shareRootFolderTitle, parentId: null, order: 0 }],
+    rootFolderId,
     activeFileId: activeFile?.id ?? activeFileId ?? snapshotFiles[0]?.id ?? mainFileId,
-    files: snapshotFiles,
     commentsByFileId: {},
-  };
-};
-
-const serializeShareSnapshot = (payload: ShareSnapshotPayload) => textEncoder.encode(JSON.stringify(payload));
-
-const importJsonShareKey = async (encodedKey: string) => {
-  const rawKey = decodeBase64Url(encodedKey);
-  if (rawKey.byteLength !== jsonShareKeyBytes) {
-    throw new TabulaMcpError(`JSON share key must decode to ${jsonShareKeyBytes} bytes.`);
-  }
-  return cryptoImpl.subtle.importKey("raw", toArrayBuffer(rawKey), "AES-GCM", false, ["encrypt"]);
-};
-
-const encodeEncryptedData = async (
-  data: Uint8Array,
-  {
-    encryptionKey,
-    metadata,
-  }: {
-    encryptionKey: string;
-    metadata: Record<string, unknown>;
-  },
-) => {
-  const encodingInfoBytes = textEncoder.encode(
-    JSON.stringify({
-      version: 1,
-      encryption: "AES-GCM",
-      compression: "none",
-    }),
-  );
-  const metadataBytes = textEncoder.encode(JSON.stringify(metadata));
-  const plaintext = concatBuffers(writeUint32(metadataBytes.byteLength), metadataBytes, data);
-  const iv = new Uint8Array(aesGcmIvBytes);
-  cryptoImpl.getRandomValues(iv);
-  const encrypted = new Uint8Array(
-    await cryptoImpl.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      await importJsonShareKey(encryptionKey),
-      toArrayBuffer(plaintext),
-    ),
-  );
-
-  return concatBuffers(encryptedDataMagic, writeUint32(encodingInfoBytes.byteLength), encodingInfoBytes, iv, encrypted);
+    now,
+  });
 };
 
 export const createEncryptedJsonShareSnapshot = async ({
@@ -339,7 +281,7 @@ export const createEncryptedJsonShareSnapshot = async ({
   snapshotKey: string;
   now?: () => Date;
 }) => {
-  const payload = createShareSnapshotPayload({
+  const payload = createMcpShareSnapshotPayload({
     files: [
       {
         id: mainFileId,
@@ -367,7 +309,7 @@ export const createEncryptedJsonShareWorkspaceSnapshot = async ({
   snapshotKey: string;
   now?: () => Date;
 }) => {
-  const payload = createShareSnapshotPayload({ files, activeFileId, now });
+  const payload = createMcpShareSnapshotPayload({ files, activeFileId, now });
   return encodeEncryptedData(serializeShareSnapshot(payload), {
     encryptionKey: snapshotKey,
     metadata: { kind: "json-share", schemaVersion: payload.schemaVersion },

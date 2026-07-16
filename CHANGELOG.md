@@ -4,6 +4,12 @@
 
 ## 0.1.5
 
+- Aligned encrypted **Open a copy** `#json` snapshots with Tabula.md's shared
+  schema v2 contract, including the workspace root folder and ordered file
+  placement required by the Tabula.md app.
+- Reused the shared Tabula encryption and snapshot codec instead of maintaining
+  a divergent MCP copy, with an interoperability test that decrypts and parses
+  MCP snapshots through the Tabula package.
 - Replaced the MCP App's cloned Markdown editor with a compact Tabula.md
   Session Card. Actual writing and real-time collaboration now always happen
   in Tabula.md through **Open a copy** or **Open session**.
