@@ -237,7 +237,16 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   const appHtml = await readFile(path.join(bundleDir, "server", "document-app.html"), "utf8");
   const icon = await readFile(path.join(bundleDir, "assets", "icon.png"));
   assert(icon.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")), `MCPB ${label} icon must be a PNG file`);
-  for (const expected of ["titleInput", "markdownPreview", "data-view-mode", "shareDocumentButton", "tabulaWorkbench"]) {
+  for (const expected of [
+    "titleInput",
+    "mcp-chrome",
+    "mcp-document-title",
+    "room-handoff-action",
+    "markdownPreview",
+    "data-view-mode",
+    "shareDocumentButton",
+    "tabulaWorkbench",
+  ]) {
     assert(appHtml.includes(expected), `MCPB ${label} Document App is missing ${expected}`);
   }
   assert(!appHtml.includes("dev-only-not-a-real-key"), `MCPB ${label} Document App includes dev-only fixture data`);

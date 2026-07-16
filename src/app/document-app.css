@@ -1,26 +1,30 @@
 :root {
   color-scheme: light;
-  --tabula-bg: var(--color-background-primary, #ffffff);
-  --tabula-surface: var(--color-background-secondary, #ffffff);
-  --tabula-subtle: #f7f7f8;
-  --tabula-text: var(--color-text-primary, #29292d);
-  --tabula-muted: var(--color-text-secondary, #737378);
-  --tabula-border: var(--color-border-primary, #e8e8eb);
-  --tabula-accent: #29292d;
+  /* `workbench.css` is the product source of truth. Keep the light MCP
+   * surface on those same tokens instead of maintaining a lookalike palette. */
+  --tabula-bg: var(--app-background, var(--color-background-primary, #ffffff));
+  --tabula-surface: var(--surface-workbench, var(--color-background-secondary, #ffffff));
+  --tabula-subtle: var(--surface-muted, #f7f7f8);
+  --tabula-text: var(--text-primary, var(--color-text-primary, #1f1f1f));
+  --tabula-muted: var(--text-muted, var(--color-text-secondary, #67676b));
+  --tabula-border: var(--line-subtle, var(--color-border-primary, #eeeeef));
+  --tabula-accent: var(--text-primary, #1f1f1f);
   --tabula-warning: #9a6700;
   --tabula-error: #b42318;
-  font-family: var(--font-sans, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-family:
+    "Geist Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --tabula-bg: var(--color-background-primary, #171719);
-  --tabula-surface: var(--color-background-secondary, #1e1e21);
-  --tabula-subtle: #28282c;
-  --tabula-text: var(--color-text-primary, #f4f4f5);
-  --tabula-muted: var(--color-text-secondary, #a6a6ad);
-  --tabula-border: var(--color-border-primary, #38383e);
-  --tabula-accent: #f4f4f5;
+  --tabula-bg: var(--app-background, var(--color-background-primary, #111111));
+  --tabula-surface: var(--surface-workbench, var(--color-background-secondary, #111111));
+  --tabula-subtle: var(--surface-muted, #232325);
+  --tabula-text: var(--text-primary, var(--color-text-primary, #ededee));
+  --tabula-muted: var(--text-muted, var(--color-text-secondary, #9a9aa0));
+  --tabula-border: var(--line-subtle, var(--color-border-primary, #333337));
+  --tabula-accent: var(--text-primary, #ededee);
 }
 
 * {
@@ -31,36 +35,15 @@ html,
 body {
   margin: 0;
   min-height: 0;
-  background: transparent;
+  background: var(--tabula-bg);
   color: var(--tabula-text);
 }
 
-button {
-  min-height: 32px;
-  border: 1px solid var(--tabula-border);
-  border-radius: 7px;
-  background: var(--tabula-surface);
-  color: var(--tabula-text);
-  font: inherit;
-  font-size: 13px;
-  padding: 0 10px;
-  cursor: pointer;
-}
-
-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--tabula-text) 20%, var(--tabula-border));
-  background: var(--tabula-subtle);
-}
-
-button:focus-visible,
-.title-input:not(:read-only):focus {
+.mcp-chrome button:focus-visible,
+.room-handoff-action:focus-visible,
+.mcp-document-title:not(:read-only):focus {
   outline: 2px solid color-mix(in srgb, var(--tabula-text) 25%, transparent);
   outline-offset: 1px;
-}
-
-button:disabled {
-  cursor: default;
-  opacity: 0.5;
 }
 
 .shell {
@@ -70,59 +53,83 @@ button:disabled {
   background: var(--tabula-bg);
 }
 
-.toolbar {
+.mcp-chrome {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 48px;
+  min-height: 50px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--tabula-border);
-  background: var(--tabula-surface);
+  background: var(--tabula-bg);
 }
 
-.identity {
+.mcp-document-tab {
   display: flex;
-  min-width: 0;
-  flex: 1;
   align-items: center;
-  gap: 8px;
-}
-
-.brand {
-  display: none;
-}
-
-.title-input {
-  width: min(520px, 100%);
+  flex: 0 1 136px;
+  width: 136px;
   min-width: 0;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--tabula-text);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 5px 7px;
-}
-
-.title-input:not(:read-only):hover {
+  height: 34px;
+  border-radius: 8px;
   background: var(--tabula-subtle);
 }
 
-.title-input:read-only {
+.mcp-document-title {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--tabula-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.actions {
+.mcp-document-title:not(:read-only):hover {
+  background: var(--surface-hover, var(--tabula-subtle));
+}
+
+.mcp-document-title:disabled,
+.mcp-document-title:read-only {
+  color: var(--tabula-text);
+  cursor: default;
+  opacity: 1;
+}
+
+.mcp-chrome-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 4px;
 }
 
-.actions button {
-  min-height: 30px;
+.mcp-chrome-actions button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-soft, var(--tabula-muted));
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mcp-chrome-actions button:hover:not(:disabled) {
+  color: var(--tabula-text);
+  background: var(--tabula-subtle);
+}
+
+.mcp-chrome-actions button:disabled {
+  display: none;
 }
 
 /*
@@ -142,31 +149,38 @@ body[data-display-mode="inline"] .shell {
   background: transparent;
 }
 
-body[data-display-mode="inline"] .toolbar {
+body[data-display-mode="inline"] .mcp-chrome {
   min-height: 40px;
-  padding: 4px 6px 4px 8px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--tabula-border);
   background: transparent;
 }
 
-body[data-display-mode="inline"] .title-input {
-  padding-left: 4px;
+body[data-display-mode="inline"] .mcp-document-tab {
+  flex-basis: min(136px, 100%);
+  width: min(136px, 100%);
+  height: 28px;
+  background: transparent;
+}
+
+body[data-display-mode="inline"] .mcp-document-title {
+  padding: 0;
+  border-radius: 0;
   font-size: 13px;
 }
 
-body[data-display-mode="inline"] .actions {
+body[data-display-mode="inline"] .mcp-chrome-actions {
   gap: 2px;
 }
 
-body[data-display-mode="inline"] .actions button {
+body[data-display-mode="inline"] .mcp-chrome-actions button {
   min-height: 28px;
-  border-color: transparent;
+  border: 0;
   background: transparent;
   padding: 0 7px;
 }
 
-body[data-display-mode="inline"] .actions button:hover:not(:disabled) {
-  border-color: var(--tabula-border);
+body[data-display-mode="inline"] .mcp-chrome-actions button:hover:not(:disabled) {
   background: var(--tabula-subtle);
 }
 
@@ -186,6 +200,112 @@ body[data-display-mode="inline"] .markdown-preview {
   padding: 18px 16px 24px;
 }
 
+/* The inline card is a handoff, not an imitation of a second full editor.
+ * A live Room is opened in Tabula.md, where its real-time editor lives. */
+.room-handoff {
+  display: none;
+}
+
+body[data-display-mode="fullscreen"][data-surface-kind="room"] .mcp-workspace,
+body[data-display-mode="fullscreen"][data-surface-kind="room"] .tabula-workbench-host,
+body[data-display-mode="fullscreen"][data-surface-kind="room"] .fullscreen-only,
+body[data-display-mode="fullscreen"][data-surface-kind="room"] #displayModeButton,
+body[data-display-mode="fullscreen"][data-surface-kind="room"] .handoff-action {
+  display: none;
+}
+
+body[data-display-mode="fullscreen"][data-surface-kind="room"] .room-handoff {
+  display: grid;
+  min-height: calc(100vh - 50px);
+  flex: 1;
+  place-items: center;
+  padding: 24px;
+}
+
+.room-handoff-content {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: min(440px, 100%);
+  text-align: center;
+  transform: translateY(-8px);
+}
+
+.room-handoff-mark {
+  width: 112px;
+  height: 112px;
+  margin: 0;
+  object-fit: contain;
+  opacity: 0.14;
+}
+
+.room-handoff-eyebrow {
+  margin: 0;
+  color: var(--tabula-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.room-handoff h1 {
+  margin: 0;
+  color: var(--tabula-text);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.room-handoff-summary {
+  max-width: 420px;
+  margin: 0;
+  color: var(--tabula-muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.room-handoff-meta {
+  margin: 0;
+  color: var(--tabula-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.room-handoff-action {
+  width: min(320px, 100%);
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-soft, var(--tabula-muted));
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+
+.room-handoff-action:hover:not(:disabled) {
+  color: var(--tabula-text);
+  background: var(--tabula-subtle);
+}
+
+.room-handoff-action:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+body[data-display-mode="fullscreen"][data-surface-kind="document"] .handoff-action {
+  display: none;
+}
+
+/* Successful local actions are already reflected in the workbench. Keep the
+ * editor chrome quiet; warnings and errors remain visible for recovery. */
+body[data-display-mode="fullscreen"][data-surface-kind="document"] .message[data-tone="neutral"] {
+  display: none;
+}
+
 /* MCP internals still update these elements for tool behavior, but they are
  * not part of a person's document collaboration surface. */
 .status-grid {
@@ -197,12 +317,18 @@ body[data-display-mode="inline"] .markdown-preview {
 }
 
 .message {
-  min-height: 0;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--tabula-border);
+  position: fixed;
+  z-index: 10;
+  right: 20px;
+  bottom: 20px;
+  max-width: min(420px, calc(100vw - 40px));
+  padding: 9px 12px;
+  border: 1px solid var(--tabula-border);
+  border-radius: 9px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--tabula-text) 12%, transparent);
   color: var(--tabula-muted);
   background: var(--tabula-surface);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .message:empty {
@@ -474,17 +600,17 @@ body[data-display-mode="fullscreen"][data-workbench-active="true"] .tabula-workb
   min-height: 420px;
 }
 
-body[data-display-mode="fullscreen"] .shell {
+body[data-display-mode="fullscreen"] .mcp-shell {
   min-height: 100vh;
 }
 
 @media (max-width: 760px) {
-  .toolbar {
+  .mcp-chrome {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .actions {
+  .mcp-chrome-actions {
     justify-content: flex-start;
   }
 
@@ -520,20 +646,20 @@ body[data-display-mode="fullscreen"] .shell {
 }
 
 @media (max-width: 500px) {
-  body[data-display-mode="inline"] .toolbar {
+  body[data-display-mode="inline"] .mcp-chrome {
     align-items: center;
     flex-direction: row;
   }
 
-  body[data-display-mode="inline"] .title-input {
+  body[data-display-mode="inline"] .mcp-document-tab {
     width: 100%;
   }
 
-  body[data-display-mode="inline"] .actions {
+  body[data-display-mode="inline"] .mcp-chrome-actions {
     flex-wrap: nowrap;
   }
 
-  body[data-display-mode="inline"] .actions button {
+  body[data-display-mode="inline"] .mcp-chrome-actions button {
     white-space: nowrap;
   }
 }

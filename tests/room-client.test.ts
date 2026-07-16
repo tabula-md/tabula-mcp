@@ -310,6 +310,7 @@ describe("TabulaRoomClient protocol v2", () => {
         status: "connected",
         recoveryMode: "temporary",
         hydrationStatus: "ready",
+        activeDocumentTitle: "Draft.md",
         checkpointStatus: { enabled: false, status: "disabled" },
       });
       await expect(client.readWorkspaceDocument({ documentId: "doc_1" })).resolves.toMatchObject({

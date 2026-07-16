@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { TabulaEmbeddedDocumentWorkbench } from "@tabula-md/tabula/workbench";
 import "@tabula-md/tabula/workbench.css";
+import tabulaLogoUrl from "../../assets/icon.png";
 import { createMarkdownChangeSummary, formatDocumentChangeMessage } from "./change-summary.js";
 import { createSelectionContext, formatSelectionContextMessage } from "./selection-context.js";
 import {
@@ -28,6 +29,12 @@ const elements = {
   markdownPane: document.querySelector(".markdown-pane"),
   markdownPreview: document.getElementById("markdownPreview"),
   workbench: document.getElementById("tabulaWorkbench"),
+  roomHandoff: document.getElementById("roomHandoff"),
+  roomHandoffMark: document.getElementById("roomHandoffMark"),
+  roomHandoffTitle: document.getElementById("roomHandoffTitle"),
+  roomHandoffSummary: document.getElementById("roomHandoffSummary"),
+  roomHandoffMeta: document.getElementById("roomHandoffMeta"),
+  openSessionCardButton: document.getElementById("openSessionCardButton"),
   viewModeButtons: document.querySelectorAll("[data-view-mode]"),
   contextTabButtons: document.querySelectorAll("[data-context-tab]"),
   textLength: document.getElementById("textLength"),
@@ -49,6 +56,9 @@ const state = {
   sessionId: "",
   roomId: "",
   shareUrl: "",
+  roomStatus: "",
+  roomHydrationStatus: "",
+  roomPeerCount: 0,
   sha256: "",
   lastSavedMarkdown: "",
   lastSavedTitle: "",
@@ -62,9 +72,19 @@ const state = {
   workbenchRoot: null,
 };
 
+let messageTimeout;
+
 const setMessage = (text, tone = "neutral") => {
+  window.clearTimeout(messageTimeout);
   elements.message.textContent = text;
   elements.message.dataset.tone = tone;
+  if (text && tone === "neutral") {
+    messageTimeout = window.setTimeout(() => {
+      if (elements.message.textContent === text) {
+        elements.message.textContent = "";
+      }
+    }, 2_500);
+  }
 };
 
 const setDraftStatus = (text, tone = "neutral") => {
@@ -105,10 +125,14 @@ const updateDocumentActionState = () => {
   elements.saveDocumentButton.disabled = !isDocument || !hasSavedContentChanges;
   elements.sendChangesButton.disabled = !hasContextChanges;
   elements.shareDocumentButton.disabled = !isDocument;
+  elements.sendSelectionButton.disabled = !isDocument || !state.selectedText;
   elements.openTabulaButton.disabled = !isDocument && !isRoom;
   elements.openTabulaButton.textContent = isRoom ? "Open session" : "Open a copy";
+  elements.openTabulaButton.hidden = !isDocument && !isRoom;
   elements.startSessionButton.hidden = !isDocument;
   elements.startSessionButton.disabled = !isDocument;
+  elements.displayModeButton.hidden = state.mode === "room";
+  elements.openSessionCardButton.disabled = !isRoom;
   updateTitleInputState();
 };
 
@@ -158,6 +182,7 @@ const renderWorkbench = () => {
       },
       onSelectedTextChange: (selectedText) => {
         state.selectedText = selectedText;
+        updateDocumentActionState();
       },
     }),
   );
@@ -181,6 +206,20 @@ const setDisplayMode = (displayMode) => {
   setViewMode(displayMode === "fullscreen" ? state.editViewMode : "preview");
   updateTitleInputState();
   renderWorkbench();
+};
+
+const renderRoomHandoff = (summary) => {
+  const peerCount = Number(summary?.peerCount ?? state.roomPeerCount ?? 0);
+  const waitingForWorkspaceState = summary?.stateReceived === false;
+  const canWrite = summary?.writeAccess === true;
+
+  elements.roomHandoffTitle.textContent = state.title || "Untitled session";
+  elements.roomHandoffSummary.textContent = waitingForWorkspaceState
+    ? "Connected to an encrypted session. Waiting for a collaborator to share the workspace state."
+    : "This encrypted session is live in Tabula.md. Open it to write and collaborate with people or agents.";
+  elements.roomHandoffMeta.textContent = canWrite
+    ? `${peerCount} collaborator${peerCount === 1 ? "" : "s"} connected · Write access available`
+    : `${peerCount} collaborator${peerCount === 1 ? "" : "s"} connected · MCP view is read-only`;
 };
 
 const setContextView = (contextView) => {
@@ -220,7 +259,14 @@ const renderDocumentSummary = (summary) => {
   state.mode = "document";
   state.documentId = summary.documentId || state.documentId;
   state.title = summary.title || state.title;
+  state.sessionId = "";
+  state.roomId = "";
+  state.shareUrl = "";
+  state.roomStatus = "";
+  state.roomHydrationStatus = "";
+  state.roomPeerCount = 0;
   state.sha256 = summary.sha256 || state.sha256;
+  document.body.dataset.surfaceKind = "document";
 
   elements.titleInput.value = state.title || "Untitled Document";
   elements.connectionStatus.textContent = "Local";
@@ -242,18 +288,24 @@ const renderRoomSummary = (summary) => {
   state.sessionId = summary.sessionId || state.sessionId;
   state.roomId = summary.roomId || state.roomId;
   state.shareUrl = summary.shareUrl || state.shareUrl;
+  state.title = summary.title || state.title || "Untitled session";
+  state.roomStatus = summary.status || state.roomStatus;
+  state.roomHydrationStatus = summary.hydrationStatus || state.roomHydrationStatus;
+  state.roomPeerCount = Number(summary.peerCount ?? state.roomPeerCount ?? 0);
   state.sha256 = summary.sha256 || state.sha256;
+  document.body.dataset.surfaceKind = "room";
 
-  elements.titleInput.value = state.roomId || "Room";
+  elements.titleInput.value = state.title;
   elements.connectionStatus.textContent = summary.status || "unknown";
   elements.writeMode.textContent = summary.writeAccess ? "Write-enabled" : "Read-only";
   elements.shaValue.textContent = shortHash(summary.sha256);
-  elements.peerCount.textContent = String(summary.peerCount ?? 0);
+  elements.peerCount.textContent = String(state.roomPeerCount);
   elements.textLength.textContent = `${summary.textLength ?? 0} chars`;
   setDraftStatus("Not used");
   state.lastSavedMarkdown = "";
-  state.lastSavedTitle = state.roomId || "Room";
+  state.lastSavedTitle = state.title;
   elements.markdownEditor.readOnly = true;
+  renderRoomHandoff(summary);
   updateDocumentActionState();
 };
 
@@ -443,6 +495,10 @@ const loadSnapshot = async () => {
     }
 
     const renderResult = renderSnapshot(result.structuredContent);
+    if (state.mode === "room" && !renderResult.waitingForWorkspaceState) {
+      setMessage("");
+      return;
+    }
     setMessage(
       renderResult.draftRestored
         ? renderResult.message
@@ -607,7 +663,7 @@ const openInTabula = async () => {
   if (state.mode === "room" && state.shareUrl) {
     try {
       await openExternalLink(state.shareUrl, "Open session");
-      setMessage("Opened Tabula.md session.");
+      setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not open the Tabula.md session.", "error");
     }
@@ -796,7 +852,7 @@ const createAppClient = () => {
   }
 
   return new App(
-    { name: "Tabula Document", version: "0.1.3" },
+    { name: "Tabula Document", version: "0.1.4" },
     { availableDisplayModes: ["inline", "fullscreen"] },
   );
 };
@@ -827,7 +883,11 @@ const boot = async () => {
 
     if (result.structuredContent?.document || result.structuredContent?.markdown) {
       const renderResult = renderSnapshot(result.structuredContent);
-      const readyMessage = result.structuredContent?.document ? "Tabula.md document is ready." : "Tabula.md content is ready.";
+      const readyMessage = result.structuredContent?.document
+        ? "Tabula.md document is ready."
+        : state.mode === "room"
+          ? ""
+          : "Tabula.md content is ready.";
       setMessage(
         renderResult.draftRestored ? renderResult.message : readyMessage,
         renderResult.draftRestored ? "warning" : "neutral",
@@ -847,6 +907,7 @@ const boot = async () => {
   elements.saveDocumentButton.addEventListener("click", () => void saveDocument());
   elements.sendChangesButton.addEventListener("click", () => void sendChanges());
   elements.openTabulaButton.addEventListener("click", () => void openInTabula());
+  elements.openSessionCardButton.addEventListener("click", () => void openInTabula());
   elements.startSessionButton.addEventListener("click", () => void startSession());
   elements.shareDocumentButton.addEventListener("click", () => void shareDocument());
   elements.refreshButton.addEventListener("click", () => void loadSnapshot());
@@ -885,6 +946,8 @@ const boot = async () => {
     setMessage("Document has unsaved changes.", "warning");
   });
 
+  elements.roomHandoffMark.src = tabulaLogoUrl;
+  document.body.dataset.surfaceKind = "idle";
   setDisplayMode(state.displayMode);
   setContextView(state.contextView);
   await app.connect();

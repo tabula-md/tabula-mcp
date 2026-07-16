@@ -432,6 +432,9 @@ export class TabulaRoomClient {
 
   async getStatus() {
     const workspace = await this.projectWorkspaceState();
+    const activeDocumentTitle = this.activeDocumentId
+      ? this.getDocumentNode(this.activeDocumentId)?.title
+      : undefined;
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
@@ -449,6 +452,7 @@ export class TabulaRoomClient {
       collaborators: this.collaboratorList,
       workspaceMode: true,
       activeDocumentId: this.activeDocumentId,
+      activeDocumentTitle,
       workspaceVersion: workspace.version,
       recoveryMode: this.recoveryMode,
       checkpointStatus: this.checkpointStatusValue,
