@@ -80,13 +80,14 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const writeEnabled = options.writeEnabled ?? resolveWriteEnabled({ env: env as NodeJS.ProcessEnv | undefined });
   const allowRoomTools = options.allowRoomTools ?? true;
   const deploymentMode = resolveDocumentStoreDeploymentMode({ deploymentMode: options.deploymentMode });
+  const allowTemporaryRooms = deploymentMode === "local";
   const documentStore = options.documentStore ?? createDefaultDocumentStore({ deploymentMode });
   const registry = new SessionRegistry();
   const workspaces = new WorkspaceRegistry();
   const documents = new DocumentRegistry(documentStore);
   const server = new McpServer({
     name: "tabula-mcp",
-    version: "0.1.2",
+    version: "0.1.3",
   });
 
   registerDocumentAppResource(server, { documentAppHtml: options.documentAppHtml });
@@ -94,7 +95,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
 
   let documentAppToolsRegistered = false;
   const registerAppTools = () => {
-    registerDocumentAppTools(server, registry, documents, { allowRoomTools });
+    registerDocumentAppTools(server, registry, documents, { allowRoomTools, allowTemporaryRooms, env });
     documentAppToolsRegistered = true;
   };
   if (options.forceDocumentAppTools) {
@@ -113,7 +114,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
 
   registerReadMeTool(server);
   if (allowRoomTools) {
-    registerRoomTools(server, registry, workspaces, { env, writeEnabled });
+    registerRoomTools(server, registry, workspaces, { env, writeEnabled, allowTemporaryRooms });
   }
 
   return { server, registry, workspaces, documents, writeEnabled, deploymentMode, documentStoreKind: documentStore.kind };

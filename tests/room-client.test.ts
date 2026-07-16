@@ -287,4 +287,36 @@ describe("TabulaRoomClient protocol v2", () => {
       client.disconnect();
     }
   });
+
+  it("starts a temporary room without checkpoint persistence", async () => {
+    const relay = createMemoryRelay();
+    const client = createClient({
+      relay,
+      writeAccess: true,
+      checkpointStore: createDisabledCheckpointStore(),
+      identityName: "Claude",
+    });
+    try {
+      await expect(client.publishWorkspaceSnapshot({
+        workspace: await createWorkspaceState("# Temporary room\n"),
+        documents: [{ documentId: "doc_1", title: "Draft.md", markdown: "# Temporary room\n" }],
+      })).resolves.toMatchObject({
+        emittedWorkspace: true,
+        checkpointStatus: { enabled: false, status: "disabled" },
+      });
+
+      await expect(client.connect()).resolves.toBe("local-bootstrap");
+      await expect(client.getStatus()).resolves.toMatchObject({
+        status: "connected",
+        recoveryMode: "temporary",
+        hydrationStatus: "ready",
+        checkpointStatus: { enabled: false, status: "disabled" },
+      });
+      await expect(client.readWorkspaceDocument({ documentId: "doc_1" })).resolves.toMatchObject({
+        markdown: "# Temporary room\n",
+      });
+    } finally {
+      client.disconnect();
+    }
+  });
 });

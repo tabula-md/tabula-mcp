@@ -135,7 +135,8 @@ const runDocumentFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
   await waitForMessage(page, "Tabula.md document is ready.");
-  await page.getByRole("button", { name: "Open in Tabula" }).waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Open a copy" }).waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Start session" }).waitFor({ state: "visible" });
   await assertInlineDocumentPresentation(page, "inline document");
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
@@ -236,6 +237,22 @@ const runDocumentFlow = async (baseUrl, browser) => {
     "share change context should not include the full Markdown body",
   );
 
+  await page.getByRole("button", { name: "Open a copy" }).click();
+  await waitForMessage(page, "Opened a Tabula.md copy.");
+  assert(
+    (await getDevEvents(page)).toolCalls.some((call) => call?.name === "tabula_share_document"),
+    "Open a copy should explicitly export a JSON snapshot",
+  );
+
+  await page.getByRole("button", { name: "Start session" }).click();
+  await waitForMessage(page, "Tabula.md session is ready.");
+  await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
+  assert.equal(await page.getByRole("button", { name: "Start session" }).isVisible(), false);
+  await page.getByRole("button", { name: "Open session" }).click();
+  await waitForMessage(page, "Opened Tabula.md session.");
+  const openedRoom = (await getDevEvents(page)).toolCalls.find((call) => call?.name === "tabula_app_start_room_from_document");
+  assert(openedRoom, "Start session should create a Room from the local document");
+
   assertNoPageErrors(consoleErrors, pageErrors);
   await page.close();
 };
@@ -308,6 +325,8 @@ const runRoomFlow = async (baseUrl, browser) => {
     events.displayModes.some((event) => event?.mode === "fullscreen"),
     "room flow should exercise display mode requests",
   );
+  await page.getByRole("button", { name: "Open session" }).click();
+  await waitForMessage(page, "Opened Tabula.md session.");
 
   assertNoPageErrors(consoleErrors, pageErrors);
   await page.close();

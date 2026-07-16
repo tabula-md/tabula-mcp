@@ -44,13 +44,16 @@ directly from an MCP tool inspector.
 Expected behavior:
 
 1. Claude opens the Tabula.md Document App.
-2. Inline mode shows the Markdown preview with `Open in Tabula` and `Edit`.
+2. Inline mode shows the Markdown preview with **Open a copy**, **Start
+   session**, and `Edit`.
 3. Clicking `Edit` opens fullscreen editing, where title editing and
    Editor/Split/Preview modes work.
 4. Save stores the document in the local MCP server process.
 5. Send Changes posts a compact edit summary back into model context.
 6. Share creates an encrypted `https://tabula.md/#json=...,...` link. If the
    App has unsent edits, the share handoff also includes a compact edit summary.
+7. Click **Start session**. Confirm the view becomes a connected Room and its
+   primary action changes to **Open session**. The opened URL must use `#room=`.
 
 Local App documents are checkpointed as plaintext files on this machine so they
 can recover across MCP process restarts. They are not uploaded to Tabula.md room
@@ -121,7 +124,8 @@ After installing the MCPB in Claude Desktop:
 
 1. Ask Claude: `Call tabula_read_me for document guidance.`
 2. Ask Claude: `Create a Tabula.md document titled Release Notes.`
-3. Confirm the inline view shows preview plus `Open in Tabula` and `Edit`.
+3. Confirm the inline view shows preview plus **Open a copy**, **Start
+   session**, and `Edit`.
 4. Click `Edit`, update the title and Markdown, then click Save.
 5. Ask Claude to call `tabula_list_documents` and confirm the saved document is
    listed.
@@ -130,6 +134,8 @@ After installing the MCPB in Claude Desktop:
 8. Make one more small edit, click Share, and confirm Claude receives both a
    snapshot URL with `#json=` and a compact edit summary for the unsent change.
 9. Open the share URL in Tabula.md and confirm the snapshot import flow starts.
+10. Click **Start session**, then confirm the Room view's **Open session**
+    action opens a `#room=` URL in Tabula.md.
 
 If the App fails to open, verify that the MCPB contains `server/document-app.html`
 and that `npm run check:mcpb` passes.

@@ -1,7 +1,7 @@
 {
   "name": "tabula-mcp",
   "description": "Shared Markdown workspaces for people and Claude through Tabula.md rooms.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "author": {
     "name": "Tabula.md"
   }

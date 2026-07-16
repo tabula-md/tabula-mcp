@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { tabulaDocumentAppResourceUri } from "../src/app/types.js";
-import { MemoryDocumentStore } from "../src/documents/store.js";
+import { MemoryDocumentStore, type DocumentStoreDeploymentMode } from "../src/documents/store.js";
 import { createTabulaMcpServer, resolveWriteEnabled } from "../src/index.js";
 import { workspaceDocumentResourceUri, workspaceResourceUri } from "../src/workspace-resources.js";
 
@@ -23,13 +23,14 @@ const uiCapabilities = {
 const withClient = async <T>(
   writeEnabled: boolean,
   callback: (client: Client) => Promise<T>,
-  options: { env?: Record<string, string | undefined>; mcpApps?: boolean } = {},
+  options: { env?: Record<string, string | undefined>; mcpApps?: boolean; deploymentMode?: DocumentStoreDeploymentMode } = {},
 ) => {
   const env = Object.hasOwn(options, "env") ? options.env : {};
   const { server, registry, workspaces, documents } = createTabulaMcpServer({
     writeEnabled,
     documentStore: new MemoryDocumentStore(),
     env,
+    deploymentMode: options.deploymentMode,
   });
   const client = new Client(
     { name: "tabula-mcp-test", version: "0.0.0" },
@@ -171,6 +172,29 @@ describe("MCP tool registration", () => {
         sessions: [],
       });
     });
+  });
+
+  it("does not let hosted MCP create a temporary Room without encrypted recovery", async () => {
+    await withClient(false, async (client) => {
+      const created = await client.callTool({
+        name: "tabula_create_workspace",
+        arguments: {
+          title: "Remote workspace",
+          files: [{ path: "README.md", markdown: "# Remote workspace\n" }],
+        },
+      });
+      const workspaceId = (created.structuredContent as { workspaceId: string }).workspaceId;
+      const started = await client.callTool({
+        name: "tabula_create_workspace_room",
+        arguments: { workspaceId },
+      });
+      const text = started.content?.find((item) => item.type === "text");
+
+      expect(started.isError).toBe(true);
+      expect(text).toMatchObject({
+        text: expect.stringContaining("Hosted Tabula MCP can start a live session only when encrypted room persistence is configured"),
+      });
+    }, { deploymentMode: "remote" });
   });
 
   it("creates, reads, imports, and shares model-facing workspaces without MCP Apps", async () => {
@@ -573,6 +597,7 @@ describe("MCP tool registration", () => {
     expect(toolNames).not.toContain("tabula_app_room_snapshot");
     expect(toolNames).not.toContain("tabula_app_document_snapshot");
     expect(toolNames).not.toContain("tabula_app_save_document");
+    expect(toolNames).not.toContain("tabula_app_start_room_from_document");
   });
 
   it("registers a Tabula Document MCP App for MCP Apps clients and keeps app helpers app-only", async () => {
@@ -585,6 +610,7 @@ describe("MCP tool registration", () => {
     const appSnapshotTool = tools.tools.find((tool) => tool.name === "tabula_app_room_snapshot");
     const appDocumentSnapshotTool = tools.tools.find((tool) => tool.name === "tabula_app_document_snapshot");
     const appSaveDocumentTool = tools.tools.find((tool) => tool.name === "tabula_app_save_document");
+    const appStartRoomTool = tools.tools.find((tool) => tool.name === "tabula_app_start_room_from_document");
 
     expect(jsonBytes(tools)).toBeLessThan(48_000);
     expect(createDocumentTool?._meta).toMatchObject({
@@ -628,6 +654,11 @@ describe("MCP tool registration", () => {
         visibility: ["app"],
       },
     });
+    expect(appStartRoomTool?._meta).toMatchObject({
+      ui: {
+        visibility: ["app"],
+      },
+    });
     for (const tool of [
       createDocumentTool,
       listDocumentsTool,
@@ -637,6 +668,7 @@ describe("MCP tool registration", () => {
       appSnapshotTool,
       appDocumentSnapshotTool,
       appSaveDocumentTool,
+      appStartRoomTool,
     ]) {
       expect(tool?.outputSchema).toBeUndefined();
     }
