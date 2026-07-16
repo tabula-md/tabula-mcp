@@ -7,11 +7,11 @@ App, which is the broad directory path, and the local Claude Desktop extension.
 
 ## Product summary
 
-**Tabula.md MCP** connects Claude to shared Tabula.md Markdown workspaces.
-People work in Tabula.md while Claude reads and changes the same files through
-MCP. The local MCPB keeps working drafts on the user’s device. Complete `#room`
-and `#json` URLs are bearer secrets; Tabula’s relay and snapshot services
-receive encrypted data only.
+**Tabula.md MCP** gives Claude a file-oriented interface for private Markdown
+drafts, encrypted live sessions, and fixed encrypted copies. It is local by default: Markdown draft
+checkpoints stay on the user’s device. A room key or snapshot key stays in the
+share URL fragment while Tabula’s relay and snapshot services receive encrypted
+bytes only.
 
 ## Remote MCP App submission
 
@@ -21,12 +21,11 @@ Use the **MCP directory submission form** for the public, stateful endpoint:
 - Transport: Streamable HTTP with a stateful Durable Object session
 - Authentication: none; this public endpoint is intentionally unauthenticated
   and does not require test credentials or OAuth setup
-- Test flow: connect, call `tabula_create_workspace` with one inline Markdown
-  file, then call `tabula_read_workspace` using the returned workspace id. The
-  reviewer should see one document, proving that the MCP session retained the
-  workspace state.
+- Test flow: call `tabula_create_draft`, then `tabula_update_draft` with the
+  returned draft id and revision. The second call should return `changed=true`,
+  proving that the MCP session retained the private draft.
 - Allowed external-link URI: `https://tabula.md`
-- Read/write surface: separate read tools and explicit create/share/change
+- Read/write surface: nine high-level draft/session/file/copy tools
   tools; every model-facing tool declares a human-readable `title`,
   `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`.
 
@@ -43,7 +42,7 @@ drafts to remain on their own machine.
 ## Submission values
 
 - Product name: `Tabula.md MCP`
-- MCPB artifact: `dist/tabula-mcp-0.1.7.mcpb`
+- MCPB artifact: `dist/tabula-mcp-0.2.0.mcpb`
 - Privacy policy: `https://mcp.tabula.md/privacy`
 - Support:
   `https://github.com/tabula-md/tabula-mcp/issues`
@@ -65,23 +64,19 @@ when the submission UI asks for it.
 
 | Screenshot | Paired user prompt | What the reviewer sees |
 | --- | --- | --- |
-| `assets/directory/local-draft-card.png` | “Create a Markdown brief titled Launch Brief and open it in Tabula.md.” | Private-draft handoff with **Open a copy** and **Start session**. |
-| `assets/directory/live-session-card.png` | “Start a Tabula.md session for Launch Brief.” | Newly started live session with **Open session** and Claude’s collaborator state. |
-| `assets/directory/connected-session-card.png` | “Join this Tabula.md session and summarize its Markdown without changing it.” | Existing live-session handoff with a clear continuation into Tabula.md. |
-
-Regenerate all three captures from the current Session Card with
-`npm run capture:directory-assets`. The readiness check verifies their names,
-format, and 1440 × 1024 dimensions.
+| `assets/directory/local-draft-card.png` | “Create a Markdown brief titled Launch Brief in Tabula.” | Compact private Draft handoff with **Open a copy** and **Start session**. |
+| `assets/directory/live-session-card.png` | “Start a Tabula session for Launch Brief.” | Live Session with **Open session**, **Export copy**, and truthful collaborator state. |
+| `assets/directory/connected-session-card.png` | “Join this Tabula room and summarize its Markdown.” | Connected Session handoff with a clear continuation into Tabula.md. |
 
 ## Directory and organization rollout
 
-1. Publish the matching `@tabula-md/mcp@0.1.7` npm release before distributing
+1. Publish the matching `@tabula-md/mcp@0.2.0` npm release before distributing
    the Claude Code plugin; its plugin configuration is intentionally pinned to
    that exact version.
 2. Build and validate the artifact with `npm run release:pack`.
 3. Submit the remote `https://mcp.tabula.md/mcp` MCP App through the MCP
    directory submission flow, including the three paired screenshots.
-4. Submit the local `dist/tabula-mcp-0.1.7.mcpb` through the Desktop Extension
+4. Submit the local `dist/tabula-mcp-0.2.0.mcpb` through the Desktop Extension
    submission flow, including the same privacy-policy URL.
 5. For a customer-specific Team or Enterprise rollout, the customer’s owner
    uploads the same MCPB in **Organization settings → Connectors → Desktop →

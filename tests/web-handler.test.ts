@@ -21,7 +21,7 @@ describe("Tabula MCP Web handler", () => {
     const response = await handler.fetch(new Request("https://mcp.example.com/"));
 
     await expect(response.json()).resolves.toMatchObject({
-      description: "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
+      description: "Create private Markdown drafts and work with people or agents in live Tabula sessions.",
     });
   });
 
@@ -37,12 +37,12 @@ describe("Tabula MCP Web handler", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       service: "tabula-mcp",
-      version: "0.1.7",
+      version: "0.2.0",
       writeAccess: "enabled",
       deploymentMode: "remote",
       documentStore: "memory",
     });
-    expect(handler.version).toBe("0.1.7");
+    expect(handler.version).toBe("0.2.0");
     expect(handler.writeAccess).toBe("enabled");
   });
 
@@ -63,7 +63,7 @@ describe("Tabula MCP Web handler", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       service: "tabula-mcp",
-      version: "0.1.7",
+      version: "0.2.0",
       writeAccess: "enabled",
       deploymentMode: "remote",
       documentStore: "memory",
@@ -85,7 +85,7 @@ describe("Tabula MCP Web handler", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: false,
       service: "tabula-mcp",
-      version: "0.1.7",
+      version: "0.2.0",
       writeAccess: "enabled",
       deploymentMode: "remote",
       documentStore: "memory",
@@ -112,7 +112,17 @@ describe("Tabula MCP Web handler", () => {
       );
       const tools = await client.listTools();
 
-      expect(tools.tools.map((tool) => tool.name)).toContain("tabula_read_me");
+      expect(tools.tools.map((tool) => tool.name)).toEqual([
+        "tabula_create_draft",
+        "tabula_update_draft",
+        "tabula_start_session",
+        "tabula_join_room",
+        "tabula_list_files",
+        "tabula_read_file",
+        "tabula_search_files",
+        "tabula_write_file",
+        "tabula_export_copy",
+      ]);
     } finally {
       await client.close();
     }
@@ -160,16 +170,17 @@ describe("Tabula MCP Web handler", () => {
       const tools = await client.listTools();
       const toolNames = tools.tools.map((tool) => tool.name);
 
-      expect(toolNames).toContain("tabula_read_me");
-      expect(toolNames).toContain("tabula_create_document");
-      expect(toolNames).toContain("tabula_open_document");
-      expect(toolNames).toContain("tabula_share_document");
-      expect(toolNames).toContain("tabula_create_workspace");
-      expect(toolNames).toContain("tabula_import_markdown_workspace");
-      expect(toolNames).toContain("tabula_share_workspace");
-      expect(toolNames).toContain("tabula_create_workspace_room");
-      expect(toolNames).toContain("tabula_connect_room");
-      expect(toolNames).toContain("tabula_open_room_view");
+      expect(toolNames).toEqual([
+        "tabula_create_draft",
+        "tabula_update_draft",
+        "tabula_start_session",
+        "tabula_join_room",
+        "tabula_list_files",
+        "tabula_read_file",
+        "tabula_search_files",
+        "tabula_write_file",
+        "tabula_export_copy",
+      ]);
       expect(transport.sessionId).toMatch(/^[0-9a-f-]{36}$/i);
     } finally {
       await client.close();
@@ -337,10 +348,17 @@ describe("Tabula MCP Web handler", () => {
       const tools = await client.listTools();
       const toolNames = tools.tools.map((tool) => tool.name);
 
-      expect(toolNames).toContain("tabula_read_me");
-      expect(toolNames).toContain("tabula_create_workspace");
-      expect(toolNames).toContain("tabula_create_workspace_room");
-      expect(toolNames).toContain("tabula_connect_room");
+      expect(toolNames).toEqual([
+        "tabula_create_draft",
+        "tabula_update_draft",
+        "tabula_start_session",
+        "tabula_join_room",
+        "tabula_list_files",
+        "tabula_read_file",
+        "tabula_search_files",
+        "tabula_write_file",
+        "tabula_export_copy",
+      ]);
       expect(transport.sessionId).toMatch(/^[0-9a-f-]{36}$/i);
     } finally {
       await client.close();

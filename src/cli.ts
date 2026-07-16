@@ -3,9 +3,9 @@
 import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { TABULA_MCP_PRODUCT_DESCRIPTION } from "./public-copy.js";
 import type { TabulaMcpServerInstance } from "./server/create-server.js";
 import type { TabulaMcpHttpServer } from "./server/http.js";
+import { TABULA_MCP_PRODUCT_DESCRIPTION } from "./public-copy.js";
 
 export type CliTransportMode = "stdio" | "http";
 
@@ -82,7 +82,7 @@ Options:
   --host <host>    HTTP listen host
   --port <port>    HTTP listen port
   --enable-write   Compatibility alias; writes are enabled by default
-  --read-only      Run as an inspection-only server without workspace changes
+  --read-only      Disable writes to live session files
   --doctor         Check the local runtime without printing secrets
   -h, --help       Show this help
   -v, --version    Show the package version
@@ -134,7 +134,7 @@ export const collectDoctorChecks = (): DoctorCheck[] => {
   checks.push({
     label: "Room writes",
     status: "pass",
-    detail: "workspace changes are hash-guarded; destructive operations remain visible to the MCP host",
+    detail: "file replacements are revision-guarded; mutating calls remain visible to the MCP host",
   });
   return checks;
 };

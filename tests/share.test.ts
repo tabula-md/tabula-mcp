@@ -163,6 +163,28 @@ describe("Tabula document sharing", () => {
     });
   });
 
+  it("preserves nested Markdown paths in exported copies", async () => {
+    const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+      files: [
+        { id: "readme", path: "README.md", title: "README.md", text: "# Readme\n" },
+        { id: "plan", path: "docs/research/Plan.md", title: "Plan.md", text: "# Plan\n" },
+      ],
+      activeFileId: "plan",
+      snapshotKey,
+      now: () => new Date("2026-07-05T00:00:00.000Z"),
+    });
+
+    const { payload } = await restoreJsonSnapshot(encrypted);
+    const docs = payload.folders.find((folder) => folder.title === "docs");
+    const research = payload.folders.find((folder) => folder.title === "research");
+    const plan = payload.files.find((file) => file.id === "plan");
+
+    expect(docs?.parentId).toBe(payload.rootFolderId);
+    expect(research?.parentId).toBe(docs?.id);
+    expect(plan?.parentId).toBe(research?.id);
+    expect(plan?.text).toBe("# Plan\n");
+  });
+
   it("uploads only an encrypted JSON snapshot and returns a bearer share URL", async () => {
     const fetchCalls: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {

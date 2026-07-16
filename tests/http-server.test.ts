@@ -30,12 +30,12 @@ describe("Tabula MCP HTTP server", () => {
       await expect(response.json()).resolves.toMatchObject({
         ok: true,
         service: "tabula-mcp",
-        version: "0.1.7",
+        version: "0.2.0",
         writeAccess: "enabled",
         deploymentMode: "remote",
         documentStore: "memory",
       });
-      expect(httpServer.version).toBe("0.1.7");
+      expect(httpServer.version).toBe("0.2.0");
       expect(httpServer.writeAccess).toBe("enabled");
     } finally {
       await httpServer.close();
@@ -56,7 +56,7 @@ describe("Tabula MCP HTTP server", () => {
       const response = await fetch(serverUrl(address.address, address.port, "/"));
 
       await expect(response.json()).resolves.toMatchObject({
-        description: "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
+        description: "Create private Markdown drafts and work with people or agents in live Tabula sessions.",
       });
     } finally {
       await httpServer.close();
@@ -86,7 +86,7 @@ describe("Tabula MCP HTTP server", () => {
       await expect(response.json()).resolves.toMatchObject({
         ok: true,
         service: "tabula-mcp",
-        version: "0.1.7",
+        version: "0.2.0",
         writeAccess: "enabled",
         deploymentMode: "remote",
         documentStore: "memory",
@@ -111,7 +111,17 @@ describe("Tabula MCP HTTP server", () => {
       await client.connect(new StreamableHTTPClientTransport(new URL(serverUrl(address.address, address.port, "/mcp"))));
       const tools = await client.listTools();
 
-      expect(tools.tools.map((tool) => tool.name)).toContain("tabula_read_me");
+      expect(tools.tools.map((tool) => tool.name)).toEqual([
+        "tabula_create_draft",
+        "tabula_update_draft",
+        "tabula_start_session",
+        "tabula_join_room",
+        "tabula_list_files",
+        "tabula_read_file",
+        "tabula_search_files",
+        "tabula_write_file",
+        "tabula_export_copy",
+      ]);
     } finally {
       await Promise.allSettled([client.close(), httpServer.close()]);
     }

@@ -21,24 +21,27 @@ const requiredFiles = [
   "server/cli.js",
   "server/document-app.html",
   "server/env.js",
-  "server/app/tools.js",
   "server/app/resource.js",
   "server/documents/index.js",
   "server/documents/registry.js",
   "server/documents/store.js",
   "server/server/index.js",
   "server/server/create-server.js",
+  "server/server/register-core-tools.js",
+  "server/server/instructions.js",
   "server/server/http.js",
   "server/server/operational-policy.js",
   "server/server/origin-policy.js",
   "server/server/web.js",
-  "server/server/register-room-tools.js",
   "server/server/write-access.js",
   "server/workspace-contract.js",
+  "server/workspace-file-service.js",
+  "server/workspace-paths.js",
+  "server/export-copy-service.js",
+  "server/session-service.js",
+  "server/core-errors.js",
   "server/share.js",
   "server/workspaces.js",
-  "server/guidance.js",
-  "server/output-schemas.js",
   "README.md",
   "PRIVACY.md",
   "docs/codex-cli.md",
@@ -50,6 +53,21 @@ const requiredFiles = [
 ];
 
 const requiredTools = [
+  "tabula_create_draft",
+  "tabula_update_draft",
+  "tabula_start_session",
+  "tabula_join_room",
+  "tabula_list_files",
+  "tabula_read_file",
+  "tabula_search_files",
+  "tabula_write_file",
+  "tabula_export_copy",
+];
+
+const forbiddenManifestTools = [
+  "tabula_app_room_snapshot",
+  "tabula_app_document_snapshot",
+  "tabula_app_save_document",
   "tabula_read_me",
   "tabula_create_document",
   "tabula_update_document",
@@ -64,18 +82,13 @@ const requiredTools = [
   "tabula_list_sessions",
   "tabula_read_workspace",
   "tabula_read_workspace_document",
+  "tabula_read_workspace_context",
   "tabula_apply_workspace_changes",
   "tabula_room_status",
   "tabula_open_room_view",
   "tabula_set_presence",
   "tabula_wait_for_changes",
   "tabula_disconnect_room",
-];
-
-const forbiddenManifestTools = [
-  "tabula_app_room_snapshot",
-  "tabula_app_document_snapshot",
-  "tabula_app_save_document",
   "tabula_read_markdown",
   "tabula_get_outline",
   "tabula_propose_text_patches",
@@ -213,10 +226,10 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   for (const toolName of forbiddenManifestTools) {
     assert(!toolNames.has(toolName), `MCPB ${label} manifest must not list ${toolName}`);
   }
-  const shareToolDescription = manifest.tools?.find((tool) => tool.name === "tabula_share_document")?.description ?? "";
+  const shareToolDescription = manifest.tools?.find((tool) => tool.name === "tabula_export_copy")?.description ?? "";
   assert(
-    shareToolDescription.includes("JSON snapshot") && !/room share/i.test(shareToolDescription),
-    `MCPB ${label} manifest tabula_share_document description must describe JSON snapshot sharing`,
+    shareToolDescription.includes("#json") && !/room share/i.test(shareToolDescription),
+    `MCPB ${label} manifest tabula_export_copy description must describe fixed #json copies`,
   );
   const modelFacingTools = await listBundledModelFacingTools(bundleDir);
   assertMatchingToolNames(
@@ -226,6 +239,7 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   );
   for (const tool of modelFacingTools) {
     assert(typeof tool.title === "string" && tool.title.trim(), `MCPB ${label} tool ${tool.name} must have a display title`);
+    assert(tool.outputSchema, `MCPB ${label} tool ${tool.name} must have an output schema`);
     assert(tool.annotations, `MCPB ${label} tool ${tool.name} must have safety annotations`);
     for (const annotation of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {
       assert(

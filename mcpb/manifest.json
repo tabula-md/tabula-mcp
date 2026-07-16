@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "tabula-mcp",
   "display_name": "Tabula.md MCP",
-  "version": "0.1.7",
-  "description": "Let Claude work with people in shared Tabula.md Markdown workspaces.",
-  "long_description": "Tabula.md MCP lets Claude create private Markdown drafts, open encrypted copy links, and join live sessions where people and Claude continue in the same files. Local working drafts stay on this machine. Complete #room and #json URLs are bearer secrets; the Tabula Room relay and Tabula JSON store receive encrypted data only.",
+  "version": "0.2.0",
+  "description": "Create private Markdown drafts and work with people or agents in live Tabula sessions.",
+  "long_description": "Tabula.md MCP gives Claude a small file-oriented interface for Markdown collaboration. Claude can create private drafts, join encrypted live sessions, list, read, search, and write Markdown files, and export fixed encrypted copies. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
   "author": {
     "name": "Tabula.md",
     "url": "https://tabula.md"
@@ -36,88 +36,40 @@
   },
   "tools": [
     {
-      "name": "tabula_create_document",
-      "description": "Create a Markdown document in the current writable Tabula session, or a private local draft when Claude is not connected to a session."
+      "name": "tabula_create_draft",
+      "description": "Create a private Markdown draft and show its Tabula card."
     },
     {
-      "name": "tabula_update_document",
-      "description": "Update the latest or selected private Tabula Markdown draft."
+      "name": "tabula_update_draft",
+      "description": "Replace the content of a private Markdown draft."
     },
     {
-      "name": "tabula_list_documents",
-      "description": "List local Tabula.md document checkpoints saved by this MCP server."
+      "name": "tabula_start_session",
+      "description": "Turn a private draft into an encrypted live Tabula session."
     },
     {
-      "name": "tabula_open_document",
-      "description": "Open the latest or selected local Tabula.md document checkpoint in a compact Tabula handoff card."
+      "name": "tabula_join_room",
+      "description": "Join an encrypted live Tabula session from a private #room URL."
     },
     {
-      "name": "tabula_read_me",
-      "description": "Read Tabula.md MCP workflow guidance and security boundaries."
+      "name": "tabula_list_files",
+      "description": "List Markdown files and folders in a live session."
     },
     {
-      "name": "tabula_share_document",
-      "description": "Export a local Tabula.md document as an encrypted JSON snapshot link."
+      "name": "tabula_read_file",
+      "description": "Read one Markdown file and its current revision."
     },
     {
-      "name": "tabula_create_workspace",
-      "description": "Create a private Tabula.md Markdown workspace from inline files."
+      "name": "tabula_search_files",
+      "description": "Search Markdown paths and contents with line-numbered excerpts."
     },
     {
-      "name": "tabula_import_markdown_workspace",
-      "description": "Import Markdown files from inline content or an allowed directory on this device."
+      "name": "tabula_write_file",
+      "description": "Create or replace a Markdown file while the server computes the collaboration patch."
     },
     {
-      "name": "tabula_share_workspace",
-      "description": "Create an encrypted Tabula.md copy link from a private workspace."
-    },
-    {
-      "name": "tabula_create_workspace_room",
-      "description": "Start an encrypted Tabula.md live session from a private workspace."
-    },
-    {
-      "name": "tabula_connect_room",
-      "description": "Join an encrypted Tabula.md live-session invite so Claude and people can work in the same files."
-    },
-    {
-      "name": "tabula_list_sessions",
-      "description": "List Tabula.md live sessions connected in this local MCP process."
-    },
-    {
-      "name": "tabula_read_workspace",
-      "description": "Read workspace metadata from a live session or private MCP workspace."
-    },
-    {
-      "name": "tabula_read_workspace_document",
-      "description": "Read one Markdown document from a live session or private MCP workspace."
-    },
-    {
-      "name": "tabula_read_workspace_context",
-      "description": "Read bounded Markdown excerpts from selected workspace documents."
-    },
-    {
-      "name": "tabula_apply_workspace_changes",
-      "description": "Apply hash-guarded document changes to a connected Tabula.md live session."
-    },
-    {
-      "name": "tabula_room_status",
-      "description": "Inspect connection state, collaborators, hashes, and write mode."
-    },
-    {
-      "name": "tabula_open_room_view",
-      "description": "Open a compact handoff card for a connected live session, then continue in Tabula.md."
-    },
-    {
-      "name": "tabula_set_presence",
-      "description": "Show Claude's current document or selection to live-session collaborators."
-    },
-    {
-      "name": "tabula_wait_for_changes",
-      "description": "Wait for live-session documents to change and return their latest hash summaries."
-    },
-    {
-      "name": "tabula_disconnect_room",
-      "description": "Disconnect this local MCP process from a Tabula.md live session."
+      "name": "tabula_export_copy",
+      "description": "Export a draft or live session state as an encrypted fixed #json copy."
     }
   ],
   "tools_generated": true,

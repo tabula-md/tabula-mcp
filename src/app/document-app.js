@@ -17,9 +17,10 @@ const elements = {
 const state = {
   app: null,
   mode: "idle",
-  documentId: "",
+  draftId: "",
   sessionId: "",
-  shareUrl: "",
+  sessionUrl: "",
+  pendingSessionUrl: "",
 };
 
 const formatCount = (value) => new Intl.NumberFormat("en-US").format(Number(value) || 0);
@@ -35,39 +36,41 @@ const setMessage = (text, tone = "neutral") => {
 };
 
 const updateActionState = () => {
-  const hasDocument = state.mode === "document" && Boolean(state.documentId);
-  const hasSession = state.mode === "room" && Boolean(state.sessionId) && Boolean(state.shareUrl);
+  const hasDocument = state.mode === "document" && Boolean(state.draftId);
+  const hasSession = state.mode === "room" && Boolean(state.sessionId);
 
-  elements.openCopyButton.hidden = !hasDocument;
-  elements.openCopyButton.disabled = !hasDocument;
+  elements.openCopyButton.hidden = !hasDocument && !hasSession;
+  elements.openCopyButton.disabled = !hasDocument && !hasSession;
+  elements.openCopyButton.textContent = hasSession ? "Export copy" : "Open a copy";
   elements.startSessionButton.hidden = !hasDocument;
   elements.startSessionButton.disabled = !hasDocument;
-  elements.openSessionButton.hidden = !hasSession;
-  elements.openSessionButton.disabled = !hasSession;
+  elements.openSessionButton.hidden = !hasSession || !state.sessionUrl;
+  elements.openSessionButton.disabled = !hasSession || !state.sessionUrl;
 };
 
-const renderDocument = (document) => {
+const renderDocument = (draft) => {
   state.mode = "document";
-  state.documentId = document.documentId || state.documentId;
+  state.draftId = draft.draftId || state.draftId;
   state.sessionId = "";
-  state.shareUrl = "";
+  state.sessionUrl = "";
 
   elements.eyebrow.textContent = "Private draft";
   elements.summary.textContent =
     "This draft stays on this device until you open a copy or start a shared session.";
-  elements.documentMeta.textContent = `${formatCount(document.textLength)} characters · private draft`;
+  elements.documentMeta.textContent = `${formatCount(draft.textLength)} characters · private draft`;
   elements.collaborationMeta.textContent = "Not shared yet";
   updateActionState();
 };
 
-const renderRoom = (room) => {
-  const collaboratorCount = Number(room.collaboratorCount ?? 0);
-  const waitingForWorkspaceState = room.stateReceived === false;
+const renderRoom = (session) => {
+  const collaboratorCount = Number(session.otherCollaboratorCount ?? 0);
+  const waitingForWorkspaceState = session.ready === false;
 
   state.mode = "room";
-  state.documentId = "";
-  state.sessionId = room.sessionId || state.sessionId;
-  state.shareUrl = room.shareUrl || state.shareUrl;
+  state.draftId = "";
+  state.sessionId = session.sessionId || state.sessionId;
+  state.sessionUrl = session.sessionUrl || state.pendingSessionUrl || state.sessionUrl;
+  state.pendingSessionUrl = "";
 
   elements.eyebrow.textContent = "Shared session";
   elements.summary.textContent = waitingForWorkspaceState
@@ -80,17 +83,18 @@ const renderRoom = (room) => {
 
 const renderToolResult = (result) => {
   if (result.isError) {
+    state.pendingSessionUrl = "";
     setMessage(getErrorText(result), "error");
     return false;
   }
 
   const content = result.structuredContent;
-  if (content?.document) {
-    renderDocument(content.document);
+  if (content?.draftId) {
+    renderDocument(content);
     return true;
   }
-  if (content?.room) {
-    renderRoom(content.room);
+  if (content?.sessionId && typeof content?.ready === "boolean") {
+    renderRoom(content);
     return true;
   }
 
@@ -109,8 +113,8 @@ const openExternalLink = async (url, label) => {
 };
 
 const openCopy = async () => {
-  if (!state.app || state.mode !== "document" || !state.documentId) {
-    setMessage("Create a local Tabula.md draft first.", "warning");
+  if (!state.app || (state.mode !== "document" && state.mode !== "room")) {
+    setMessage("Create a draft or join a Tabula session first.", "warning");
     return;
   }
 
@@ -119,14 +123,18 @@ const openCopy = async () => {
   setMessage("Preparing encrypted Tabula.md copy...");
   try {
     const result = await state.app.callServerTool({
-      name: "tabula_share_document",
-      arguments: { documentId: state.documentId },
+      name: "tabula_export_copy",
+      arguments: {
+        source: state.mode === "document"
+          ? { kind: "draft", draftId: state.draftId }
+          : { kind: "session", sessionId: state.sessionId },
+      },
     });
     if (result.isError) {
       throw new Error(getErrorText(result));
     }
 
-    const shareUrl = result.structuredContent?.share?.shareUrl;
+    const shareUrl = result.structuredContent?.copyUrl;
     if (!shareUrl) {
       throw new Error("Tabula.md did not return an encrypted copy link.");
     }
@@ -141,7 +149,7 @@ const openCopy = async () => {
 };
 
 const startSession = async () => {
-  if (!state.app || state.mode !== "document" || !state.documentId) {
+  if (!state.app || state.mode !== "document" || !state.draftId) {
     setMessage("Create a local Tabula.md draft first.", "warning");
     return;
   }
@@ -151,8 +159,8 @@ const startSession = async () => {
   setMessage("Starting encrypted Tabula.md session...");
   try {
     const result = await state.app.callServerTool({
-      name: "tabula_app_start_room_from_document",
-      arguments: { documentId: state.documentId },
+      name: "tabula_start_session",
+      arguments: { draftId: state.draftId },
     });
     if (!renderToolResult(result)) {
       throw new Error("Tabula.md did not return a live session.");
@@ -167,14 +175,14 @@ const startSession = async () => {
 };
 
 const openSession = async () => {
-  if (state.mode !== "room" || !state.shareUrl) {
+  if (state.mode !== "room" || !state.sessionUrl) {
     setMessage("Start or open a Tabula.md session first.", "warning");
     return;
   }
 
   elements.openSessionButton.disabled = true;
   try {
-    await openExternalLink(state.shareUrl, "Open session");
+    await openExternalLink(state.sessionUrl, "Open session");
     setMessage("");
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Could not open the Tabula.md session.", "error");
@@ -198,7 +206,7 @@ const createAppClient = () => {
   }
 
   return new App(
-    { name: "Tabula Session", version: "0.1.7" },
+    { name: "Tabula Session", version: "0.2.0" },
     // The editing surface is tabula.md itself. This App stays inline as a
     // compact bridge, rather than becoming a second Tabula implementation.
     { availableDisplayModes: ["inline"] },
@@ -210,11 +218,15 @@ const boot = async () => {
   state.app = app;
 
   app.ontoolinput = (input) => {
-    if (typeof input?.arguments?.documentId === "string") {
+    if (typeof input?.arguments?.draftId === "string") {
       state.mode = "document";
-      state.documentId = input.arguments.documentId;
+      state.draftId = input.arguments.draftId;
       setMessage("Preparing Tabula.md draft...");
       return;
+    }
+    if (typeof input?.arguments?.roomUrl === "string") {
+      state.pendingSessionUrl = input.arguments.roomUrl;
+      setMessage("Preparing Tabula.md session...");
     }
     if (typeof input?.arguments?.sessionId === "string") {
       state.mode = "room";
