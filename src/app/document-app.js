@@ -32,6 +32,7 @@ const elements = {
   contextTabButtons: document.querySelectorAll("[data-context-tab]"),
   textLength: document.getElementById("textLength"),
   openTabulaButton: document.getElementById("openTabulaButton"),
+  startSessionButton: document.getElementById("startSessionButton"),
   saveDocumentButton: document.getElementById("saveDocumentButton"),
   sendChangesButton: document.getElementById("sendChangesButton"),
   shareDocumentButton: document.getElementById("shareDocumentButton"),
@@ -95,6 +96,7 @@ const updateTitleInputState = () => {
 
 const updateDocumentActionState = () => {
   const isDocument = state.mode === "document" && Boolean(state.documentId);
+  const isRoom = state.mode === "room" && Boolean(state.sessionId) && Boolean(state.shareUrl);
   const hasContextChanges = isDocument && state.markdown !== state.lastContextMarkdown;
   const hasSavedContentChanges =
     isDocument &&
@@ -103,7 +105,10 @@ const updateDocumentActionState = () => {
   elements.saveDocumentButton.disabled = !isDocument || !hasSavedContentChanges;
   elements.sendChangesButton.disabled = !hasContextChanges;
   elements.shareDocumentButton.disabled = !isDocument;
-  elements.openTabulaButton.disabled = !isDocument && !state.shareUrl;
+  elements.openTabulaButton.disabled = !isDocument && !isRoom;
+  elements.openTabulaButton.textContent = isRoom ? "Open session" : "Open a copy";
+  elements.startSessionButton.hidden = !isDocument;
+  elements.startSessionButton.disabled = !isDocument;
   updateTitleInputState();
 };
 
@@ -233,6 +238,7 @@ const renderRoomSummary = (summary) => {
   }
 
   state.mode = "room";
+  state.documentId = "";
   state.sessionId = summary.sessionId || state.sessionId;
   state.roomId = summary.roomId || state.roomId;
   state.shareUrl = summary.shareUrl || state.shareUrl;
@@ -249,6 +255,16 @@ const renderRoomSummary = (summary) => {
   state.lastSavedTitle = state.roomId || "Room";
   elements.markdownEditor.readOnly = true;
   updateDocumentActionState();
+};
+
+const openExternalLink = async (url, label) => {
+  if (!state.app?.openLink) {
+    throw new Error(`${label} is unavailable because this MCP host cannot open external links.`);
+  }
+  const result = await state.app.openLink({ url });
+  if (result?.isError) {
+    throw new Error(`${label} was blocked by this MCP host.`);
+  }
 };
 
 const renderOutline = (outline) => {
@@ -566,14 +582,14 @@ const shareDocument = async ({ sendModelContext = true, openAfterShare = false }
     }
 
     if (openAfterShare) {
-      await state.app.openLink?.({ url: share.shareUrl });
+      await openExternalLink(share.shareUrl, "Open a copy");
     }
 
     if (changeSummary.changed && sendModelContext) {
       state.lastContextMarkdown = currentMarkdown;
     }
     updateDocumentActionState();
-    setMessage(openAfterShare ? "Opened encrypted Tabula.md snapshot." : "Encrypted share link sent to the model context.");
+    setMessage(openAfterShare ? "Opened a Tabula.md copy." : "Encrypted share link sent to the model context.");
     return share;
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "Could not create encrypted share link.", "error");
@@ -589,8 +605,12 @@ const openInTabula = async () => {
   }
 
   if (state.mode === "room" && state.shareUrl) {
-    await state.app.openLink?.({ url: state.shareUrl });
-    setMessage("Opened Tabula.md room.");
+    try {
+      await openExternalLink(state.shareUrl, "Open session");
+      setMessage("Opened Tabula.md session.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not open the Tabula.md session.", "error");
+    }
     return;
   }
 
@@ -600,6 +620,41 @@ const openInTabula = async () => {
   }
 
   setMessage("Create a local Tabula.md document first.", "warning");
+};
+
+const startSession = async () => {
+  if (!state.app || state.mode !== "document" || !state.documentId) {
+    setMessage("Create a local Tabula.md document first.", "warning");
+    return;
+  }
+
+  elements.startSessionButton.disabled = true;
+  elements.openTabulaButton.disabled = true;
+  setMessage("Starting encrypted Tabula.md session...");
+  try {
+    const saved = await state.app.callServerTool({
+      name: "tabula_app_save_document",
+      arguments: {
+        documentId: state.documentId,
+        title: currentTitle(),
+        markdown: state.markdown,
+      },
+    });
+    if (saved.isError) throw new Error(getErrorText(saved));
+
+    const started = await state.app.callServerTool({
+      name: "tabula_app_start_room_from_document",
+      arguments: { documentId: state.documentId },
+    });
+    if (started.isError) throw new Error(getErrorText(started));
+
+    renderSnapshot(started.structuredContent);
+    setMessage("Tabula.md session is ready. Open session to continue in Tabula.md.");
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : "Could not start the Tabula.md session.", "error");
+  } finally {
+    updateDocumentActionState();
+  }
 };
 
 const sendChanges = async () => {
@@ -741,7 +796,7 @@ const createAppClient = () => {
   }
 
   return new App(
-    { name: "Tabula Document", version: "0.1.2" },
+    { name: "Tabula Document", version: "0.1.3" },
     { availableDisplayModes: ["inline", "fullscreen"] },
   );
 };
@@ -792,6 +847,7 @@ const boot = async () => {
   elements.saveDocumentButton.addEventListener("click", () => void saveDocument());
   elements.sendChangesButton.addEventListener("click", () => void sendChanges());
   elements.openTabulaButton.addEventListener("click", () => void openInTabula());
+  elements.startSessionButton.addEventListener("click", () => void startSession());
   elements.shareDocumentButton.addEventListener("click", () => void shareDocument());
   elements.refreshButton.addEventListener("click", () => void loadSnapshot());
   elements.sendSelectionButton.addEventListener("click", () => void sendSelection());

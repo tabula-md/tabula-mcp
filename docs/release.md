@@ -144,7 +144,8 @@ After installing the generated `.mcpb`:
 
 1. Call `tabula_read_me`.
 2. Create a local document with `tabula_create_document`.
-3. Confirm inline mode shows preview plus `Open in Tabula` and `Edit`.
+3. Confirm a local-document preview shows **Open a copy**, **Start session**,
+   and `Edit`.
 4. Click `Edit`, then edit title and Markdown in fullscreen.
 5. Switch between Editor, Split, and Preview.
 6. Save the document.
@@ -154,9 +155,11 @@ After installing the generated `.mcpb`:
 10. Click Share and confirm Claude receives a `https://tabula.md/#json=...,...`
    link.
 11. Open that link in Tabula.md and confirm the snapshot import flow starts.
-12. For room testing, connect a separate live room link with `tabula_connect_room`.
-13. Open the room view with `tabula_open_room_view`.
-14. Confirm Markdown preview, outline, refresh, and selection handoff work.
+12. Click **Start session** and confirm the result is a Room view whose
+    **Open session** action opens a `https://tabula.md/#room=...,...` URL.
+13. For room testing, connect a separate live room link with `tabula_connect_room`.
+14. Open the room view with `tabula_open_room_view`.
+15. Confirm Markdown preview, outline, refresh, and selection handoff work.
 
 For local Tabula.md development, run the room server separately and use local
 links such as:

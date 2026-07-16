@@ -2,9 +2,12 @@ import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { DocumentRegistry } from "../documents/registry.js";
+import type { RuntimeEnvironment } from "../env.js";
 import { errorContent } from "../json.js";
 import type { SessionRegistry } from "../registry.js";
+import { startWorkspaceRoom } from "../room-session.js";
 import { shareMarkdownDocument } from "../share.js";
+import { createWorkspaceFromFiles } from "../workspaces.js";
 import {
   documentSnapshotContent,
   readDocumentSnapshot,
@@ -46,7 +49,7 @@ export const registerDocumentAppTools = (
   server: McpServer,
   registry: SessionRegistry,
   documents: DocumentRegistry,
-  options: { allowRoomTools?: boolean } = {},
+  options: { allowRoomTools?: boolean; allowTemporaryRooms?: boolean; env?: RuntimeEnvironment } = {},
 ) => {
   const allowRoomTools = options.allowRoomTools ?? true;
 
@@ -86,6 +89,59 @@ export const registerDocumentAppTools = (
         };
       }),
   );
+
+  if (allowRoomTools) {
+    registerAppTool(
+      server,
+      "tabula_app_start_room_from_document",
+      {
+        title: "Start Tabula Session",
+        description:
+          "Turn a local Tabula Document MCP App draft into a one-document encrypted Tabula.md live session. A configured checkpoint makes the session durable; otherwise it stays available while a participant remains connected.",
+        inputSchema: {
+          ...optionalDocumentSchema,
+          appOrigin: z.string().url().default("https://tabula.md").describe("Tabula.md app origin for the returned #room URL."),
+          roomServerUrl: z.string().url().optional().describe("Tabula Room service URL. Can also be set with TABULA_ROOM_URL."),
+        },
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
+        _meta: {
+          ui: {
+            visibility: ["app"],
+          },
+        },
+      },
+      async ({ documentId, appOrigin, roomServerUrl }) =>
+        runStructuredTool(async () => {
+          const document = await documents.get(documentId);
+          const workspace = await createWorkspaceFromFiles({
+            title: document.title,
+            files: [{ path: document.title || "Untitled.md", title: document.title, markdown: document.markdown }],
+          });
+          const started = await startWorkspaceRoom({
+            registry,
+            workspace,
+            env: options.env,
+            appOrigin,
+            roomServerUrl,
+            allowTemporary: options.allowTemporaryRooms,
+          });
+          const snapshot = await readRoomSnapshot(registry, started.sessionId);
+
+          return {
+            value: {
+              ...snapshot,
+              resourceUri: tabulaDocumentAppResourceUri,
+            },
+            text: `Started Tabula session ${started.roomId}.`,
+          };
+        }),
+    );
+  }
 
   registerAppTool(
     server,

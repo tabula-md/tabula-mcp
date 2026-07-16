@@ -57,7 +57,7 @@ import {
 } from "./text.js";
 
 export type ConnectionStatus = "connecting" | "connected" | "offline" | "closed";
-export type RoomRecoveryStatus = "checkpoint-loaded" | "checkpoint-missing" | "checkpoint-disabled" | "checkpoint-failed";
+export type RoomRecoveryStatus = "local-bootstrap" | "checkpoint-loaded" | "checkpoint-missing" | "checkpoint-disabled" | "checkpoint-failed";
 export type RoomHydrationStatus = "waiting-for-peer-state" | "ready";
 
 export type LiveSelection = {
@@ -375,11 +375,15 @@ export class TabulaRoomClient {
     return this.hasReceivedState ? "ready" : "waiting-for-peer-state";
   }
 
+  get recoveryMode(): "durable" | "temporary" {
+    return this.checkpointStore.enabled ? "durable" : "temporary";
+  }
+
   async connect({ waitForStateMs = 0 }: { waitForStateMs?: number } = {}) {
     this.statusValue = "connecting";
     await this.ensureRoomKey();
     const recoveryStatus = this.hasReceivedState
-      ? "checkpoint-loaded"
+      ? "local-bootstrap"
       : await this.loadCheckpoint();
     if (recoveryStatus === "checkpoint-failed") {
       throw new TabulaMcpError(
@@ -446,6 +450,7 @@ export class TabulaRoomClient {
       workspaceMode: true,
       activeDocumentId: this.activeDocumentId,
       workspaceVersion: workspace.version,
+      recoveryMode: this.recoveryMode,
       checkpointStatus: this.checkpointStatusValue,
       metadata: null,
       lastError: this.lastErrorValue || undefined,
@@ -521,9 +526,6 @@ export class TabulaRoomClient {
     documents: readonly WorkspaceSnapshotDocument[];
   }) {
     this.assertWritable("publish workspace state");
-    if (!this.checkpointStore.enabled) {
-      throw new TabulaMcpError("Live room persistence is not configured.");
-    }
     await this.ensureRoomKey();
     if (workspace.roomId !== this.roomId) {
       throw new TabulaMcpError("Workspace roomId must match the connected room.");
@@ -560,11 +562,13 @@ export class TabulaRoomClient {
     this.activeDocumentId = workspace.activeDocumentId ?? documents[0]?.documentId;
     this.publishLocalPresence();
     this.markReceivedState();
-    await this.saveCheckpointNow();
-    if (this.checkpointStatusValue.status !== "saved") {
-      throw new TabulaMcpError(
-        this.checkpointStatusValue.error ?? "The encrypted live room could not be saved.",
-      );
+    if (this.checkpointStore.enabled) {
+      await this.saveCheckpointNow();
+      if (this.checkpointStatusValue.status !== "saved") {
+        throw new TabulaMcpError(
+          this.checkpointStatusValue.error ?? "The encrypted live room could not be saved.",
+        );
+      }
     }
     return {
       emittedWorkspace: true,

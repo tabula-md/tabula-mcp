@@ -390,10 +390,14 @@ or verify security boundaries. It returns concise topic-specific guidance for
 local documents, encrypted rooms, sharing, and write policy.
 
 The Document App is bundled into `dist/document-app.html` during `npm run build`.
-Inline mode shows a Markdown preview with `Open in Tabula` and `Edit` actions.
-Editing happens in fullscreen, where the App provides title editing, outline
-context, and Editor/Split/Preview modes for local Markdown drafts. It also opens connected rooms through
-`tabula_open_room_view` as a read-only room mode. It does not replace the
+For a local document, inline mode shows a Markdown preview with **Open a copy**,
+**Start session**, and `Edit`: Open a copy creates an encrypted `#json`
+snapshot, while Start session publishes the draft into a live `#room`.
+For a connected Room, the primary action is **Open session**, which opens that
+same Room in Tabula.md. Editing happens in fullscreen, where the App provides
+title editing, outline context, and Editor/Split/Preview modes for local
+Markdown drafts. It also opens connected rooms through `tabula_open_room_view`
+as a read-only room mode. It does not replace the
 workspace room tools: clients without MCP Apps support can keep using
 `tabula_read_workspace`, `tabula_read_workspace_document`, and
 `tabula_apply_workspace_changes` normally. Agents can also create/import a
@@ -422,6 +426,11 @@ The app uses internal `tabula_app_document_snapshot`,
 They are marked app-only so model-facing tool lists stay focused, while the
 normal read/write tools remain the compatibility path for Codex, Claude, and
 other MCP clients.
+
+Starting a session makes the Room—not the local document checkpoint—the
+collaboration source of truth. A local MCP client may create a temporary Room
+when another participant remains connected; hosted MCP requires configured
+encrypted Room persistence before it will create a Room.
 
 For MCP App document checkpoints, the `Send Changes` control sends a compact
 Markdown change summary back into model context. It uses changed ranges and

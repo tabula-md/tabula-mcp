@@ -1,5 +1,4 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { RoomCapability } from "@tabula-md/tabula/collaboration";
 import { z } from "zod";
 import { assertLocalImportRootAllowed } from "../import-roots.js";
 import { jsonContent, errorContent } from "../json.js";
@@ -8,12 +7,12 @@ import type { SessionRegistry } from "../registry.js";
 import type { RuntimeEnvironment } from "../env.js";
 import { createFirebaseWorkspaceRoomCheckpointStore } from "../room-checkpoints.js";
 import { TabulaRoomClient } from "../room-client.js";
-import { createRoomShareUrl, generateRoomId, generateRoomKey, shareMarkdownWorkspace } from "../share.js";
+import { shareMarkdownWorkspace } from "../share.js";
+import { startWorkspaceRoom } from "../room-session.js";
 import { addWorkspaceDocumentResourceUri, addWorkspaceResourceUris } from "../workspace-resources.js";
 import {
   readStoredWorkspace,
   readStoredWorkspaceDocument,
-  withWorkspaceRoomId,
   workspaceShareFiles,
   type WorkspaceRegistry,
 } from "../workspaces.js";
@@ -46,12 +45,6 @@ const workspaceFileInputSchema = z.object({
   title: z.string().min(1).max(200).optional().describe("Optional display title. Defaults to the file basename."),
   markdown: z.string().describe("Markdown content for this workspace document."),
 });
-
-const workspacePublisherCapabilities = [
-  "presence",
-  "read",
-  "write",
-] as const satisfies readonly RoomCapability[];
 
 const textPatchInputSchema = z.object({
   from: z.number().int().nonnegative(),
@@ -353,7 +346,7 @@ export const registerRoomTools = (
   server: McpServer,
   registry: SessionRegistry,
   workspaces: WorkspaceRegistry,
-  { env, writeEnabled }: { env?: RuntimeEnvironment; writeEnabled: boolean },
+  { env, writeEnabled, allowTemporaryRooms = true }: { env?: RuntimeEnvironment; writeEnabled: boolean; allowTemporaryRooms?: boolean },
 ) => {
   server.registerTool(
     "tabula_create_workspace",
@@ -523,51 +516,18 @@ export const registerRoomTools = (
     async ({ workspaceId, appOrigin, roomServerUrl, identityName, identityColor }) =>
       runTool(async () => {
         const workspace = workspaces.get(workspaceId);
-        const roomId = generateRoomId();
-        const roomKey = generateRoomKey();
-        const roomUrl = createRoomShareUrl({ appOrigin, roomId, roomKey });
-        const parsedRoom = parseRoomShareUrl(roomUrl);
-        const resolvedRoomServerUrl = resolveRoomServerUrl({
-          appOrigin: parsedRoom.appOrigin,
+        const started = await startWorkspaceRoom({
+          registry,
+          workspace,
+          env,
+          appOrigin,
           roomServerUrl,
-        });
-        const roomWorkspace = withWorkspaceRoomId(workspace, roomId);
-        workspaces.add(roomWorkspace);
-
-        const client = new TabulaRoomClient({
-          parsedRoom,
-          roomServerUrl: resolvedRoomServerUrl,
-          writeAccess: false,
           identityName,
           identityColor,
-          actorCapabilities: workspacePublisherCapabilities,
-          roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
+          allowTemporary: allowTemporaryRooms,
         });
-        let recoveryStatus: Awaited<ReturnType<TabulaRoomClient["connect"]>>;
-        let published: Awaited<ReturnType<TabulaRoomClient["publishWorkspaceSnapshot"]>>;
-        try {
-          published = await client.publishWorkspaceSnapshot({
-            workspace: roomWorkspace.workspace,
-            documents: roomWorkspace.documents,
-          });
-          recoveryStatus = await client.connect();
-        } catch (error) {
-          client.disconnect();
-          throw error;
-        }
-        registry.add(client);
         server.sendResourceListChanged();
-        const status = await client.getStatus();
-
-        return {
-          ...status,
-          workspaceId: roomWorkspace.workspaceId,
-          roomUrl,
-          recoveryStatus,
-          published,
-          note:
-            "Created a Tabula workspace room, synchronized one encrypted workspace CRDT, and saved an encrypted live room checkpoint when Firebase is configured. Continue with hash-guarded direct workspace edit tools for follow-up edits.",
-        };
+        return started;
       }),
   );
 

@@ -208,6 +208,7 @@ App-only tools:
 
 - `tabula_app_document_snapshot`
 - `tabula_app_save_document`
+- `tabula_app_start_room_from_document`
 - `tabula_app_room_snapshot`
 
 App-only tools are marked with MCP Apps visibility metadata so model-facing
@@ -221,8 +222,14 @@ The App should not send the full Markdown document on every keystroke. It should
 send bounded summaries, hashes, changed ranges, and short excerpts. Full text
 handoff should remain a deliberate tool or user action.
 
-Inline mode is preview-first and exposes only `Open in Tabula` plus `Edit`.
-Editing and context handoff controls live in fullscreen mode.
+Inline mode is preview-first. A local draft exposes **Open a copy** (encrypted
+`#json` snapshot), **Start session** (live encrypted `#room`), and `Edit`.
+After a Room starts, its view exposes **Open session**, which follows the same
+`#room` URL. Editing and context handoff controls live in fullscreen mode.
+
+The local document checkpoint is staging only once a session starts. The
+connected Room is the sole collaboration object for human and agent reads and
+writes; no later local document edits are silently mirrored into it.
 
 When the user shares an App document with unsent edits, the App saves the
 current document checkpoint, creates the encrypted snapshot link, and includes

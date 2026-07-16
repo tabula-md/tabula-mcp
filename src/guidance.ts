@@ -17,6 +17,7 @@ const securityRules = [
   "Never send room keys or plaintext Markdown to the Tabula Room server.",
   "Hosted Tabula MCP document checkpoints may temporarily store plaintext Markdown for agent editing; use encrypted share export for handoff links.",
   "Encrypted live room checkpoints may be saved to Firebase Storage with an opaque Firestore pointer; neither service receives the room key or plaintext Markdown.",
+  "A local MCP client may start a temporary Room without encrypted recovery while an active peer remains connected; hosted MCP must have encrypted Room persistence before it starts a Room.",
   "Room edits use the same workspace Y.Doc, binary RoomWire v2 sync, and Awareness actor state as Tabula.md.",
   "Use current lowercase SHA-256 hex sha256/baseSha256 values before applying guarded workspace document patches.",
   "Encrypted share export may upload encrypted snapshot bytes to the Tabula JSON service, but not plaintext Markdown or snapshot keys.",
@@ -40,7 +41,7 @@ const summaries: Record<TabulaReadMeTopic, string> = {
   documents:
     "For a new draft, call tabula_create_document. To resume a saved checkpoint, call tabula_list_documents, then tabula_open_document. The App editor can save into the MCP document checkpoint store, recover unsaved browser drafts, send compact changes back into model context, and share the saved document as an encrypted snapshot link.",
   rooms:
-    "For a new live room, create or import a workspace and call tabula_create_workspace_room. For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. The MCP client joins as an agent actor, loads/saves encrypted live room checkpoints when Firebase is configured, or waits for state from an active peer when it is not. Do not read or edit workspace content until stateReceived is true.",
+    "For a new live room, create or import a workspace and call tabula_create_workspace_room. Local MCP can create a temporary Room when an active peer stays connected; hosted MCP requires encrypted Room persistence to create a Room. For an existing Tabula.md room link, call tabula_connect_room with the full URL including #room=<roomId>,<roomKey>. The MCP client joins as an agent actor, loads/saves encrypted live room checkpoints when Firebase is configured, or waits for state from an active peer when it is not. Do not read or edit workspace content until stateReceived is true.",
   sharing:
     "To share an MCP App document, call tabula_share_document or use the App Share control. To share a multi-file workspace, call tabula_share_workspace. The MCP process creates a snapshot key, encrypts a Tabula JSON snapshot, uploads only encrypted bytes, and returns a #json share URL.",
   security:
@@ -63,7 +64,7 @@ const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
     "Use Save before treating the MCP checkpoint copy as current.",
   ],
   rooms: [
-    "Use tabula_create_workspace_room to create a new encrypted workspace room from an imported or inline workspace.",
+    "Use tabula_create_workspace_room to create a new encrypted workspace room from an imported or inline workspace; hosted MCP needs encrypted Room persistence configured first.",
     "Read room status before deciding whether a room is connected or writable.",
     "Check checkpointStatus after connecting or creating a room to see whether encrypted live room recovery was loaded, saved, missing, disabled, or failed.",
     "Expect room content to arrive from an encrypted live room checkpoint or as workspace metadata plus document state from connected peers.",

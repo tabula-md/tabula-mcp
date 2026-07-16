@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.1.3
+
+- Made the MCP App's collaboration transition explicit: local documents offer
+  **Open a copy** for an encrypted `#json` snapshot or **Start session** for a
+  live encrypted `#room` session; connected rooms offer **Open session**.
+- Made a Room the authoritative collaboration object after a session starts;
+  the pre-session local document remains a private draft checkpoint rather
+  than a second collaboration copy.
+- Allow local MCPB clients to create temporary live sessions without Firebase
+  persistence, while hosted MCP rejects that unsafe mode unless encrypted Room
+  persistence is configured.
+
 ## 0.1.2
 
 - Let local MCPB clients join active encrypted rooms without Firebase checkpoint
