@@ -80,7 +80,11 @@ Expected behavior:
    encrypted live room checkpoint for later recovery.
 3. `tabula_connect_room` connects an existing encrypted room as a
    `tabula-mcp` agent actor and reports whether checkpoint recovery was loaded,
-   missing, disabled, or failed.
+   missing, disabled, or failed. Checkpoint recovery is optional: when it is
+   unavailable, Claude can still join an active room and receive the workspace
+   from a browser or another live peer. Until `stateReceived` is true, the MCP
+   keeps workspace reads and edits blocked to avoid treating an empty local
+   CRDT as the shared workspace.
 4. `tabula_open_room_view` opens the App room view.
 5. `tabula_read_workspace`, `tabula_read_workspace_context`,
    `tabula_read_workspace_document`, and `tabula_apply_workspace_changes` let

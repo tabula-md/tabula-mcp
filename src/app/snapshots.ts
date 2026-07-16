@@ -32,13 +32,24 @@ export const readDocumentSnapshot = async (documents: DocumentRegistry, document
 
 export const readRoomSnapshot = async (registry: SessionRegistry, sessionId?: string) => {
   const session = registry.get(sessionId);
-  const [status, markdown, outline] = await Promise.all([
-    session.getStatus(),
+  const status = await session.getStatus();
+
+  const room = summarizeRoomStatus(status);
+  if (!status.stateReceived) {
+    return {
+      mode: "room",
+      room,
+      status: room,
+      markdown: "",
+      outline: [],
+      waitingForWorkspaceState: true,
+    };
+  }
+
+  const [markdown, outline] = await Promise.all([
     session.readMarkdown(),
     session.getOutline(),
   ]);
-
-  const room = summarizeRoomStatus(status);
 
   return {
     mode: "room",
@@ -46,5 +57,6 @@ export const readRoomSnapshot = async (registry: SessionRegistry, sessionId?: st
     status: room,
     markdown: markdown.markdown,
     outline: outline.outline,
+    waitingForWorkspaceState: false,
   };
 };

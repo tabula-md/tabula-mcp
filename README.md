@@ -323,7 +323,7 @@ small ESM surface for tests and local embedding:
 - `tabula_import_markdown_workspace`: import Markdown files into a local MCP workspace from an inline files array, or from a local filesystem path allowed by MCP roots or `TABULA_MCP_ALLOWED_IMPORT_ROOTS`.
 - `tabula_share_workspace`: export a workspace as an encrypted multi-file Tabula.md `#json` snapshot link.
 - `tabula_create_workspace_room`: create a new encrypted Tabula.md live room from a workspace, publish workspace metadata and document state, save an encrypted live room checkpoint when Firebase is configured, and return a `#room` URL.
-- `tabula_connect_room`: connect to a room URL as a `tabula-mcp` agent actor and load the encrypted live room checkpoint when Firebase is configured.
+- `tabula_connect_room`: join a room URL as a `tabula-mcp` agent actor. It restores an encrypted live room checkpoint when Firebase is configured, or waits for workspace state from an active live peer when it is not.
 - `tabula_list_sessions`: list connected sessions in this MCP process.
 - `tabula_room_status`: inspect connection state, room metadata, hash, actor capabilities, and collaborators.
 - `tabula_read_workspace`: read decrypted workspace tree metadata from a connected room session or a local/imported MCP workspace, including document ids, titles, hashes, paths, and cache status.

@@ -109,6 +109,7 @@ describe("MCP tool registration", () => {
     expect(toolNames).not.toContain("tabula_apply_text_patches");
     expect(jsonBytes(tools)).toBeLessThan(36_000);
     expect(connectTool?.inputSchema.properties).not.toHaveProperty("writeAccess");
+    expect(connectTool?.inputSchema.properties).toHaveProperty("waitForStateMs");
     expect(createWorkspaceTool?.inputSchema.properties).toHaveProperty("files");
     expect(createWorkspaceTool?.inputSchema.properties).toHaveProperty("detail");
     expect(importWorkspaceTool?.inputSchema.properties).toHaveProperty("source");

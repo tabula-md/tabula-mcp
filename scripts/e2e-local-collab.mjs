@@ -192,19 +192,31 @@ const callTool = async (client, name, args = {}) => {
 
 const withMcpClient = async ({ serverEntrypoint, roomUrl, firebaseConfig }, callback) => {
   const client = new Client({ name: "tabula-mcp-local-e2e", version: "0.0.0" });
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [serverEntrypoint],
-    cwd: rootDir,
-    env: {
-      ...process.env,
-      TABULA_ROOM_URL: roomUrl,
-      TABULA_MCP_ALLOW_ANY_EGRESS: "1",
+  const env = {
+    ...process.env,
+    TABULA_ROOM_URL: roomUrl,
+    TABULA_MCP_ALLOW_ANY_EGRESS: "1",
+  };
+  if (firebaseConfig) {
+    Object.assign(env, {
       TABULA_MCP_FIREBASE_CONFIG: firebaseConfig,
       TABULA_MCP_FIREBASE_EMULATOR_HOST: "127.0.0.1",
       TABULA_MCP_FIRESTORE_EMULATOR_PORT: "8080",
       TABULA_MCP_FIREBASE_STORAGE_EMULATOR_PORT: "9199",
-    },
+    });
+  } else {
+    delete env.TABULA_MCP_FIREBASE_CONFIG;
+    delete env.TABULA_FIREBASE_CONFIG;
+    delete env.VITE_TABULA_FIREBASE_CONFIG;
+    delete env.TABULA_MCP_FIREBASE_EMULATOR_HOST;
+    delete env.TABULA_MCP_FIRESTORE_EMULATOR_PORT;
+    delete env.TABULA_MCP_FIREBASE_STORAGE_EMULATOR_PORT;
+  }
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [serverEntrypoint],
+    cwd: rootDir,
+    env,
     stderr: "pipe",
   });
   const stderr = [];
@@ -511,12 +523,37 @@ const run = async () => {
         peerOnlyBrowserText.includes("# Peer-only recovery"),
         "browser without checkpoint access should hydrate from the live MCP peer",
       );
-      await peerOnlyPage.close();
 
       const peerOnlyDisconnected = await callTool(client, "tabula_disconnect_room", {
         sessionId: peerOnlyRoom.sessionId,
       });
       assert.equal(peerOnlyDisconnected.disconnectedSessionId, peerOnlyRoom.sessionId);
+
+      await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, firebaseConfig: null }, async (peerClient) => {
+        const joinedFromMcpb = await callTool(peerClient, "tabula_connect_room", {
+          roomUrl: peerOnlyRoom.roomUrl,
+          roomServerUrl: roomUrl,
+          identityName: "No-persistence MCPB",
+          waitForStateMs: 8_000,
+        });
+        assert.equal(joinedFromMcpb.recoveryStatus, "checkpoint-disabled");
+        assert.equal(joinedFromMcpb.hydrationStatus, "ready");
+        assert.equal(joinedFromMcpb.checkpointStatus.status, "disabled");
+        const peerWorkspace = await callTool(peerClient, "tabula_read_workspace", {
+          sessionId: joinedFromMcpb.sessionId,
+          detail: "tree",
+        });
+        const peerReadme = peerWorkspace.documents.find((document) => document.title === "README.md");
+        assert(peerReadme, "MCPB without persistence should receive the workspace from the open browser peer");
+        const peerReadmeDocument = await callTool(peerClient, "tabula_read_workspace_document", {
+          sessionId: joinedFromMcpb.sessionId,
+          documentId: peerReadme.id,
+        });
+        assert.equal(peerReadmeDocument.markdown, "# Peer-only recovery\n\nLoaded from the live MCP participant.\n");
+        await callTool(peerClient, "tabula_disconnect_room", { sessionId: joinedFromMcpb.sessionId });
+      });
+
+      await peerOnlyPage.close();
 
       const disconnected = await callTool(client, "tabula_disconnect_room", {
         sessionId: room.sessionId,

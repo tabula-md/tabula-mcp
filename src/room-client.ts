@@ -131,6 +131,11 @@ type Waiter = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+type HydrationWaiter = {
+  resolve: (value: RoomHydrationStatus) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 const LOCAL_DIRECT_ORIGIN = Symbol("tabula-mcp.direct-edit");
 const CHECKPOINT_DELAY_MS = 5_000;
 
@@ -220,6 +225,7 @@ export class TabulaRoomClient {
   private readonly awareness: Awareness;
   private readonly syncController: WorkspaceRoomSyncController;
   private readonly waiters = new Set<Waiter>();
+  private readonly hydrationWaiters = new Set<HydrationWaiter>();
   private roomKey: CryptoKey | null = null;
   private statusValue: ConnectionStatus = "connecting";
   private lastErrorValue = "";
@@ -369,19 +375,15 @@ export class TabulaRoomClient {
     return this.hasReceivedState ? "ready" : "waiting-for-peer-state";
   }
 
-  async connect() {
+  async connect({ waitForStateMs = 0 }: { waitForStateMs?: number } = {}) {
     this.statusValue = "connecting";
     await this.ensureRoomKey();
     const recoveryStatus = this.hasReceivedState
       ? "checkpoint-loaded"
       : await this.loadCheckpoint();
-    if (recoveryStatus !== "checkpoint-loaded") {
+    if (recoveryStatus === "checkpoint-failed") {
       throw new TabulaMcpError(
-        recoveryStatus === "checkpoint-disabled"
-          ? "Live room persistence is not configured."
-          : recoveryStatus === "checkpoint-missing"
-            ? "This live room has no saved workspace."
-            : this.checkpointStatusValue.error ?? "The encrypted live room could not be opened.",
+        this.checkpointStatusValue.error ?? "The encrypted live room could not be opened.",
       );
     }
 
@@ -420,6 +422,7 @@ export class TabulaRoomClient {
       });
     });
     this.publishLocalPresence();
+    await this.waitForInitialState(waitForStateMs);
     return recoveryStatus;
   }
 
@@ -450,6 +453,7 @@ export class TabulaRoomClient {
   }
 
   async readMarkdown() {
+    this.assertHydrated("read Markdown");
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
@@ -461,6 +465,7 @@ export class TabulaRoomClient {
   }
 
   async getOutline() {
+    this.assertHydrated("read the Markdown outline");
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
@@ -471,6 +476,7 @@ export class TabulaRoomClient {
   }
 
   async readWorkspace() {
+    this.assertHydrated("read the workspace");
     const workspace = await this.projectWorkspaceState();
     const documents = workspace.nodes.filter(
       (node): node is WorkspaceDocumentNode => node.type === "document",
@@ -487,6 +493,7 @@ export class TabulaRoomClient {
   }
 
   async readWorkspaceDocument({ documentId }: { documentId: string }) {
+    this.assertHydrated("read workspace documents");
     const node = this.getDocumentNode(documentId);
     const text = this.room.documents.get(documentId);
     if (!node || !text) throw new TabulaMcpError("Workspace document was not found.");
@@ -568,6 +575,7 @@ export class TabulaRoomClient {
 
   async applyWorkspaceChanges({ changes }: { changes: readonly WorkspaceChange[] }) {
     this.assertWritable("edit workspace documents");
+    this.assertHydrated("edit workspace documents");
     if (changes.length === 0) throw new TabulaMcpError("At least one workspace change is required.");
 
     const draftDoc = new Y.Doc();
@@ -695,6 +703,11 @@ export class TabulaRoomClient {
     this.awareness.destroy();
     for (const waiter of this.waiters) clearTimeout(waiter.timer);
     this.waiters.clear();
+    for (const waiter of this.hydrationWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve("waiting-for-peer-state");
+    }
+    this.hydrationWaiters.clear();
     this.doc.destroy();
   }
 
@@ -804,6 +817,14 @@ export class TabulaRoomClient {
     if (!this.writeAccess) throw new TabulaMcpError(`Write access is required to ${action}.`);
   }
 
+  private assertHydrated(action: string) {
+    if (!this.hasReceivedState) {
+      throw new TabulaMcpError(
+        `Room is connected but waiting for workspace state. Wait for a live peer or encrypted checkpoint before attempting to ${action}.`,
+      );
+    }
+  }
+
   private nextOrder(room: WorkspaceRoomCrdt) {
     const nodes = getWorkspaceRoomStructureSnapshot(room).nodes;
     return Math.max(0, ...nodes.map((node: WorkspaceRoomNode) => node.order)) + 1;
@@ -818,8 +839,28 @@ export class TabulaRoomClient {
   }
 
   private markReceivedState() {
+    const wasHydrated = this.hasReceivedState;
     this.hasReceivedState = true;
     this.lastStateReceivedAtValue = new Date().toISOString();
+    if (wasHydrated) return;
+    for (const waiter of this.hydrationWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve("ready");
+    }
+    this.hydrationWaiters.clear();
+  }
+
+  private async waitForInitialState(timeoutMs: number): Promise<RoomHydrationStatus> {
+    if (this.hasReceivedState || timeoutMs <= 0) return this.hydrationStatus;
+    const boundedTimeout = Math.max(0, Math.min(timeoutMs, 30_000));
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.hydrationWaiters.delete(waiter);
+        resolve(this.hydrationStatus);
+      }, boundedTimeout);
+      const waiter = { resolve, timer };
+      this.hydrationWaiters.add(waiter);
+    });
   }
 
   private scheduleCheckpoint() {

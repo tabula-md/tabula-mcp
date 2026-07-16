@@ -86,7 +86,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const documents = new DocumentRegistry(documentStore);
   const server = new McpServer({
     name: "tabula-mcp",
-    version: "0.1.1",
+    version: "0.1.2",
   });
 
   registerDocumentAppResource(server, { documentAppHtml: options.documentAppHtml });
