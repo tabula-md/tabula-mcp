@@ -191,8 +191,8 @@ const runDocumentFlow = async (baseUrl, browser) => {
   await page.getByRole("button", { name: "Share" }).click();
   await waitForMessage(page, "Encrypted share link sent to the model context.");
   assert.equal(
-    await page.getByRole("button", { name: "Send Changes" }).isDisabled(),
-    true,
+    await page.getByRole("button", { name: "Send Changes" }).isVisible(),
+    false,
     "share should include unsent edits and clear the model context baseline",
   );
 

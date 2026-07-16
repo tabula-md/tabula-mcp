@@ -123,9 +123,12 @@ const updateDocumentActionState = () => {
     (state.markdown !== state.lastSavedMarkdown || currentTitle() !== state.lastSavedTitle);
 
   elements.saveDocumentButton.disabled = !isDocument || !hasSavedContentChanges;
+  elements.saveDocumentButton.hidden = !hasSavedContentChanges;
   elements.sendChangesButton.disabled = !hasContextChanges;
+  elements.sendChangesButton.hidden = !hasContextChanges;
   elements.shareDocumentButton.disabled = !isDocument;
   elements.sendSelectionButton.disabled = !isDocument || !state.selectedText;
+  elements.sendSelectionButton.hidden = !state.selectedText;
   elements.openTabulaButton.disabled = !isDocument && !isRoom;
   elements.openTabulaButton.textContent = isRoom ? "Open session" : "Open a copy";
   elements.openTabulaButton.hidden = !isDocument && !isRoom;
