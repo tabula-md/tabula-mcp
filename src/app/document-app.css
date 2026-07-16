@@ -1,40 +1,44 @@
 :root {
   color-scheme: light;
-  --tabula-bg: var(--color-background-primary, #f8fafc);
+  --tabula-bg: var(--color-background-primary, #ffffff);
   --tabula-surface: var(--color-background-secondary, #ffffff);
-  --tabula-text: var(--color-text-primary, #0f172a);
-  --tabula-muted: var(--color-text-secondary, #64748b);
-  --tabula-border: var(--color-border-primary, #d8dee8);
-  --tabula-accent: #2563eb;
-  --tabula-warning: #b45309;
-  --tabula-error: #b91c1c;
+  --tabula-subtle: #f7f7f8;
+  --tabula-text: var(--color-text-primary, #29292d);
+  --tabula-muted: var(--color-text-secondary, #737378);
+  --tabula-border: var(--color-border-primary, #e8e8eb);
+  --tabula-accent: #29292d;
+  --tabula-warning: #9a6700;
+  --tabula-error: #b42318;
   font-family: var(--font-sans, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --tabula-bg: var(--color-background-primary, #101418);
-  --tabula-surface: var(--color-background-secondary, #171c22);
-  --tabula-text: var(--color-text-primary, #eef2f7);
-  --tabula-muted: var(--color-text-secondary, #a7b1bf);
-  --tabula-border: var(--color-border-primary, #2d3744);
-  --tabula-accent: #60a5fa;
+  --tabula-bg: var(--color-background-primary, #171719);
+  --tabula-surface: var(--color-background-secondary, #1e1e21);
+  --tabula-subtle: #28282c;
+  --tabula-text: var(--color-text-primary, #f4f4f5);
+  --tabula-muted: var(--color-text-secondary, #a6a6ad);
+  --tabula-border: var(--color-border-primary, #38383e);
+  --tabula-accent: #f4f4f5;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
-  background: var(--tabula-bg);
+  min-height: 0;
+  background: transparent;
   color: var(--tabula-text);
 }
 
 button {
-  min-height: 34px;
+  min-height: 32px;
   border: 1px solid var(--tabula-border);
-  border-radius: 6px;
+  border-radius: 7px;
   background: var(--tabula-surface);
   color: var(--tabula-text);
   font: inherit;
@@ -44,20 +48,26 @@ button {
 }
 
 button:hover:not(:disabled) {
-  border-color: var(--tabula-accent);
+  border-color: color-mix(in srgb, var(--tabula-text) 20%, var(--tabula-border));
+  background: var(--tabula-subtle);
+}
+
+button:focus-visible,
+.title-input:not(:read-only):focus {
+  outline: 2px solid color-mix(in srgb, var(--tabula-text) 25%, transparent);
+  outline-offset: 1px;
 }
 
 button:disabled {
   cursor: default;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .shell {
-  min-height: 100vh;
   display: flex;
+  min-height: 0;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  background: var(--tabula-bg);
 }
 
 .toolbar {
@@ -65,51 +75,60 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 40px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--tabula-border);
+  background: var(--tabula-surface);
 }
 
 .identity {
-  min-width: 0;
   display: flex;
+  min-width: 0;
+  flex: 1;
   align-items: center;
   gap: 8px;
-  flex: 1;
 }
 
 .brand {
-  font-weight: 700;
-  letter-spacing: 0;
+  display: none;
 }
 
 .title-input {
-  min-width: 0;
   width: min(520px, 100%);
+  min-width: 0;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: var(--tabula-text);
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   padding: 5px 7px;
 }
 
-.title-input:not(:read-only):focus {
-  border-color: var(--tabula-accent);
-  outline: 2px solid color-mix(in srgb, var(--tabula-accent) 22%, transparent);
+.title-input:not(:read-only):hover {
+  background: var(--tabula-subtle);
 }
 
 .title-input:read-only {
-  color: var(--tabula-muted);
+  color: var(--tabula-text);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
 }
 
+.actions button {
+  min-height: 30px;
+}
+
+/*
+ * An inline MCP App is a result in the conversation, not a second desktop
+ * application. Keep only the document and the two ways to continue working.
+ */
 body[data-display-mode="inline"] .fullscreen-only,
 body[data-display-mode="inline"] .status-grid,
 body[data-display-mode="inline"] .message,
@@ -119,16 +138,41 @@ body[data-display-mode="inline"] .markdown-pane .pane-heading {
 }
 
 body[data-display-mode="inline"] .shell {
-  min-height: 100vh;
-  gap: 12px;
+  min-height: 0;
+  background: transparent;
 }
 
 body[data-display-mode="inline"] .toolbar {
-  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 4px 6px 4px 8px;
+  border-bottom: 1px solid var(--tabula-border);
+  background: transparent;
+}
+
+body[data-display-mode="inline"] .title-input {
+  padding-left: 4px;
+  font-size: 13px;
+}
+
+body[data-display-mode="inline"] .actions {
+  gap: 2px;
+}
+
+body[data-display-mode="inline"] .actions button {
+  min-height: 28px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0 7px;
+}
+
+body[data-display-mode="inline"] .actions button:hover:not(:disabled) {
+  border-color: var(--tabula-border);
+  background: var(--tabula-subtle);
 }
 
 body[data-display-mode="inline"] .workspace {
   display: block;
+  min-height: 0;
 }
 
 body[data-display-mode="inline"] .markdown-pane {
@@ -136,59 +180,33 @@ body[data-display-mode="inline"] .markdown-pane {
 }
 
 body[data-display-mode="inline"] .markdown-preview {
-  min-height: calc(100vh - 88px);
+  min-height: 0;
+  max-height: 420px;
+  overflow: auto;
+  padding: 18px 16px 24px;
 }
 
+/* MCP internals still update these elements for tool behavior, but they are
+ * not part of a person's document collaboration surface. */
 .status-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.status-grid > div,
-.context-pane,
-.markdown-pane,
-.message {
-  border: 1px solid var(--tabula-border);
-  border-radius: 8px;
-  background: var(--tabula-surface);
-}
-
-.status-grid > div {
-  min-width: 0;
-  padding: 8px 10px;
+  display: none;
 }
 
 .label {
-  display: block;
   color: var(--tabula-muted);
-  font-size: 11px;
-  line-height: 1.25;
-  margin-bottom: 3px;
-}
-
-.status-grid strong {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-}
-
-.status-grid strong[data-tone="warning"] {
-  color: var(--tabula-warning);
-}
-
-.status-grid strong[data-tone="error"] {
-  color: var(--tabula-error);
 }
 
 .message {
-  min-height: 34px;
-  padding: 8px 10px;
+  min-height: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--tabula-border);
   color: var(--tabula-muted);
-  font-size: 13px;
+  background: var(--tabula-surface);
+  font-size: 12px;
+}
+
+.message:empty {
+  display: none;
 }
 
 .message[data-tone="warning"] {
@@ -200,23 +218,27 @@ body[data-display-mode="inline"] .markdown-preview {
 }
 
 .workspace {
+  display: grid;
   min-height: 0;
   flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
 }
 
 .context-pane,
 .markdown-pane {
-  min-height: 0;
   display: flex;
+  min-height: 0;
   flex-direction: column;
+  background: var(--tabula-surface);
+}
+
+.context-pane {
+  border-left: 1px solid var(--tabula-border);
 }
 
 .pane-heading {
-  min-height: 42px;
   display: flex;
+  min-height: 44px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -226,38 +248,23 @@ body[data-display-mode="inline"] .markdown-preview {
 
 .pane-heading h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
 .pane-tools {
-  min-width: 0;
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
 
 .context-pane .pane-heading {
-  align-items: stretch;
-  flex-direction: column;
-  padding: 8px 10px;
-}
-
-.context-pane .pane-tools {
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.context-pane .segmented-control {
-  flex: 1 1 auto;
-}
-
-.context-pane .segmented-control button {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 0 6px;
-  white-space: nowrap;
+  align-items: center;
+  flex-direction: row;
+  padding: 0 12px;
 }
 
 .segmented-control {
@@ -265,14 +272,16 @@ body[data-display-mode="inline"] .markdown-preview {
   min-height: 30px;
   overflow: hidden;
   border: 1px solid var(--tabula-border);
-  border-radius: 6px;
+  border-radius: 7px;
+  background: var(--tabula-subtle);
 }
 
 .segmented-control button {
   min-height: 28px;
   border: 0;
-  border-radius: 0;
   border-right: 1px solid var(--tabula-border);
+  border-radius: 0;
+  background: transparent;
   padding: 0 9px;
 }
 
@@ -281,7 +290,8 @@ body[data-display-mode="inline"] .markdown-preview {
 }
 
 .segmented-control button[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--tabula-accent) 14%, var(--tabula-surface));
+  background: var(--tabula-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tabula-text) 8%, transparent);
   color: var(--tabula-text);
   font-weight: 600;
 }
@@ -295,12 +305,12 @@ body[data-display-mode="inline"] .markdown-preview {
 .outline-list {
   overflow: auto;
   margin: 0;
-  padding: 8px 10px 10px;
+  padding: 8px;
   list-style: none;
 }
 
 .outline-list li {
-  padding: 5px 4px 5px calc((var(--depth, 1) - 1) * 12px + 4px);
+  padding: 6px 6px 6px calc((var(--depth, 1) - 1) * 12px + 6px);
   border-radius: 5px;
   color: var(--tabula-text);
   font-size: 13px;
@@ -313,40 +323,40 @@ body[data-display-mode="inline"] .markdown-preview {
 }
 
 .document-surface {
-  flex: 1;
-  min-height: 320px;
   display: grid;
+  min-height: 320px;
+  flex: 1;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   overflow: hidden;
 }
 
 .markdown-editor {
-  min-height: 320px;
   width: 100%;
-  border: 0;
-  border-right: 1px solid var(--tabula-border);
+  min-height: 320px;
+  margin: 0;
   resize: none;
   overflow: auto;
-  margin: 0;
-  padding: 14px;
-  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--tabula-border);
+  background: var(--tabula-surface);
   color: var(--tabula-text);
+  padding: 16px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font: 13px/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font: 13px/1.6 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 
 .markdown-editor:focus {
-  outline: 2px solid color-mix(in srgb, var(--tabula-accent) 55%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--tabula-text) 18%, transparent);
   outline-offset: -2px;
 }
 
 .markdown-preview {
   min-height: 320px;
   overflow: auto;
-  padding: 16px 18px 28px;
+  padding: 20px 24px 32px;
   font-size: 14px;
-  line-height: 1.65;
+  line-height: 1.7;
   overflow-wrap: anywhere;
 }
 
@@ -360,9 +370,9 @@ body[data-display-mode="inline"] .markdown-preview {
 .markdown-preview h4,
 .markdown-preview h5,
 .markdown-preview h6 {
-  margin: 18px 0 8px;
+  margin: 20px 0 8px;
   line-height: 1.25;
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
 }
 
 .markdown-preview h1 {
@@ -396,7 +406,7 @@ body[data-display-mode="inline"] .markdown-preview {
 
 .markdown-preview code {
   border-radius: 4px;
-  background: color-mix(in srgb, var(--tabula-border) 35%, transparent);
+  background: var(--tabula-subtle);
   padding: 1px 4px;
   font: 13px/1.45 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
@@ -406,7 +416,7 @@ body[data-display-mode="inline"] .markdown-preview {
   border: 1px solid var(--tabula-border);
   border-radius: 6px;
   padding: 10px 12px;
-  background: color-mix(in srgb, var(--tabula-border) 18%, transparent);
+  background: var(--tabula-subtle);
 }
 
 .markdown-preview pre code {
@@ -416,7 +426,8 @@ body[data-display-mode="inline"] .markdown-preview {
 }
 
 .markdown-preview a {
-  color: var(--tabula-accent);
+  color: inherit;
+  text-decoration-color: var(--tabula-muted);
 }
 
 .empty-preview {
@@ -441,6 +452,10 @@ body[data-display-mode="inline"] .markdown-preview {
   min-height: 420px;
 }
 
+body[data-display-mode="fullscreen"] .shell {
+  min-height: 100vh;
+}
+
 @media (max-width: 760px) {
   .toolbar {
     align-items: stretch;
@@ -451,16 +466,14 @@ body[data-display-mode="inline"] .markdown-preview {
     justify-content: flex-start;
   }
 
-  .status-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .workspace {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .context-pane {
     max-height: 180px;
+    border-top: 1px solid var(--tabula-border);
+    border-left: 0;
   }
 
   .pane-heading {
@@ -481,5 +494,24 @@ body[data-display-mode="inline"] .markdown-preview {
   .markdown-pane[data-view-mode="split"] .markdown-editor {
     border-right: 0;
     border-bottom: 1px solid var(--tabula-border);
+  }
+}
+
+@media (max-width: 500px) {
+  body[data-display-mode="inline"] .toolbar {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  body[data-display-mode="inline"] .title-input {
+    width: 100%;
+  }
+
+  body[data-display-mode="inline"] .actions {
+    flex-wrap: nowrap;
+  }
+
+  body[data-display-mode="inline"] .actions button {
+    white-space: nowrap;
   }
 }
