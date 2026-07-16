@@ -48,13 +48,26 @@ const sensitiveContentPatterns = [
 
 const isTextPackageFile = (filePath) => /\.(?:css|d\.ts|html|js|json|md|txt)$/i.test(filePath);
 
+const readPackResult = (output, packageName) => {
+  const parsed = JSON.parse(output);
+  const pack = Array.isArray(parsed)
+    ? parsed[0]
+    : parsed?.[packageName] ?? Object.values(parsed ?? {})[0];
+
+  if (!pack || !Array.isArray(pack.files)) {
+    throw new Error("npm pack returned an unsupported JSON result");
+  }
+
+  return pack;
+};
+
 const main = async () => {
+  const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   const { stdout } = await execFileAsync("npm", ["pack", "--dry-run", "--json"], {
     maxBuffer: 1024 * 1024 * 20,
   });
-  const pack = JSON.parse(stdout)[0];
+  const pack = readPackResult(stdout, packageJson.name);
   const paths = new Set(pack.files.map((file) => file.path));
-  const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 
   if (packageJson.name !== "@tabula-md/mcp" || packageJson.publishConfig?.access !== "public") {
     throw new Error("npm package metadata must publish @tabula-md/mcp with public access");
@@ -89,7 +102,7 @@ const main = async () => {
     }
   }
 
-  console.log(`npm package contents check passed (${pack.entryCount} files)`);
+  console.log(`npm package contents check passed (${pack.entryCount ?? pack.files.length} files)`);
 };
 
 main().catch((error) => {
