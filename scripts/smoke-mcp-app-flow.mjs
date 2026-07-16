@@ -80,7 +80,7 @@ const runDocumentFlow = async (baseUrl, browser) => {
   await page.getByRole("button", { name: "Open a copy" }).click();
   await waitForMessage(page, "Opened a Tabula.md copy.");
   let events = await getDevEvents(page);
-  assert(events.toolCalls.some((call) => call?.name === "tabula_share_document"), "Open a copy should create an encrypted JSON snapshot");
+  assert(events.toolCalls.some((call) => call?.name === "tabula_export_copy"), "Open a copy should create an encrypted JSON snapshot");
   assert(events.openLinks.some((request) => String(request?.url).includes("#json=")), "Open a copy should open the Tabula.md snapshot link");
 
   await page.getByRole("button", { name: "Start session" }).click();
@@ -88,11 +88,12 @@ const runDocumentFlow = async (baseUrl, browser) => {
   await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
   await page.getByText("Claude is connected · 0 other collaborators", { exact: true }).waitFor({ state: "visible" });
   assert.equal(await page.getByRole("button", { name: "Open a copy" }).isVisible(), false);
+  await page.getByRole("button", { name: "Export copy" }).waitFor({ state: "visible" });
   assert.equal(await page.getByRole("button", { name: "Start session" }).isVisible(), false);
 
   await page.getByRole("button", { name: "Open session" }).click();
   events = await getDevEvents(page);
-  assert(events.toolCalls.some((call) => call?.name === "tabula_app_start_room_from_document"), "Start session should create a Room from the local draft");
+  assert(events.toolCalls.some((call) => call?.name === "tabula_start_session"), "Start session should create a Room from the local draft");
   assert(events.openLinks.some((request) => String(request?.url).includes("#room=")), "Open session should open the encrypted Room link");
 
   assertNoPageErrors(consoleErrors, pageErrors);

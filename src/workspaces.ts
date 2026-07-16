@@ -425,6 +425,7 @@ export const readStoredWorkspaceDocument = (
 export const workspaceShareFiles = (workspace: StoredWorkspace) =>
   workspace.documents.map((document) => ({
     id: document.documentId,
+    path: document.path,
     title: document.title,
     text: document.markdown,
   }));

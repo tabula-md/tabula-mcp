@@ -49,7 +49,7 @@ const healthResponse = await fetchImpl(new Request("https://mcp.example.com/heal
 assert(healthResponse.status === 200, `Vercel health returned ${healthResponse.status}`);
 const healthBody = await healthResponse.json();
 assert(healthBody.service === "tabula-mcp", "Vercel health did not identify tabula-mcp");
-assert(healthBody.version === "0.1.7", "Vercel health did not expose the package version");
+assert(healthBody.version === "0.2.0", "Vercel health did not expose the package version");
 assert(healthBody.writeAccess === "enabled", "Vercel health did not expose the write policy");
 assert(healthBody.deploymentMode === "remote", "Vercel health did not use remote deployment mode");
 
@@ -57,7 +57,7 @@ const readyResponse = await fetchImpl(new Request("https://mcp.example.com/ready
 assert(readyResponse.status === 200, `Vercel ready returned ${readyResponse.status}`);
 const readyBody = await readyResponse.json();
 assert(readyBody.service === "tabula-mcp", "Vercel ready did not identify tabula-mcp");
-assert(readyBody.version === "0.1.7", "Vercel ready did not expose the package version");
+assert(readyBody.version === "0.2.0", "Vercel ready did not expose the package version");
 assert(readyBody.writeAccess === "enabled", "Vercel ready did not expose the write policy");
 
 const client = new Client({ name: "tabula-mcp-vercel-smoke", version: "0.0.0" });
@@ -68,10 +68,17 @@ try {
     }),
   );
   const tools = await client.listTools();
-  assert(
-    tools.tools.some((tool) => tool.name === "tabula_read_me"),
-    "Vercel MCP endpoint did not expose tabula_read_me",
-  );
+  assert(JSON.stringify(tools.tools.map((tool) => tool.name)) === JSON.stringify([
+    "tabula_create_draft",
+    "tabula_update_draft",
+    "tabula_start_session",
+    "tabula_join_room",
+    "tabula_list_files",
+    "tabula_read_file",
+    "tabula_search_files",
+    "tabula_write_file",
+    "tabula_export_copy",
+  ]), "Vercel MCP endpoint did not expose exactly the nine core tools");
 } finally {
   await client.close();
 }

@@ -1,219 +1,206 @@
 # Tabula.md MCP
 
-Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.
+Create private Markdown drafts and work with people or agents in live Tabula sessions.
 
-[Open Tabula.md](https://tabula.md)
+It exposes three product concepts:
 
-People work in Tabula.md. Agents use MCP to read and change the same Markdown
-files. No Tabula.md account is required.
+- **Draft** — a private Markdown draft stored by the MCP runtime.
+- **Live Session** — an encrypted `#room` workspace that people and agents can edit together.
+- **Copy** — an encrypted `#json` snapshot for a fixed handoff.
+
+The model sees a file-oriented API. Room encryption, Yjs updates, document IDs, checkpoints, and patch offsets stay inside the server.
+
+## Core workflow
+
+Join an existing session:
+
+```text
+tabula_join_room
+→ tabula_list_files
+→ tabula_read_file
+→ tabula_write_file
+```
+
+Start from a private draft:
+
+```text
+tabula_create_draft
+→ tabula_update_draft
+→ tabula_start_session
+```
+
+Hand off a fixed result:
+
+```text
+tabula_export_copy
+→ https://tabula.md/#json=...
+```
+
+Use `Start Session` when collaborators should continue editing. Use `Export Copy` when the recipient should receive an immutable copy of the current state.
+
+## Core tools
+
+The default server exposes exactly nine model-facing tools:
+
+| Tool | Purpose |
+|---|---|
+| `tabula_create_draft` | Create a private Markdown draft. |
+| `tabula_update_draft` | Replace a private draft. |
+| `tabula_start_session` | Turn a draft into a live encrypted session. |
+| `tabula_join_room` | Join a private `#room` URL. |
+| `tabula_list_files` | List session files and folders. |
+| `tabula_read_file` | Read Markdown and its revision. |
+| `tabula_search_files` | Search paths and content by line. |
+| `tabula_write_file` | Create or replace a Markdown file. |
+| `tabula_export_copy` | Export a draft or session as an encrypted `#json` copy. |
+
+For an existing file, call `tabula_read_file` first and pass its `revision` as `expectedRevision` to `tabula_write_file`. The server rejects stale writes and computes the collaboration patch itself.
 
 ## Install
 
-Requirements: Node.js `^20.19.0 || >=22.12.0`, npm, and an MCP client.
+### Claude Desktop
 
-### Codex
-
-```sh
-codex mcp add tabula -- npx -y @tabula-md/mcp@latest
-```
-
-### Claude Code
+Build the local extension:
 
 ```sh
-claude mcp add tabula -- npx -y @tabula-md/mcp@latest
+npm ci
+npm run build:mcpb
 ```
 
-Claude Code can also install the repository plugin:
+Then open `dist/tabula-mcp-0.2.0.mcpb` in Claude Desktop and restart Claude Desktop after replacing an older build.
+
+### Claude Code or Codex CLI
+
+Run the published stdio server:
 
 ```sh
-claude plugin marketplace add tabula-md/tabula-mcp
-claude plugin install tabula-mcp@tabula-md
+npx -y @tabula-md/mcp@0.2.0
 ```
 
-### Other local MCP clients
+Example MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "tabula": {
       "command": "npx",
-      "args": ["-y", "@tabula-md/mcp@latest"]
+      "args": ["-y", "@tabula-md/mcp@0.2.0"]
     }
   }
 }
 ```
 
-### Claude Desktop
+### Hosted MCP
 
-Download the latest
-[Tabula.md MCP extension](https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb),
-then install it by double-clicking the file or from **Settings → Extensions →
-Advanced settings → Install Extension**. No installer configuration is
-required.
-
-See [Claude Desktop setup](docs/claude-desktop.md) for the complete check.
-
-## Use it
-
-Give the agent a complete live-session invite and a concrete task:
-
-```text
-Join this Tabula.md session, review the workspace, and update findings.md:
-
-https://tabula.md/#room=<roomId>,<roomKey>
-```
-
-The complete URL is a bearer secret. Anyone or any agent with it can decrypt
-and edit the session. Do not put it in logs, issues, or public screenshots.
-
-Local MCP connections allow changes by default. Codex, Claude, and other MCP
-hosts still control approval for mutating tool calls. Start the server with
-`--read-only` for inspection-only use.
-
-Check an installation without reading files or secrets:
-
-```sh
-npx -y @tabula-md/mcp@latest --doctor
-```
-
-## Core workflows
-
-### Join a live session
-
-```text
-tabula_connect_room
-→ tabula_read_workspace
-→ tabula_read_workspace_context
-→ tabula_read_workspace_document when exact text is needed
-→ tabula_apply_workspace_changes
-→ tabula_wait_for_changes
-```
-
-### Start a live session from Markdown files
-
-```text
-tabula_import_markdown_workspace
-→ tabula_create_workspace_room
-→ share the returned #room URL
-```
-
-### Create a non-live copy link
-
-```text
-tabula_create_workspace or tabula_import_markdown_workspace
-→ tabula_share_workspace
-→ share the returned #json URL
-```
-
-Agents can create, read, rename, move, patch, and delete Markdown documents.
-Changes use the latest document hash to avoid silently overwriting a newer
-collaborator edit.
-
-## Session Card
-
-MCP App-compatible clients can show a compact Tabula.md Session Card.
-
-- **Open a copy** creates an encrypted, non-live `#json` link.
-- **Start session** creates a live `#room` and connects the agent.
-- **Open session** continues in the full Tabula.md collaboration surface.
-
-The card is a handoff surface, not a second editor. Clients without MCP Apps
-support use the same workspace tools directly.
-
-## Local and hosted modes
-
-Local stdio or MCPB is the recommended path for private collaboration.
-
-| Path | Runs in | Plaintext boundary | Best for |
-| --- | --- | --- | --- |
-| Local stdio or MCPB | Your device | Working drafts and room decryption stay in the local MCP process; the model receives content returned by tools | Private live-session work |
-| Hosted MCP | Tabula.md infrastructure | The hosted MCP runtime is a trusted plaintext participant for the MCP session | Installation-free clients and MCP Apps |
-| Tabula Room | Encrypted relay | Receives encrypted collaboration messages, not room keys or Markdown | Live synchronization |
-| Tabula JSON | Encrypted snapshot store | Receives encrypted snapshot bytes, not snapshot keys or Markdown | Non-live copy links |
-
-The official hosted endpoint is:
+Use the Streamable HTTP endpoint:
 
 ```text
 https://mcp.tabula.md/mcp
 ```
 
-Using it deliberately moves the MCP plaintext boundary to the hosted runtime.
-This is separate from the blind Tabula Room relay. Read the
-[security model](docs/security-model.md) before hosting or integrating the
-remote endpoint.
+The hosted runtime is a trusted plaintext participant in rooms it joins. Use the local MCPB when room plaintext and keys must remain on the user's device.
 
-## Service defaults
+## Example prompt
 
-Hosted `https://tabula.md/#room=...` links use
-`https://rooms.tabula.md`. Local Tabula.md development links use
-`http://localhost:3002`.
-
-Hosted `#json` copy links use `https://json.tabula.md`. Local development uses
-`http://localhost:3004`.
-
-Self-hosted deployments can override these services:
-
-```sh
-export TABULA_ROOM_URL=https://rooms.example.com
-export TABULA_JSON_URL=https://json.example.com
+```text
+Use your Tabula tools to join this room and work with me.
+Keep the room URL private.
+If Tabula tools are unavailable, tell me to set up Tabula MCP.
+https://tabula.md/#room=...
 ```
 
-Encrypted Firebase room recovery is optional for local sessions while a peer
-remains connected. Hosted MCP must configure encrypted room recovery before it
-can start a new live session. See [Deployment](docs/deployment.md) for Vercel,
-Cloudflare, Redis, Firebase, origin policy, and production settings.
+Expected behavior:
 
-## Develop
+1. The agent calls `tabula_join_room`.
+2. It lists files when the target is unknown.
+3. It reads the selected file.
+4. It writes once with the returned revision.
+5. The browser sees the change immediately.
+
+The model never constructs `changes[]`, `patches[]`, or text offsets.
+
+## MCP App
+
+Draft and Session tools can show a compact Tabula card in MCP Apps-capable hosts.
+
+Draft actions:
+
+- **Open a copy** — export and open an encrypted `#json` snapshot.
+- **Start session** — create a live `#room` session.
+
+Session actions:
+
+- **Open session** — open the current live `#room` link.
+- **Export copy** — export the current session state as a fixed `#json` snapshot.
+
+The MCP App is a handoff card, not a second Markdown editor.
+
+## Security model
+
+- `#room` and `#json` URLs contain bearer secrets in their URL fragments.
+- Do not echo a room URL after joining it.
+- Room relays receive encrypted collaboration envelopes.
+- JSON snapshot storage receives encrypted snapshot bytes.
+- A local MCP runtime decrypts content on the user's device.
+- A hosted MCP runtime decrypts content inside the hosted MCP process.
+- Claude Desktop or the MCP host controls approval for mutating tool calls.
+- Tabula does not require a second agent-specific write permission after the host approves a writable MCP call.
+
+## Configuration
+
+Common environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `TABULA_ROOM_URL` | Override the Room relay URL. |
+| `TABULA_JSON_URL` | Override the encrypted JSON snapshot service. |
+| `TABULA_MCP_AUTH_TOKEN` | Protect the hosted MCP endpoint. |
+| `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` | Explicitly allow a public hosted endpoint. |
+| `TABULA_MCP_DOCUMENT_STORE_DIR` | Override local draft storage. |
+
+The local server is writable by default so the MCP host can govern approvals. Use `--read-only` to disable live session writes.
+
+## Development
 
 ```sh
-npm install
+npm ci
+npm run typecheck
 npm test
 npm run test:app
 npm run test:stdio
+npm run check:context-budget
 ```
 
-Inspect the Session Card locally:
+Build and verify the extension:
 
 ```sh
-npm run dev:app
+npm run build:mcpb
+npm run check:mcpb
 ```
 
-Open `http://127.0.0.1:5174/index-dev.html?tabula-dev=1` for a private draft or
-add `&fixture=room` for a connected live session.
+## 0.2 migration
 
-Build the npm server and MCP App:
+Version 0.2 intentionally removes the 0.1 tool surface. No legacy adapter is registered.
 
-```sh
-npm run build
-```
+| 0.1 tool | 0.2 replacement |
+|---|---|
+| `tabula_create_document` | `tabula_create_draft` |
+| `tabula_update_document` | `tabula_update_draft` |
+| `tabula_create_workspace_room` | `tabula_start_session` |
+| `tabula_connect_room` | `tabula_join_room` |
+| `tabula_read_workspace` | `tabula_list_files` |
+| `tabula_read_workspace_document` | `tabula_read_file` |
+| `tabula_read_workspace_context` | `tabula_search_files` |
+| `tabula_apply_workspace_changes` | `tabula_write_file` |
+| `tabula_share_document`, `tabula_share_workspace` | `tabula_export_copy` |
+| `tabula_read_me` | Server instructions |
 
-Build the one-click Claude Desktop bundle:
-
-```sh
-npm run release:pack
-```
-
-Run the complete release gate:
-
-```sh
-npm run release:verify
-```
-
-## Documentation
-
-- [Codex CLI](docs/codex-cli.md)
-- [Claude Code](docs/claude-code.md)
-- [Claude Desktop](docs/claude-desktop.md)
-- [Deployment](docs/deployment.md)
-- [Security Model](docs/security-model.md)
-- [MCP App Architecture](docs/mcp-app-architecture.md)
-- [Release](docs/release.md)
+Reinstall the MCPB or restart the MCP client after upgrading so cached tool and MCP App definitions are discarded.
 
 ## Privacy Policy
 
-Read the [Tabula.md MCP Privacy Policy](PRIVACY.md) for local checkpoints,
-hosted working state, encrypted services, retention, and support data.
+See the [Tabula.md MCP privacy policy](https://mcp.tabula.md/privacy) for plaintext trust boundaries, encrypted service data, and retention details.
 
 ## License
 
-[MIT](LICENSE)
+MIT

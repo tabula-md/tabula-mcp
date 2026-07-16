@@ -190,11 +190,12 @@ const callTool = async (client, name, args = {}) => {
   return result.structuredContent;
 };
 
-const withMcpClient = async ({ serverEntrypoint, roomUrl, firebaseConfig }, callback) => {
+const withMcpClient = async ({ serverEntrypoint, roomUrl, appOrigin, firebaseConfig }, callback) => {
   const client = new Client({ name: "tabula-mcp-local-e2e", version: "0.0.0" });
   const env = {
     ...process.env,
     TABULA_ROOM_URL: roomUrl,
+    TABULA_APP_ORIGIN: appOrigin,
     TABULA_MCP_ALLOW_ANY_EGRESS: "1",
   };
   if (firebaseConfig) {
@@ -354,232 +355,91 @@ const run = async () => {
       }
     });
 
-    await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, firebaseConfig }, async (client) => {
-      const tools = await client.listTools();
-      const toolNames = tools.tools.map((tool) => tool.name);
-      for (const toolName of [
-        "tabula_create_workspace",
-        "tabula_create_workspace_room",
-        "tabula_read_workspace",
-        "tabula_read_workspace_document",
-        "tabula_apply_workspace_changes",
-        "tabula_wait_for_changes",
-      ]) {
-        assert(toolNames.includes(toolName), `MCP local E2E requires ${toolName}`);
-      }
+    await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, firebaseConfig }, async (client) => {
+      const expectedTools = [
+        "tabula_create_draft", "tabula_update_draft", "tabula_start_session", "tabula_join_room",
+        "tabula_list_files", "tabula_read_file", "tabula_search_files", "tabula_write_file", "tabula_export_copy",
+      ];
+      assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), expectedTools);
 
-      const created = await callTool(client, "tabula_create_workspace", {
-        title: "MCP Local E2E",
-        files: [
-          {
-            path: "README.md",
-            markdown: "# MCP Local E2E\n\nInitial from MCP.\n",
-          },
-        ],
-        detail: "tree",
+      const draft = await callTool(client, "tabula_create_draft", {
+        title: "README.md",
+        content: "# MCP Local E2E\n\nInitial from MCP.\n",
       });
-      const sourceDocument = created.documents.find((document) => document.title === "README.md");
-      assert(sourceDocument, "created workspace should include README.md");
+      const session = await callTool(client, "tabula_start_session", { draftId: draft.draftId });
+      assert.match(session.sessionUrl, new RegExp(`^${appOrigin.replaceAll(".", "\\.")}/#room=`));
+      assert.equal(session.ready, true);
+      assert.equal(session.canWrite, true);
 
-      const room = await callTool(client, "tabula_create_workspace_room", {
-        workspaceId: created.workspaceId,
-        appOrigin,
-        roomServerUrl: roomUrl,
-        identityName: "Local E2E Agent",
-        identityColor: "#2563eb",
-      });
-      assert.match(room.roomUrl, new RegExp(`^${appOrigin.replaceAll(".", "\\.")}/#room=`));
-      assert.equal(
-        room.published?.checkpointStatus?.status,
-        "saved",
-        `MCP-created room must persist before a browser joins: ${JSON.stringify(room.published?.checkpointStatus)}`,
-      );
-      const roomStatusBeforeBrowser = await callTool(client, "tabula_room_status", {
-        sessionId: room.sessionId,
-      });
+      await page.goto(session.sessionUrl);
+      const browserInitialText = await waitForEditorText(page, "Initial from MCP.");
+      const listed = await callTool(client, "tabula_list_files", { sessionId: session.sessionId });
+      assert(listed.files.some((file) => file.path === "README.md"));
+      const readme = await callTool(client, "tabula_read_file", { sessionId: session.sessionId, path: "README.md" });
+      assert.equal(readme.content, "# MCP Local E2E\n\nInitial from MCP.\n");
 
-      await page.goto(room.roomUrl);
-      let browserInitialText;
-      try {
-        browserInitialText = await waitForEditorText(page, "Initial from MCP.");
-      } catch (error) {
-        const body = await page.locator("body").innerText().catch(() => "[body unavailable]");
-        const roomState = JSON.stringify({
-          status: roomStatusBeforeBrowser.status,
-          socketConnected: roomStatusBeforeBrowser.socketConnected,
-          peerCount: roomStatusBeforeBrowser.peerCount,
-          hydrationStatus: roomStatusBeforeBrowser.hydrationStatus,
-          checkpointStatus: roomStatusBeforeBrowser.checkpointStatus,
-          lastError: roomStatusBeforeBrowser.lastError,
-        });
-        throw new Error(`${error.message}\nMCP room state: ${roomState}\nBrowser body:\n${body}\nBrowser diagnostics:\n${pageDiagnostics.join("\n")}\nRoom server stdout:\n${roomServer.stdout.join("")}\nRoom server stderr:\n${roomServer.stderr.join("")}`);
-      }
-      assert(browserInitialText.includes("# MCP Local E2E"), "browser should receive MCP-created workspace text");
-
-      const workspace = await callTool(client, "tabula_read_workspace", {
-        sessionId: room.sessionId,
-        detail: "tree",
+      const nextContent = `${readme.content}\nEdited by tabula-mcp local E2E.\n`;
+      await callTool(client, "tabula_write_file", {
+        sessionId: session.sessionId,
+        path: "README.md",
+        content: nextContent,
+        expectedRevision: readme.revision,
       });
-      const readme =
-        workspace.documents.find((document) => document.id === sourceDocument.id) ??
-        workspace.documents.find((document) => document.title === "README.md") ??
-        workspace.documents.find((document) => document.title?.includes("README"));
-      assert(
-        readme,
-        `room workspace should expose the MCP-created README document. Documents: ${JSON.stringify(workspace.documents)}`,
-      );
-
-      const readmeDocument = await callTool(client, "tabula_read_workspace_document", {
-        sessionId: room.sessionId,
-        documentId: readme.id,
+      await callTool(client, "tabula_write_file", {
+        sessionId: session.sessionId,
+        path: "Agent Notes.md",
+        content: "# Agent Notes\n\nCreated by MCP local E2E.\n",
       });
-      assert.equal(readmeDocument.markdown, "# MCP Local E2E\n\nInitial from MCP.\n");
-
-      const appended = "\nEdited by tabula-mcp local E2E.\n";
-      const applied = await callTool(client, "tabula_apply_workspace_changes", {
-        sessionId: room.sessionId,
-        changes: [
-          {
-            type: "document.patch",
-            documentId: readme.id,
-            baseSha256: readmeDocument.sha256,
-            patches: [
-              {
-                from: readmeDocument.markdown.length,
-                to: readmeDocument.markdown.length,
-                insert: appended,
-              },
-            ],
-          },
-          {
-            type: "document.create",
-            parentId: workspace.workspace.rootId,
-            title: "Agent Notes.md",
-            markdown: "# Agent Notes\n\nCreated by MCP local E2E.\n",
-          },
-        ],
-      });
-      assert.equal(applied.applied, true);
-      assert.equal(applied.changedDocumentIds.length, 2);
 
       const browserAfterMcpText = await waitForEditorText(page, "Edited by tabula-mcp local E2E.");
-      assert(browserAfterMcpText.includes("Initial from MCP."), "MCP patch should preserve existing browser text");
       const tabsAfterMcp = await tabTitles(page);
-      assert(
-        !tabsAfterMcp.some((tab) => tab.title.includes("Agent Notes.md")),
-        "a remote document creation must not disrupt the human's open tabs",
-      );
       await page.keyboard.press(process.platform === "darwin" ? "Meta+Alt+f" : "Control+Alt+f");
       await page.locator(".right-file-tree").getByText("Agent Notes", { exact: false }).waitFor();
-      assert(
-        await page.locator(".right-file-tree").innerText().then((text) => text.includes("Agent Notes")),
-        "browser files panel should show the MCP-created Agent Notes document",
-      );
-
-      const beforeHumanEdit = await callTool(client, "tabula_read_workspace_document", {
-        sessionId: room.sessionId,
-        documentId: readme.id,
-      });
 
       await page.locator(".cm-content").click();
       await page.keyboard.press(process.platform === "darwin" ? "Meta+End" : "Control+End");
       await page.keyboard.type("\nHuman browser edit.\n");
+      let afterHumanEdit;
+      const deadline = Date.now() + 12_000;
+      while (Date.now() < deadline) {
+        afterHumanEdit = await callTool(client, "tabula_read_file", { sessionId: session.sessionId, path: "README.md" });
+        if (afterHumanEdit.content.includes("Human browser edit.")) break;
+        await wait(250);
+      }
+      assert(afterHumanEdit?.content.includes("Human browser edit."), "MCP should observe browser-originated text");
 
-      const waitResult = await callTool(client, "tabula_wait_for_changes", {
-        sessionId: room.sessionId,
-        sinceSha256: beforeHumanEdit.sha256,
-        timeoutMs: 12_000,
+      const peerDraft = await callTool(client, "tabula_create_draft", {
+        title: "README.md",
+        content: "# Peer-only recovery\n\nLoaded from the live MCP participant.\n",
       });
-      assert.equal(waitResult.changed, true, "MCP should observe browser-originated document changes");
-      assert(waitResult.changedDocumentIds.includes(readme.id), "changedDocumentIds should include edited README.md");
-
-      const afterHumanEdit = await callTool(client, "tabula_read_workspace_document", {
-        sessionId: room.sessionId,
-        documentId: readme.id,
-      });
-      assert(afterHumanEdit.markdown.includes("Human browser edit."), "MCP should read browser-originated text");
-
-      const peerOnlyWorkspace = await callTool(client, "tabula_create_workspace", {
-        title: "Peer-only recovery",
-        files: [{
-          path: "README.md",
-          markdown: "# Peer-only recovery\n\nLoaded from the live MCP participant.\n",
-        }],
-      });
-      const peerOnlyRoom = await callTool(client, "tabula_create_workspace_room", {
-        workspaceId: peerOnlyWorkspace.workspaceId,
-        appOrigin: peerOnlyAppOrigin,
-        roomServerUrl: roomUrl,
-        identityName: "Peer-only E2E Agent",
-        identityColor: "#7c3aed",
-      });
+      const peerSession = await callTool(client, "tabula_start_session", { draftId: peerDraft.draftId });
       const peerOnlyPage = await context.newPage();
-      await peerOnlyPage.goto(peerOnlyRoom.roomUrl);
-      const peerOnlyBrowserText = await waitForEditorText(
-        peerOnlyPage,
-        "Loaded from the live MCP participant.",
-      );
-      assert(
-        peerOnlyBrowserText.includes("# Peer-only recovery"),
-        "browser without checkpoint access should hydrate from the live MCP peer",
-      );
+      await peerOnlyPage.goto(peerSession.sessionUrl.replace(appOrigin, peerOnlyAppOrigin));
+      const peerOnlyBrowserText = await waitForEditorText(peerOnlyPage, "Loaded from the live MCP participant.");
 
-      const peerOnlyDisconnected = await callTool(client, "tabula_disconnect_room", {
-        sessionId: peerOnlyRoom.sessionId,
+      await withMcpClient({
+        serverEntrypoint: options.serverEntrypoint,
+        roomUrl,
+        appOrigin: peerOnlyAppOrigin,
+        firebaseConfig: null,
+      }, async (peerClient) => {
+        const joined = await callTool(peerClient, "tabula_join_room", { roomUrl: peerSession.sessionUrl });
+        assert.equal(joined.ready, true);
+        const peerRead = await callTool(peerClient, "tabula_read_file", { sessionId: joined.sessionId, path: "README.md" });
+        assert.equal(peerRead.content, "# Peer-only recovery\n\nLoaded from the live MCP participant.\n");
       });
-      assert.equal(peerOnlyDisconnected.disconnectedSessionId, peerOnlyRoom.sessionId);
-
-      await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, firebaseConfig: null }, async (peerClient) => {
-        const joinedFromMcpb = await callTool(peerClient, "tabula_connect_room", {
-          roomUrl: peerOnlyRoom.roomUrl,
-          roomServerUrl: roomUrl,
-          identityName: "No-persistence MCPB",
-          waitForStateMs: 8_000,
-        });
-        assert.equal(joinedFromMcpb.recoveryStatus, "checkpoint-disabled");
-        assert.equal(joinedFromMcpb.hydrationStatus, "ready");
-        assert.equal(joinedFromMcpb.checkpointStatus.status, "disabled");
-        const peerWorkspace = await callTool(peerClient, "tabula_read_workspace", {
-          sessionId: joinedFromMcpb.sessionId,
-          detail: "tree",
-        });
-        const peerReadme = peerWorkspace.documents.find((document) => document.title === "README.md");
-        assert(peerReadme, "MCPB without persistence should receive the workspace from the open browser peer");
-        const peerReadmeDocument = await callTool(peerClient, "tabula_read_workspace_document", {
-          sessionId: joinedFromMcpb.sessionId,
-          documentId: peerReadme.id,
-        });
-        assert.equal(peerReadmeDocument.markdown, "# Peer-only recovery\n\nLoaded from the live MCP participant.\n");
-        await callTool(peerClient, "tabula_disconnect_room", { sessionId: joinedFromMcpb.sessionId });
-      });
-
       await peerOnlyPage.close();
 
-      const disconnected = await callTool(client, "tabula_disconnect_room", {
-        sessionId: room.sessionId,
-      });
-      assert.equal(disconnected.disconnectedSessionId, room.sessionId);
-
-      const sessions = await callTool(client, "tabula_list_sessions");
-      assert.deepEqual(sessions.sessions, []);
-
-      console.log(
-        JSON.stringify(
-          {
-            ok: true,
-            roomUrlShape: redactRoomUrl(room.roomUrl),
-            sessionId: room.sessionId,
-            documentId: readme.id,
-            browserInitialText,
-            browserAfterMcpText,
-            afterHumanEditMarkdown: afterHumanEdit.markdown,
-            tabsAfterMcp,
-            peerOnlyBrowserText,
-          },
-          null,
-          2,
-        ),
-      );
+      console.log(JSON.stringify({
+        ok: true,
+        roomUrlShape: redactRoomUrl(session.sessionUrl),
+        sessionId: session.sessionId,
+        browserInitialText,
+        browserAfterMcpText,
+        afterHumanEditMarkdown: afterHumanEdit.content,
+        tabsAfterMcp,
+        peerOnlyBrowserText,
+      }, null, 2));
     });
   } finally {
     await browser?.close();

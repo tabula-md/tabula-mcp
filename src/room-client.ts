@@ -501,6 +501,18 @@ export class TabulaRoomClient {
     };
   }
 
+  async readWorkspaceSnapshot() {
+    this.assertHydrated("read the workspace snapshot");
+    const snapshot = getWorkspaceRoomSnapshot(this.room);
+    return {
+      sessionId: this.sessionId,
+      workspace: await this.projectWorkspaceState(),
+      documents: snapshot.documents,
+      commentsByFileId: snapshot.commentsByFileId,
+      activeDocumentId: this.activeDocumentId,
+    };
+  }
+
   async readWorkspaceDocument({ documentId }: { documentId: string }) {
     this.assertHydrated("read workspace documents");
     const node = this.getDocumentNode(documentId);

@@ -34,9 +34,10 @@ const main = async () => {
     assertIncludes(builtHtml, expected, "built session card");
   }
 
-  for (const expected of ["tabula_share_document", "tabula_app_start_room_from_document", "openLink"]) {
+  for (const expected of ["tabula_export_copy", "tabula_start_session", "openLink"]) {
     assertIncludes(mockApp, expected, "mock app bridge");
   }
+  assertIncludes(await readText("src/app/document-app.js"), "pendingSessionUrl", "session handoff state");
 
   assertIncludes(devHtml, "/src/app-dev/main.js", "dev harness");
   assertIncludes(builtHtml, ">Tabula<", "built session card");

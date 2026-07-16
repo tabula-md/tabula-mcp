@@ -2,16 +2,19 @@
 
 ## Unreleased
 
-## 0.1.7
+## 0.2.0
 
-- Made local and hosted MCP descriptions state their real runtime and plaintext
-  trust boundary, with concise server instructions for choosing a workflow.
-- Limited default hosted Markdown import to inline files; trusted self-hosted
-  deployments can expose operator-approved server paths explicitly.
-- Aligned npm, MCPB, Claude Code, CLI, README, and directory surfaces around
-  one Tabula.md product story and the current Session Card.
-- Added an OIDC-based npm and GitHub Release workflow with provenance,
-  versioned MCPB artifacts, stable download aliases, and post-publish checks.
+- Replaced the 0.1 workspace/CRDT tool surface with nine high-level Draft,
+  Session, file, and Copy tools. No legacy adapter is registered.
+- Added path-based list, read, search, and write operations. The server now
+  validates revisions and computes Yjs text patches instead of asking models
+  to construct patch offsets.
+- Unified MCP App and model exports through `tabula_export_copy` and the shared
+  Tabula schema-v2 snapshot serializer, including nested folder preservation.
+- Reduced default `tools/list` below 14 KB and replaced `tabula_read_me` with
+  server instructions.
+- Made the compact Session Card call the same Start Session and Export Copy
+  services as model-facing tools.
 
 ## 0.1.6
 

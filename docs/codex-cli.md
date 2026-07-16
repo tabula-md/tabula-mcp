@@ -1,122 +1,29 @@
 # Codex CLI
 
-Tabula.md MCP can be used from Codex CLI as a local stdio MCP server.
-
-```sh
-codex mcp add tabula -- npx -y @tabula-md/mcp@latest
-```
-
-## One-Off Configuration
-
-Tabula connects as a read/write Room actor by default. The MCP host controls
-approval for each mutating call. Add `--read-only` only for inspection-only
-room access; this server policy is fixed when the process starts.
-
-Verify the installation:
-
-```sh
-codex mcp list --json
-```
-
-## Development from source
-
-For a one-off Codex CLI run against a local checkout, build the server and pass
-the MCP server as config overrides:
-
-```sh
-npm install
-npm run build
-codex exec \
-  -C /absolute/path/to/tabula-mcp \
-  -c 'mcp_servers.tabula.command="node"' \
-  -c 'mcp_servers.tabula.args=["/absolute/path/to/tabula-mcp/dist/index.js"]' \
-  'Use the tabula MCP server tools. Call tabula_read_me with topic="rooms".'
-```
-
-For a persistent source-checkout setup, add the built server with:
-
-```sh
-codex mcp add tabula -- node /absolute/path/to/tabula-mcp/dist/index.js
-```
-
-
-## Room Workflow
-
-Codex can join an encrypted Tabula room as an agent actor:
-
-1. `tabula_connect_room`
-2. `tabula_wait_for_changes`
-3. `tabula_read_workspace`
-4. `tabula_read_workspace_context` for bounded planning context. Use
-   `documentIds`, `pathGlobs`, `query`, and `changedSince` to avoid loading
-   unrelated documents, or use
-   `tabula_read_workspace_document` when exact full text is needed
-5. `tabula_apply_workspace_changes`
-
-`tabula_read_workspace` defaults to summary metadata. Pass `detail: "tree"`
-only when folder/node structure is needed.
-
-If the client surface supports MCP resources, the read tools also return
-`tabula://...` `resourceUri` handles for read-only workspace metadata and
-Markdown. Codex workflows should still work through tools alone.
-
-The workflow is direct collaboration. `tabula_apply_workspace_changes`
-validates the requested changes and commits one transaction to the same
-workspace Y.Doc used by Tabula.md.
-
-Codex can also create the collaboration surface first:
-
-1. `tabula_create_workspace` or `tabula_import_markdown_workspace`
-2. `tabula_share_workspace` for an encrypted `#json` handoff, or
-   `tabula_create_workspace_room` for a new live `#room` link
-3. Check the returned `checkpointStatus`; Firebase-configured sessions should
-   report `saved`, while local relay-only sessions report `disabled`
-4. `tabula_apply_workspace_changes` for follow-up edits after collaborators
-   join the room
-
-`tabula_import_markdown_workspace` can always use `source.files`. `source.type:
-local-path` is limited to MCP client roots when the client supports roots, or to
-directories explicitly listed in `TABULA_MCP_ALLOWED_IMPORT_ROOTS`.
-
-## Approval Behavior
-
-`tabula_connect_room` opens a live room connection and receives a URL whose
-`#room` fragment contains the room key. Codex CLI may therefore require approval
-before calling it, especially in non-interactive runs. That is intentional: room
-URLs are bearer secrets and the MCP process becomes a trusted plaintext room
-participant after connecting.
-When Firebase room checkpoints are configured, `tabula_connect_room` first tries
-to load encrypted room recovery state and reports that in `checkpointStatus`.
-When no checkpoint is available, the connection remains live and waits for an
-active browser or agent peer to send workspace state. Check `stateReceived`
-before reading or editing workspace content.
-
-For unattended local test automation only, Codex CLI can be run with:
-
-```sh
-codex exec --dangerously-bypass-approvals-and-sandbox ...
-```
-
-Do not use that flag as the default user workflow. Interactive Codex CLI users
-should review and approve the room connection.
-
-## Local E2E Check Used For This Repo
-
-The local Codex CLI smoke used for this branch ran a temporary `tabula-room`
-relay, joined a simulated Tabula peer, and asked a real `codex exec` agent to:
-
-1. connect to the room with `tabula_connect_room`
-2. wait for encrypted workspace state
-3. read workspace metadata and one workspace document
-4. submit `tabula_apply_workspace_changes`
-
-The simulated peer received RoomWire v2 sync and Awareness packets from an
-actor with:
+Configure Tabula as a stdio MCP server:
 
 ```json
 {
-  "kind": "agent",
-  "name": "Codex CLI Agent",
-  "client": "tabula-mcp"
+  "mcpServers": {
+    "tabula": {
+      "command": "npx",
+      "args": ["-y", "@tabula-md/mcp@0.2.0"]
+    }
+  }
 }
 ```
+
+Join and edit a session:
+
+```text
+tabula_join_room
+→ tabula_list_files
+→ tabula_read_file
+→ tabula_write_file
+```
+
+`tabula_write_file` receives complete Markdown. The server validates the revision and computes the Yjs patch. Codex should never construct text offsets or low-level workspace changes.
+
+Use `tabula_export_copy` to produce a fixed encrypted `#json` copy. Use `tabula_start_session` when collaborators should continue editing together.
+
+Keep all `#room` and `#json` URLs private unless the user explicitly asks to share them.

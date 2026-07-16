@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import path from "node:path";
 import {
   createShareSnapshotPayloadFromData,
   encodeEncryptedData,
@@ -36,6 +37,7 @@ type JsonShareCreateResponse = {
 
 export type ShareMarkdownWorkspaceFile = {
   id: string;
+  path?: string;
   title: string;
   text: string;
 };
@@ -48,6 +50,7 @@ export type ShareMarkdownDocumentOptions = {
   fetchImpl?: FetchLike;
   snapshotKey?: string;
   now?: () => Date;
+  env?: NodeJS.ProcessEnv;
 };
 
 export type SharedMarkdownDocument = {
@@ -75,6 +78,7 @@ export type ShareMarkdownWorkspaceOptions = {
   fetchImpl?: FetchLike;
   snapshotKey?: string;
   now?: () => Date;
+  env?: NodeJS.ProcessEnv;
 };
 
 export type SharedMarkdownWorkspace = {
@@ -223,11 +227,20 @@ export const createEncryptedMarkdownSnapshot = async ({
   }
 };
 
-const normalizeShareFile = (file: ShareMarkdownWorkspaceFile) => ({
-  id: file.id.trim(),
-  title: file.title.trim() || "Untitled Document",
-  text: file.text,
-});
+const normalizeShareFile = (file: ShareMarkdownWorkspaceFile) => {
+  const title = file.title.trim() || "Untitled Document";
+  const rawPath = file.path?.replaceAll("\\", "/").trim();
+  if (rawPath && (rawPath.startsWith("/") || /^[A-Za-z]:\//.test(rawPath))) {
+    throw new TabulaMcpError("Tabula.md snapshot file paths must be relative.");
+  }
+  const normalizedPath = rawPath
+    ? path.posix.normalize(rawPath)
+    : title;
+  if (!normalizedPath || normalizedPath === "." || normalizedPath === ".." || normalizedPath.startsWith("../")) {
+    throw new TabulaMcpError("Tabula.md snapshot file paths must stay inside the workspace.");
+  }
+  return { id: file.id.trim(), path: normalizedPath, title, text: file.text };
+};
 
 const createShareRootFolderId = (files: readonly ShareMarkdownWorkspaceFile[]) => {
   const fileIds = new Set(files.map((file) => file.id));
@@ -255,14 +268,51 @@ const createMcpShareSnapshotPayload = ({
   }
   const activeFile = snapshotFiles.find((file) => file.id === activeFileId) ?? snapshotFiles[0];
   const rootFolderId = createShareRootFolderId(snapshotFiles);
+  const usedIds = new Set(snapshotFiles.map((file) => file.id));
+  usedIds.add(rootFolderId);
+  const folderIds = new Map<string, string>([["", rootFolderId]]);
+  const folders: Array<{ id: string; title: string; parentId: string | null; order: number }> = [
+    { id: rootFolderId, title: shareRootFolderTitle, parentId: null, order: 0 },
+  ];
+  const createFolderId = (folderPath: string) => {
+    const base = `folder_${Buffer.from(folderPath).toString("base64url")}`;
+    let candidate = base;
+    let suffix = 1;
+    while (usedIds.has(candidate)) {
+      candidate = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedIds.add(candidate);
+    return candidate;
+  };
+  for (const file of snapshotFiles) {
+    const directory = path.posix.dirname(file.path) === "." ? "" : path.posix.dirname(file.path);
+    let parentPath = "";
+    for (const [index, part] of directory.split("/").filter(Boolean).entries()) {
+      const folderPath = parentPath ? `${parentPath}/${part}` : part;
+      if (!folderIds.has(folderPath)) {
+        const id = createFolderId(folderPath);
+        folderIds.set(folderPath, id);
+        folders.push({
+          id,
+          title: part,
+          parentId: folderIds.get(parentPath) ?? rootFolderId,
+          order: folders.length,
+        });
+      }
+      parentPath = folderPath;
+    }
+  }
 
   return createShareSnapshotPayloadFromData({
     files: snapshotFiles.map((file, index) => ({
-      ...file,
-      parentId: rootFolderId,
+      id: file.id,
+      title: file.title,
+      text: file.text,
+      parentId: folderIds.get(path.posix.dirname(file.path) === "." ? "" : path.posix.dirname(file.path)) ?? rootFolderId,
       order: index,
     })),
-    folders: [{ id: rootFolderId, title: shareRootFolderTitle, parentId: null, order: 0 }],
+    folders,
     rootFolderId,
     activeFileId: activeFile?.id ?? activeFileId ?? snapshotFiles[0]?.id ?? mainFileId,
     commentsByFileId: {},
@@ -360,10 +410,12 @@ export const shareMarkdownDocument = async ({
   fetchImpl = fetch,
   snapshotKey = generateJsonShareKey(),
   now,
+  env = process.env,
 }: ShareMarkdownDocumentOptions): Promise<SharedMarkdownDocument> => {
   const normalizedJsonServerUrl = resolveJsonShareServerUrl({
     appOrigin,
     jsonServerUrl,
+    env,
   });
   const encrypted = await createEncryptedJsonShareSnapshot({
     title,
@@ -412,11 +464,13 @@ export const shareMarkdownWorkspace = async ({
   fetchImpl = fetch,
   snapshotKey = generateJsonShareKey(),
   now,
+  env = process.env,
 }: ShareMarkdownWorkspaceOptions): Promise<SharedMarkdownWorkspace> => {
   const normalizedFiles = files.map(normalizeShareFile).filter((file) => file.id);
   const normalizedJsonServerUrl = resolveJsonShareServerUrl({
     appOrigin,
     jsonServerUrl,
+    env,
   });
   const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
     files: normalizedFiles,

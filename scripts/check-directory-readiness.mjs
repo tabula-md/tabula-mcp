@@ -15,11 +15,11 @@ const mcpConfig = await readJson("plugins/tabula-mcp/.mcp.json");
 const privacyPolicy = await readFile(path.join(rootDir, "PRIVACY.md"), "utf8");
 const readme = await readFile(path.join(rootDir, "README.md"), "utf8");
 const submissionGuide = await readFile(path.join(rootDir, "docs/directory-submission.md"), "utf8");
-const packageDescription = "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.";
+const packageDescription = "Create private Markdown drafts and work with people or agents in live Tabula sessions.";
 
 assert.equal(manifest.version, packageJson.version, "MCPB version must match the npm package version.");
 assert.equal(packageJson.description, packageDescription, "npm must use the canonical Tabula.md MCP description.");
-assert.equal(manifest.description, "Let Claude work with people in shared Tabula.md Markdown workspaces.", "MCPB must use the Claude-specific product description.");
+assert.equal(manifest.description, packageDescription, "MCPB and npm must use the same product description.");
 assert.equal(plugin.version, packageJson.version, "Claude Code plugin version must match the npm package version.");
 assert.deepEqual(mcpConfig.mcpServers?.tabula?.args, ["-y", `@tabula-md/mcp@${packageJson.version}`]);
 assert.ok(packageJson.repository?.url?.includes("github.com/tabula-md/tabula-mcp"), "npm repository metadata must identify this source repository.");

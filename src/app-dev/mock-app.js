@@ -48,7 +48,8 @@ export const createDevApp = () => {
         if (getFixtureMode() === "room") {
           this.ontoolinput?.({
             arguments: {
-              sessionId: roomSnapshot.room.sessionId,
+              sessionId: roomSnapshot.sessionId,
+              roomUrl: roomSnapshot.sessionUrl,
             },
           });
           this.ontoolresult?.(textResult("Opened Tabula.md session.", roomSnapshot));
@@ -57,10 +58,10 @@ export const createDevApp = () => {
 
         this.ontoolinput?.({
           arguments: {
-            documentId: documentSnapshot.document.documentId,
+            draftId: documentSnapshot.draftId,
           },
         });
-        this.ontoolresult?.(textResult(`Created local Tabula.md draft "${documentSnapshot.document.title}".`, documentSnapshot));
+        this.ontoolresult?.(textResult(`Created private draft "${documentSnapshot.title}".`, documentSnapshot));
       });
     },
 
@@ -74,40 +75,23 @@ export const createDevApp = () => {
     async callServerTool(request) {
       emitDevEvent("tool-call", request);
       switch (request?.name) {
-        case "tabula_app_start_room_from_document": {
+        case "tabula_start_session": {
           roomSnapshot = {
-            mode: "room",
-            room: {
-              sessionId: "123e4567-e89b-42d3-a456-426614174998",
-              roomId: "started-from-document",
-              shareUrl: "http://localhost:5173/#room=started-from-document,example-key-for-local-preview-only",
-              status: "ready",
-              sha256: documentSnapshot.document.sha256,
-              textLength: documentSnapshot.markdown.length,
-              collaboratorCount: 0,
-              agentConnected: true,
-              hydrationStatus: "ready",
-              stateReceived: true,
-            },
+            sessionId: "123e4567-e89b-42d3-a456-426614174998",
+            sessionUrl: "http://localhost:5173/#room=started-from-document,example-key-for-local-preview-only",
+            ready: true,
+            canWrite: true,
+            fileCount: 1,
+            otherCollaboratorCount: 0,
           };
           return textResult("Started a Tabula session. Claude is connected to the shared workspace.", roomSnapshot);
         }
-        case "tabula_share_document":
+        case "tabula_export_copy":
           return textResult("Encrypted Tabula.md snapshot link created.", {
-            share: {
-              title: documentSnapshot.document.title,
-              linkKind: "json-snapshot",
-              snapshotId: "dev-share-snapshot",
-              appOrigin: "http://localhost:5173",
-              jsonServerUrl: "http://localhost:3004",
-              snapshotUrl: "http://localhost:3004/api/v2/dev-share-snapshot",
-              shareUrl: "http://localhost:5173/#json=dev-share-snapshot,dev-only-not-a-real-key",
-              textLength: documentSnapshot.markdown.length,
-              sha256: documentSnapshot.document.sha256,
-              encrypted: true,
-              secret: true,
-              keyLocation: "url-fragment",
-            },
+            copyUrl: "http://localhost:5173/#json=dev-share-snapshot,dev-only-not-a-real-key",
+            fileCount: 1,
+            encrypted: true,
+            createdAt: "2026-07-17T00:00:00.000Z",
           });
         default:
           return toolError(`Unknown dev harness tool: ${request?.name || "missing"}`);
