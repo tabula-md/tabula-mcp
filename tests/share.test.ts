@@ -1,5 +1,6 @@
 import * as Y from "yjs";
 import { describe, expect, it } from "vitest";
+import { decodeEncryptedData, parseShareSnapshot } from "@tabula-md/tabula";
 import { decryptEnvelopeForRoom, importRoomKey } from "../src/crypto.js";
 import { decodeBase64Url, encodeBase64Url, type EncryptedEnvelope } from "../src/protocol.js";
 import {
@@ -31,6 +32,16 @@ const restoreMarkdown = async (envelope: EncryptedEnvelope) => {
   } finally {
     doc.destroy();
   }
+};
+
+const restoreJsonSnapshot = async (encrypted: Uint8Array) => {
+  const decoded = await decodeEncryptedData<{ kind: string; schemaVersion: number }>(encrypted, {
+    decryptionKey: snapshotKey,
+  });
+  return {
+    metadata: decoded.metadata,
+    payload: parseShareSnapshot(decoded.data),
+  };
 };
 
 describe("Tabula document sharing", () => {
@@ -103,6 +114,53 @@ describe("Tabula document sharing", () => {
     expect(body).not.toContain("Secret plan");
     expect(body).not.toContain("Plan.md");
     expect(body).not.toContain(snapshotKey);
+  });
+
+  it("creates a schema v2 snapshot that Tabula can decrypt and parse", async () => {
+    const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+      files: [
+        { id: "tabula-mcp-root", title: "README.md", text: "# Readme\n" },
+        { id: "plan", title: "Plan.md", text: "# Plan\n\nReady to share" },
+      ],
+      activeFileId: "plan",
+      snapshotKey,
+      now: () => new Date("2026-07-05T00:00:00.000Z"),
+    });
+
+    const { metadata, payload } = await restoreJsonSnapshot(encrypted);
+
+    expect(metadata).toEqual({ kind: "json-share", schemaVersion: 2 });
+    expect(payload).toMatchObject({
+      schemaVersion: 2,
+      createdAt: "2026-07-05T00:00:00.000Z",
+      rootFolderId: "tabula-mcp-root-1",
+      activeFileId: "plan",
+      folders: [
+        {
+          id: "tabula-mcp-root-1",
+          title: "Tabula.md workspace",
+          parentId: null,
+          order: 0,
+        },
+      ],
+      files: [
+        {
+          id: "tabula-mcp-root",
+          title: "README.md",
+          text: "# Readme\n",
+          parentId: "tabula-mcp-root-1",
+          order: 0,
+        },
+        {
+          id: "plan",
+          title: "Plan.md",
+          text: "# Plan\n\nReady to share",
+          parentId: "tabula-mcp-root-1",
+          order: 1,
+        },
+      ],
+      commentsByFileId: {},
+    });
   });
 
   it("uploads only an encrypted JSON snapshot and returns a bearer share URL", async () => {
