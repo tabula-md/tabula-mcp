@@ -29,12 +29,12 @@ maintainers explicitly request a coordinated change.
 Hosted production behavior should stay safe by default:
 
 - local HTTP binds to `127.0.0.1` unless a host is configured
-- production remote HTTP requires `TABULA_MCP_AUTH_TOKEN`
+- production remote HTTP declares either `TABULA_MCP_AUTH_TOKEN` or the
+  explicit public policy `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1`
 - production remote checkpoints require Redis/Upstash REST credentials unless
   memory is explicitly requested with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory`
   and `TABULA_MCP_ALLOW_MEMORY_STORE=1`
 - production browser Origins are denied unless `TABULA_MCP_ALLOWED_ORIGINS` is configured
-- remote room tools stay disabled unless `TABULA_MCP_ALLOW_REMOTE_ROOM=1`
 
 If a change weakens one of these defaults, document why and add tests covering
 the new boundary.

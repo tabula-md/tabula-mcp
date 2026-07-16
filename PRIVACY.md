@@ -91,7 +91,6 @@ the complete URL.
 
 You can use the local stdio/MCPB mode, disable local checkpoint persistence,
 choose a self-hosted endpoint, remove locally stored checkpoints, or avoid
-hosted room recovery. For privacy questions or deletion requests relating to
-the official hosted service, open a private security report or issue at
-https://github.com/tabula-md/tabula-mcp/issues. Do not include secrets in the
-report.
+hosted room recovery. For non-sensitive privacy questions, open an issue at
+https://github.com/tabula-md/tabula-mcp/issues. Use GitHub private vulnerability
+reporting for security reports. Do not include secrets in either channel.
