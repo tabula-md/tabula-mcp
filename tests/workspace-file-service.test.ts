@@ -37,6 +37,7 @@ const createHarness = async () => {
       },
     ],
   };
+  const checkpoint = { flushes: 0 };
 
   const refresh = async () => {
     workspace.nodes = await Promise.all(workspace.nodes.map(async (node) => node.type === "folder" ? node : ({
@@ -78,9 +79,12 @@ const createHarness = async () => {
       await refresh();
       return { changedDocumentIds };
     },
+    async flushCheckpoint() {
+      checkpoint.flushes += 1;
+    },
   };
   const registry = { get: () => session } as unknown as SessionRegistry;
-  return { registry, docs, session, workspace };
+  return { checkpoint, registry, docs, session, workspace };
 };
 
 describe("workspace file service", () => {
@@ -107,7 +111,7 @@ describe("workspace file service", () => {
   });
 
   it("replaces an existing file with one server-computed patch", async () => {
-    const { registry, docs } = await createHarness();
+    const { checkpoint, registry, docs } = await createHarness();
     const current = await readSessionFile({ registry, sessionId, path: "README.md" });
     const content = `${current.content}\nDone.\n`;
     const written = await writeSessionFile({
@@ -119,14 +123,16 @@ describe("workspace file service", () => {
     });
     expect(written).toMatchObject({ created: false, changed: true, textLength: content.length });
     expect(docs.readme).toBe(content);
+    expect(checkpoint.flushes).toBe(1);
   });
 
   it("returns no-op, stale, and missing-parent outcomes deterministically", async () => {
-    const { registry } = await createHarness();
+    const { checkpoint, registry } = await createHarness();
     const current = await readSessionFile({ registry, sessionId, path: "README.md" });
     await expect(writeSessionFile({
       registry, sessionId, path: "README.md", content: current.content, expectedRevision: current.revision,
     })).resolves.toMatchObject({ changed: false });
+    expect(checkpoint.flushes).toBe(1);
     await expect(writeSessionFile({
       registry, sessionId, path: "README.md", content: "stale", expectedRevision: "0".repeat(64),
     })).rejects.toMatchObject({ code: "stale_revision" });
@@ -142,11 +148,12 @@ describe("workspace file service", () => {
   });
 
   it("creates a file at the root or in an existing folder", async () => {
-    const { registry } = await createHarness();
+    const { checkpoint, registry } = await createHarness();
     await expect(writeSessionFile({ registry, sessionId, path: "notes.md", content: "# Notes\n" }))
       .resolves.toMatchObject({ created: true, changed: true });
     await expect(writeSessionFile({ registry, sessionId, path: "docs/plan.md", content: "# Plan\n" }))
       .resolves.toMatchObject({ created: true, changed: true });
+    expect(checkpoint.flushes).toBe(2);
     const listed = await listSessionFiles({ registry, sessionId });
     expect(listed.files).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "notes.md" }),
@@ -187,6 +194,25 @@ describe("workspace file service", () => {
       code: "write_failed",
       details: { path: "README.md" },
       retry: "Read the latest file state and retry once.",
+    });
+  });
+
+  it("returns write_failed when the durable checkpoint cannot be flushed", async () => {
+    const { registry, session } = await createHarness();
+    const current = await readSessionFile({ registry, sessionId, path: "README.md" });
+    session.flushCheckpoint = async () => {
+      throw new Error("checkpoint unavailable");
+    };
+
+    await expect(writeSessionFile({
+      registry,
+      sessionId,
+      path: "README.md",
+      content: `${current.content}\nChanged\n`,
+      expectedRevision: current.revision,
+    })).rejects.toMatchObject({
+      code: "write_failed",
+      details: { path: "README.md" },
     });
   });
 });

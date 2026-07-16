@@ -189,6 +189,11 @@ export const writeSessionFile = async ({
       });
     }
     if (currentContent === content) {
+      try {
+        await session.flushCheckpoint();
+      } catch {
+        throw writeFailed(filePath);
+      }
       return { sessionId, path: filePath, created: false, changed: false, revision: currentRevision, textLength: content.length };
     }
     try {
@@ -200,6 +205,7 @@ export const writeSessionFile = async ({
           patches: getTextPatchesForChange(currentContent, content),
         }],
       });
+      await session.flushCheckpoint();
     } catch (error) {
       if (error instanceof Error && /changed before/i.test(error.message)) {
         const latest = await session.readWorkspaceSnapshot();
@@ -242,6 +248,7 @@ export const writeSessionFile = async ({
     changed = await session.applyWorkspaceChanges({
       changes: [{ type: "document.create", parentId: parent?.node.id ?? null, title: path.posix.basename(filePath), markdown: content }],
     });
+    await session.flushCheckpoint();
   } catch {
     throw writeFailed(filePath);
   }
