@@ -48,7 +48,7 @@
 
       <section id="message" class="message" aria-live="polite"></section>
 
-      <section class="workspace">
+      <section class="mcp-workspace">
         <section class="markdown-pane">
           <div class="pane-heading">
             <h2>Document</h2>
@@ -62,7 +62,7 @@
             </div>
           </div>
           <div class="document-surface">
-            <textarea id="markdownEditor" class="markdown-editor" spellcheck="false" readonly></textarea>
+            <textarea id="markdownEditor" class="mcp-markdown-editor" spellcheck="false" readonly></textarea>
             <article id="markdownPreview" class="markdown-preview" aria-label="Markdown preview"></article>
           </div>
         </section>
@@ -74,6 +74,8 @@
           <ol id="outlineList" class="outline-list"></ol>
         </aside>
       </section>
+
+      <section id="tabulaWorkbench" class="tabula-workbench-host" aria-label="Tabula.md editor"></section>
     </main>
 
     <script type="module" src="/src/app-dev/main.js"></script>

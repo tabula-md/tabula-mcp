@@ -128,6 +128,9 @@ const assertInlineDocumentPresentation = async (page, label) => {
   assert(presentation.toolbarHeight <= 48, `${label} should keep continuation controls compact`);
 };
 
+const getWorkbenchEditor = (page) =>
+  page.locator("[data-tabula-document-workbench] .cm-content[contenteditable='true']").first();
+
 const runDocumentFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
@@ -136,7 +139,7 @@ const runDocumentFlow = async (baseUrl, browser) => {
   await assertInlineDocumentPresentation(page, "inline document");
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
-  await page.getByRole("heading", { name: "Outline" }).waitFor({ state: "visible" });
+  await page.getByRole("region", { name: "Tabula.md editor" }).waitFor({ state: "visible" });
 
   const markdown = [
     "# Flow Smoke",
@@ -154,7 +157,8 @@ const runDocumentFlow = async (baseUrl, browser) => {
   ].join("\n");
 
   await page.locator("#titleInput").fill("Flow Smoke");
-  await page.locator("#markdownEditor").fill(markdown);
+  const workbenchEditor = getWorkbenchEditor(page);
+  await workbenchEditor.fill(markdown);
   await waitForMessage(page, "Document has unsaved changes.");
   await page.getByRole("button", { name: "Save" }).click();
   await waitForMessage(page, "Document saved in this MCP session.");
@@ -162,18 +166,13 @@ const runDocumentFlow = async (baseUrl, browser) => {
   await page.getByRole("button", { name: "Send Changes" }).click();
   await waitForMessage(page, "Document changes sent to the model context.");
 
-  await page.locator("#markdownEditor").evaluate((element) => {
-    const text = element.value;
-    const start = text.indexOf("Start ");
-    const end = text.indexOf("End", start) + "End".length;
-    element.focus();
-    element.setSelectionRange(start, end);
-  });
+  await workbenchEditor.click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
   await page.getByRole("button", { name: "Send Selection" }).click();
   await waitForMessage(page, "Selection sent to the model context.");
 
   const shareMarkdown = `${markdown}\n\n## Shared Update\n\nReady for encrypted handoff.`;
-  await page.locator("#markdownEditor").fill(shareMarkdown);
+  await workbenchEditor.fill(shareMarkdown);
   await waitForMessage(page, "Document has unsaved changes.");
   await page.getByRole("button", { name: "Share" }).click();
   await waitForMessage(page, "Encrypted share link sent to the model context.");
@@ -250,9 +249,10 @@ const runMobileLayoutFlow = async (baseUrl, browser) => {
   await assertNoHorizontalOverflow(page, "mobile initial document layout");
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
+  await page.getByRole("region", { name: "Tabula.md editor" }).waitFor({ state: "visible" });
 
   await page.locator("#titleInput").fill("Mobile smoke title");
-  await page.locator("#markdownEditor").fill(
+  await getWorkbenchEditor(page).fill(
     [
       "# Mobile Smoke",
       "",
@@ -268,7 +268,7 @@ const runMobileLayoutFlow = async (baseUrl, browser) => {
   await waitForMessage(page, "Document has unsaved changes.");
   await assertNoHorizontalOverflow(page, "mobile edited document layout");
 
-  for (const viewMode of ["Preview", "Editor", "Split"]) {
+  for (const viewMode of ["Preview", "Edit", "Split"]) {
     await page.getByRole("button", { name: viewMode }).click();
     await assertNoHorizontalOverflow(page, `mobile ${viewMode.toLowerCase()} view layout`);
   }
