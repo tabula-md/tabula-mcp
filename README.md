@@ -84,14 +84,14 @@ npm ci
 npm run build:mcpb
 ```
 
-Open `dist/tabula-mcp-0.2.1.mcpb` in Claude Desktop and restart Claude Desktop after replacing an older build.
+Open `dist/tabula-mcp-0.2.2.mcpb` in Claude Desktop and restart Claude Desktop after replacing an older build.
 
 ### Claude Code or Codex CLI
 
 Run the published stdio server:
 
 ```sh
-npx -y @tabula-md/mcp@0.2.1
+npx -y @tabula-md/mcp@0.2.2
 ```
 
 Example MCP configuration:
@@ -101,7 +101,7 @@ Example MCP configuration:
   "mcpServers": {
     "tabula": {
       "command": "npx",
-      "args": ["-y", "@tabula-md/mcp@0.2.1"]
+      "args": ["-y", "@tabula-md/mcp@0.2.2"]
     }
   }
 }

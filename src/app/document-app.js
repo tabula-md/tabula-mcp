@@ -206,7 +206,7 @@ const createAppClient = () => {
   }
 
   return new App(
-    { name: "Tabula Session", version: "0.2.1" },
+    { name: "Tabula Session", version: "0.2.2" },
     // The editing surface is tabula.md itself. This App stays inline as a
     // compact bridge, rather than becoming a second Tabula implementation.
     { availableDisplayModes: ["inline"] },

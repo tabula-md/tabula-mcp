@@ -101,6 +101,7 @@ const roomMock = vi.hoisted(() => {
       }
       return { changedDocumentIds };
     }
+    async flushCheckpoint() {}
     disconnect() {}
   }
   return {

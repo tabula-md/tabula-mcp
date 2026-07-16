@@ -680,6 +680,18 @@ export class TabulaRoomClient {
     };
   }
 
+  async flushCheckpoint() {
+    if (!this.checkpointStore.enabled) return;
+    if (this.checkpointTimer) clearTimeout(this.checkpointTimer);
+    this.checkpointTimer = null;
+    await this.saveCheckpointNow();
+    if (this.checkpointStatusValue.status !== "saved") {
+      throw new TabulaMcpError(
+        this.checkpointStatusValue.error ?? "The encrypted live room could not be saved.",
+      );
+    }
+  }
+
   async setPresence(selection?: LiveSelection, fileTitle?: string) {
     if (selection?.documentId) this.activeDocumentId = selection.documentId;
     this.publishLocalPresence(selection, fileTitle);

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.2
+
+- Made `tabula_write_file` flush the encrypted room checkpoint before returning
+  success so the latest agent edit survives an immediate MCP disconnect.
+- Added file-service coverage for durable flush success and failure behavior.
+
 ## 0.2.1
 
 - Replaced the production Firebase checkpoint SDK transport with standard REST
