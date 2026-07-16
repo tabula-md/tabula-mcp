@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "tabula-mcp",
   "display_name": "Tabula.md MCP",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Work with people and AI agents in shared Tabula.md Markdown workspaces.",
   "long_description": "Tabula.md MCP lets Claude join a shared multi-file Markdown workspace as an agent collaborator. It can inspect bounded context, read documents, publish presence, and apply hash-guarded workspace changes. Local documents are checkpointed as plaintext on this machine for local recovery. Room keys from invite URL fragments stay local, while the Tabula Room server receives only encrypted envelopes.",
   "author": {

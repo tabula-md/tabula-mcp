@@ -44,7 +44,7 @@ drafts to remain on their own machine.
 ## Submission values
 
 - Product name: `Tabula.md MCP`
-- MCPB artifact: `dist/tabula-mcp-0.1.3.mcpb`
+- MCPB artifact: `dist/tabula-mcp-0.1.4.mcpb`
 - Privacy policy: `https://mcp.tabula.md/privacy`
 - Support:
   `https://github.com/tabula-md/tabula-mcp/issues`
@@ -67,18 +67,18 @@ when the submission UI asks for it.
 | Screenshot | Paired user prompt | What the reviewer sees |
 | --- | --- | --- |
 | `assets/directory/document-preview.png` | “Create a Markdown brief titled Launch Brief and open it in Tabula.” | The inline document result before editing. |
-| `assets/directory/document-editor.png` | “Open Launch Brief in Tabula and help me edit the Markdown.” | Full-screen split Markdown editor, preview, and outline context. |
-| `assets/directory/room-context.png` | “Open this Tabula room and summarize its current Markdown without changing it.” | Read-only encrypted-room view, connection state, Markdown preview, and outline. |
+| `assets/directory/document-editor.png` | “Open Launch Brief in Tabula and help me edit the Markdown.” | Full-screen Tabula.md workbench with the split Markdown editor and preview. |
+| `assets/directory/room-context.png` | “Open this Tabula room and summarize its current Markdown without changing it.” | Read-only live-session handoff with the active document title and a clear **Open session** continuation into Tabula.md. |
 
 ## Directory and organization rollout
 
-1. Publish the matching `@tabula-md/mcp@0.1.3` npm release before distributing
+1. Publish the matching `@tabula-md/mcp@0.1.4` npm release before distributing
    the Claude Code plugin; its plugin configuration is intentionally pinned to
    that exact version.
 2. Build and validate the artifact with `npm run release:pack`.
 3. Submit the remote `https://mcp.tabula.md/mcp` MCP App through the MCP
    directory submission flow, including the three paired screenshots.
-4. Submit the local `dist/tabula-mcp-0.1.3.mcpb` through the Desktop Extension
+4. Submit the local `dist/tabula-mcp-0.1.4.mcpb` through the Desktop Extension
    submission flow, including the same privacy-policy URL.
 5. For a customer-specific Team or Enterprise rollout, the customer’s owner
    uploads the same MCPB in **Organization settings → Connectors → Desktop →

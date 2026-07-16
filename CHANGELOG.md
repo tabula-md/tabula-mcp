@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.4
+
+- Rebuilt the MCP App around the same Tabula.md visual language: branded app
+  chrome, a local-draft state, and the existing Tabula workbench for local
+  Markdown editing.
+- Made a connected Room a distinct live-session handoff rather than a second,
+  misleading editor. Inline results keep a compact preview and **Open
+  session**; fullscreen presents one focused Tabula.md session surface.
+- Display the active Room document title instead of the internal Room ID in
+  the MCP App and its Room snapshots.
+
 ## 0.1.3
 
 - Made the MCP App's collaboration transition explicit: local documents offer

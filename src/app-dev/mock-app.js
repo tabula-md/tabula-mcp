@@ -3,6 +3,8 @@ import { documentFixture, roomFixture } from "./fixtures.js";
 const clone = (value) => structuredClone(value);
 
 const getFixtureMode = () => new URLSearchParams(window.location.search).get("fixture") || "document";
+const getDisplayMode = () =>
+  new URLSearchParams(window.location.search).get("display") === "fullscreen" ? "fullscreen" : "inline";
 
 const extractOutline = (markdown) => {
   const headings = [];
@@ -71,7 +73,7 @@ export const shouldUseDevBridge = () => {
 };
 
 export const createDevApp = () => {
-  let displayMode = "inline";
+  let displayMode = getDisplayMode();
   let documentSnapshot = clone(documentFixture);
   let roomSnapshot = clone(roomFixture);
 
@@ -139,6 +141,7 @@ export const createDevApp = () => {
             room: {
               sessionId: "123e4567-e89b-42d3-a456-426614174998",
               roomId: "started-from-document",
+              title: documentSnapshot.document.title,
               shareUrl: "http://localhost:5173/#room=started-from-document,example-key-for-local-preview-only",
               status: "connected",
               writeAccess: false,

@@ -33,6 +33,7 @@ export const roomFixture = {
   room: {
     sessionId: "123e4567-e89b-42d3-a456-426614174999",
     roomId: "research-review",
+    title: "Research Review",
     shareUrl: "http://localhost:5173/#room=research-review,example-key-for-local-preview-only",
     status: "connected",
     writeAccess: false,

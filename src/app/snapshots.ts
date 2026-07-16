@@ -8,6 +8,7 @@ type RoomStatus = Awaited<ReturnType<ReturnType<SessionRegistry["get"]>["getStat
 export const summarizeRoomStatus = (status: RoomStatus) => ({
   sessionId: status.sessionId,
   roomId: status.roomId,
+  title: status.activeDocumentTitle ?? "Untitled session",
   shareUrl: status.shareUrl,
   status: status.status,
   writeAccess: status.writeAccess,

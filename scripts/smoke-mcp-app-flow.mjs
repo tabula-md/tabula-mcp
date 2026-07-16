@@ -8,11 +8,20 @@ const waitForMessage = async (page, text) => {
   await page.locator("#message", { hasText: text }).waitFor({ state: "attached" });
 };
 
+const waitForInputValue = async (page, selector, value) => {
+  await page.waitForFunction(
+    ({ selector: fieldSelector, expectedValue }) =>
+      document.querySelector(fieldSelector)?.value === expectedValue,
+    { selector, expectedValue: value },
+  );
+};
+
 const getDevEvents = (page) =>
   page.evaluate(() => ({
     toolCalls: window.__TABULA_DEV_TOOL_CALLS__ || [],
     modelContexts: window.__TABULA_DEV_MODEL_CONTEXTS__ || [],
     displayModes: window.__TABULA_DEV_DISPLAY_MODES__ || [],
+    openLinks: window.__TABULA_DEV_OPEN_LINKS__ || [],
   }));
 
 const installDevEventCapture = async (page) => {
@@ -20,6 +29,7 @@ const installDevEventCapture = async (page) => {
     window.__TABULA_DEV_TOOL_CALLS__ = [];
     window.__TABULA_DEV_MODEL_CONTEXTS__ = [];
     window.__TABULA_DEV_DISPLAY_MODES__ = [];
+    window.__TABULA_DEV_OPEN_LINKS__ = [];
     window.addEventListener("tabula-dev:tool-call", (event) => {
       window.__TABULA_DEV_TOOL_CALLS__.push(event.detail);
     });
@@ -28,6 +38,9 @@ const installDevEventCapture = async (page) => {
     });
     window.addEventListener("tabula-dev:display-mode", (event) => {
       window.__TABULA_DEV_DISPLAY_MODES__.push(event.detail);
+    });
+    window.addEventListener("tabula-dev:open-link", (event) => {
+      window.__TABULA_DEV_OPEN_LINKS__.push(event.detail);
     });
   });
 };
@@ -237,6 +250,8 @@ const runDocumentFlow = async (baseUrl, browser) => {
     "share change context should not include the full Markdown body",
   );
 
+  await page.getByRole("button", { name: "Inline" }).click();
+  await page.getByRole("button", { name: "Edit" }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Open a copy" }).click();
   await waitForMessage(page, "Opened a Tabula.md copy.");
   assert(
@@ -248,8 +263,13 @@ const runDocumentFlow = async (baseUrl, browser) => {
   await waitForMessage(page, "Tabula.md session is ready.");
   await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
   assert.equal(await page.getByRole("button", { name: "Start session" }).isVisible(), false);
+  assert.equal(await page.locator("#titleInput").inputValue(), "Flow Smoke");
+  assert.equal(await page.getByRole("button", { name: "Edit" }).isVisible(), false);
   await page.getByRole("button", { name: "Open session" }).click();
-  await waitForMessage(page, "Opened Tabula.md session.");
+  assert(
+    (await getDevEvents(page)).openLinks.some((request) => String(request?.url).includes("#room=")),
+    "Open session should ask the host to open the encrypted Room link",
+  );
   const openedRoom = (await getDevEvents(page)).toolCalls.find((call) => call?.name === "tabula_app_start_room_from_document");
   assert(openedRoom, "Start session should create a Room from the local document");
 
@@ -305,28 +325,35 @@ const runMobileLayoutFlow = async (baseUrl, browser) => {
 const runRoomFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=room`);
-  await waitForMessage(page, "Tabula.md content is current.");
+  await waitForInputValue(page, "#titleInput", "Research Review");
   await assertInlineDocumentPresentation(page, "inline room document");
-  await page.getByRole("button", { name: "Edit" }).click();
-  await page.getByRole("button", { name: "Inline" }).waitFor({ state: "visible" });
+  assert.equal(await page.locator("#titleInput").inputValue(), "Research Review");
+  assert.equal(await page.getByRole("button", { name: "Edit" }).isVisible(), false);
 
-  await page.getByRole("button", { name: "Refresh" }).click();
-  await waitForMessage(page, "Tabula.md content is current.");
-
-  const isReadOnly = await page.locator("#markdownEditor").evaluate((element) => element.readOnly);
-  assert.equal(isReadOnly, true, "room fixture must open in read-only mode");
-
-  const events = await getDevEvents(page);
-  assert(
-    events.toolCalls.some((call) => call?.name === "tabula_app_room_snapshot"),
-    "room flow should refresh through the room snapshot tool",
-  );
-  assert(
-    events.displayModes.some((event) => event?.mode === "fullscreen"),
-    "room flow should exercise display mode requests",
-  );
   await page.getByRole("button", { name: "Open session" }).click();
-  await waitForMessage(page, "Opened Tabula.md session.");
+  assert(
+    (await getDevEvents(page)).openLinks.some((request) => String(request?.url).includes("#room=")),
+    "room handoff should ask the host to open the encrypted Room link",
+  );
+
+  assertNoPageErrors(consoleErrors, pageErrors);
+  await page.close();
+};
+
+const runFullscreenRoomPresentationFlow = async (baseUrl, browser) => {
+  const { page, consoleErrors, pageErrors } = await createPage(browser);
+  await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=room&display=fullscreen`);
+  await page.locator("#roomHandoff").waitFor({ state: "visible" });
+  await page.getByRole("heading", { name: "Research Review" }).waitFor({ state: "visible" });
+  await page.getByText("This encrypted session is live in Tabula.md.").waitFor({ state: "visible" });
+  assert.equal(await page.locator(".mcp-workspace").isVisible(), false);
+  assert.equal(await page.locator("#tabulaWorkbench").isVisible(), false);
+  assert.equal(await page.getByRole("button", { name: "Edit" }).isVisible(), false);
+  await page.locator("#openSessionCardButton").click();
+  assert(
+    (await getDevEvents(page)).openLinks.some((request) => String(request?.url).includes("#room=")),
+    "fullscreen Room handoff should ask the host to open the encrypted Room link",
+  );
 
   assertNoPageErrors(consoleErrors, pageErrors);
   await page.close();
@@ -352,6 +379,7 @@ const main = async () => {
     await runDocumentFlow(baseUrl, browser);
     await runMobileLayoutFlow(baseUrl, browser);
     await runRoomFlow(baseUrl, browser);
+    await runFullscreenRoomPresentationFlow(baseUrl, browser);
   } catch (error) {
     if (String(error?.message || error).includes("Executable doesn't exist")) {
       throw new Error("Playwright Chromium is not installed. Run `npx playwright install chromium`.");
