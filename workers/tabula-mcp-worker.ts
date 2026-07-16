@@ -1,4 +1,5 @@
 import documentAppHtml from "../dist/document-app.html";
+import { tabulaMcpPrivacyPolicyHtml } from "../src/privacy-policy.js";
 import { createTabulaMcpWebHandler, type TabulaMcpWebHandler, type WebEnvironment } from "../src/server/web.js";
 
 let handler: TabulaMcpWebHandler | null = null;
@@ -25,6 +26,8 @@ const stringEnv = (env: Record<string, unknown>): WebEnvironment =>
   );
 
 const requestPathname = (request: Request) => new URL(request.url).pathname;
+
+const isPrivacyRequest = (request: Request) => requestPathname(request) === "/privacy";
 
 const isMcpRequest = (request: Request) => {
   const pathname = requestPathname(request);
@@ -84,6 +87,15 @@ const routeMcpRequestToSession = (request: Request, env: WorkerEnv) => {
 
 export default {
   fetch(request: Request, env: WorkerEnv) {
+    if (isPrivacyRequest(request)) {
+      return new Response(tabulaMcpPrivacyPolicyHtml, {
+        headers: {
+          "cache-control": "public, max-age=3600",
+          "content-type": "text/html; charset=utf-8",
+        },
+      });
+    }
+
     if (isMcpRequest(request)) {
       return routeMcpRequestToSession(request, env);
     }

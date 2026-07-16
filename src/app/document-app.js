@@ -680,7 +680,7 @@ const createAppClient = () => {
   }
 
   return new App(
-    { name: "Tabula Document", version: "0.1.0" },
+    { name: "Tabula Document", version: "0.1.1" },
     { availableDisplayModes: ["inline", "fullscreen"] },
   );
 };

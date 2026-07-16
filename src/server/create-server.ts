@@ -45,6 +45,7 @@ const registerReadMeTool = (server: McpServer) => {
   server.registerTool(
     "tabula_read_me",
     {
+      title: "Read Tabula Guidance",
       description:
         "Read concise Tabula.md MCP guidance for document drafting, room links, encrypted sharing, and security boundaries. Call this once before choosing a Tabula workflow.",
       inputSchema: {
@@ -85,7 +86,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const documents = new DocumentRegistry(documentStore);
   const server = new McpServer({
     name: "tabula-mcp",
-    version: "0.1.0",
+    version: "0.1.1",
   });
 
   registerDocumentAppResource(server, { documentAppHtml: options.documentAppHtml });

@@ -30,6 +30,7 @@ endpoint.
 - [Security Model](docs/security-model.md): local trust boundary, room keys, share/export, and write policy.
 - [MCP App Architecture](docs/mcp-app-architecture.md): bundled App shape, tool visibility, and source layout.
 - [Release](docs/release.md): validation commands, MCPB checks, runtime support, and handoff notes.
+- [Privacy Policy](PRIVACY.md): local, hosted, encrypted-room, and support-data handling.
 
 ## Quick Start
 
@@ -512,6 +513,13 @@ collaborators or agents.
 
 See [Security Model](docs/security-model.md) for the complete trust boundary and
 release-blocking security checks.
+
+## Privacy Policy
+
+Tabula MCP's privacy policy is available at
+[mcp.tabula.md/privacy](https://mcp.tabula.md/privacy).
+It explains local plaintext checkpoints, optional hosted plaintext working
+state, encrypted room and snapshot services, retention, and support contact.
 
 ## Validation
 
