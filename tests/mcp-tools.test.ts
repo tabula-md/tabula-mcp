@@ -101,14 +101,28 @@ describe("MCP tool registration", () => {
     expect(local.instructions).toContain("Filesystem paths refer to this device");
     expect(localCreate?.description).toContain("this local MCP process");
     expect(localImport?.description).toContain("directory on this device");
+    expect(JSON.stringify(localImport?.inputSchema.properties?.source)).toContain("local-path");
     expect(localConnect?.description).toContain("invite key stays on this device");
 
     expect(hosted.instructions).toContain("This MCP server is hosted");
     expect(hosted.instructions).toContain("trusted plaintext participant");
     expect(hostedCreate?.description).toContain("this hosted MCP session");
-    expect(hostedImport?.description).toContain("not the user's device");
+    expect(hostedImport?.description).toContain("Import inline Markdown files supplied by the client");
+    expect(JSON.stringify(hostedImport?.inputSchema.properties?.source)).not.toContain("local-path");
     expect(hostedConnect?.description).toContain("hosted service becomes a trusted plaintext participant");
     expect(hostedStart?.description).toContain("requires encrypted room recovery");
+  });
+
+  it("exposes hosted server-path import only when the operator configures explicit roots", async () => {
+    const tools = await withClient(true, (client) => client.listTools(), {
+      deploymentMode: "remote",
+      env: { TABULA_MCP_ALLOWED_IMPORT_ROOTS: "/srv/tabula/imports" },
+    });
+    const importTool = tools.tools.find((tool) => tool.name === "tabula_import_markdown_workspace");
+
+    expect(importTool?.description).toContain("operator-approved server directory");
+    expect(importTool?.description).toContain("never refer to the user's device");
+    expect(JSON.stringify(importTool?.inputSchema.properties?.source)).toContain("local-path");
   });
 
   it("fingerprints the App resource URI so hosts do not reuse stale bundled UI", () => {

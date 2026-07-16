@@ -189,9 +189,9 @@ inspect, filter, share, and apply hash-guarded changes through tools alone.
 `tabula_read_workspace_context` is the bounded context tool: use
 `documentIds`, `pathGlobs`, `query`, and `changedSince` instead of reading every
 document in full. Local filesystem imports are limited to MCP roots or
-`TABULA_MCP_ALLOWED_IMPORT_ROOTS`; hosted clients should pass inline
-`source.files`. Resource URIs never include `#room` keys or encrypted share
-secrets.
+`TABULA_MCP_ALLOWED_IMPORT_ROOTS`. Hosted catalogs expose only inline
+`source.files` unless a trusted operator configures explicit server import
+roots. Resource URIs never include `#room` keys or encrypted share secrets.
 
 Tool results are context-budgeted. Exact objects are returned in
 `structuredContent`, while `content` uses concise text plus `resource_link`

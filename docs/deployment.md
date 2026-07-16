@@ -58,10 +58,13 @@ Live room recovery is a separate encrypted checkpoint path: configure
 Tabula.md. The MCP server encrypts the complete workspace Y.Doc update locally
 with the `#room` key, writes the ciphertext blob to Firebase Storage, and uses
 Firestore only for the generation pointer.
-Local filesystem workspace import is disabled unless the MCP client provides
-filesystem roots or the operator sets `TABULA_MCP_ALLOWED_IMPORT_ROOTS` to
-comma- or newline-separated directories. Hosted clients should import with
-inline `source.files`.
+Local MCP exposes filesystem workspace import and accepts paths only when the
+client provides filesystem roots or the operator sets
+`TABULA_MCP_ALLOWED_IMPORT_ROOTS` to comma- or newline-separated directories.
+Hosted MCP exposes only inline `source.files` by default. A trusted self-hosted
+operator can expose `local-path` for server-side directories by setting
+`TABULA_MCP_ALLOWED_IMPORT_ROOTS`; those paths are on the server, never the
+user's device.
 When production mode is enabled, startup fails if the auth token is missing
 unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is explicitly set. Redis REST
 credentials are required by default. Excalidraw-style production memory fallback

@@ -23,7 +23,7 @@ const securityRules = [
   "Room edits use the same workspace Y.Doc, binary RoomWire v2 sync, and Awareness actor state as Tabula.md.",
   "Use current lowercase SHA-256 hex sha256/baseSha256 values before applying guarded workspace document patches.",
   "Encrypted share export may upload encrypted snapshot bytes to the Tabula JSON service, but not plaintext Markdown or snapshot keys.",
-  "Filesystem workspace import reads paths visible to the MCP server runtime; hosted clients should provide inline files instead of local user paths.",
+  "Filesystem workspace import reads paths visible to the MCP server runtime. Hosted catalogs expose it only when the operator configures explicit server import roots; otherwise hosted clients must provide inline files.",
   "tabula:// resource URIs are session-local read handles and must never contain #room keys, #json keys, or plaintext secrets.",
   "Prefer compact workspace context before full Markdown reads; full document text should be requested deliberately.",
 ];
@@ -56,7 +56,7 @@ const summaries: Record<TabulaReadMeTopic, string> = {
 const nextActionsByTopic: Record<TabulaReadMeTopic, string[]> = {
   overview: [
     "Use tabula_create_document for a new private Markdown draft, or for a new document in a connected writable session.",
-    "Use tabula_create_workspace or tabula_import_markdown_workspace for multi-file Markdown workspaces; prefer source.files unless the MCP client grants filesystem roots or TABULA_MCP_ALLOWED_IMPORT_ROOTS is configured.",
+    "Use tabula_create_workspace or tabula_import_markdown_workspace for multi-file Markdown workspaces. Use source.files in hosted MCP; local-path appears only for local MCP or operator-approved hosted server directories.",
     "Use tabula_create_workspace_room when the agent should create a new live collaboration room.",
     "Use tabula_list_documents and tabula_open_document to resume a saved checkpoint.",
     "Use tabula_connect_room for an existing Tabula.md room URL.",
