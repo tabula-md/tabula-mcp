@@ -76,7 +76,10 @@ const main = async () => {
   await cp(packageLockPath, path.join(stageDir, "package-lock.json"));
   await writeBundlePackage(pkg);
 
-  await run("npm", ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--fund=false"], {
+  // `npm publish --dry-run` propagates its dry-run config to lifecycle scripts.
+  // This nested install must still materialize the MCPB runtime dependencies so
+  // the artifact can be validated before anything is published.
+  await run("npm", ["ci", "--dry-run=false", "--omit=dev", "--ignore-scripts", "--no-audit", "--fund=false"], {
     cwd: stageDir,
   });
 
