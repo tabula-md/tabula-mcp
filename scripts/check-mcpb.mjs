@@ -44,11 +44,6 @@ const requiredFiles = [
   "server/workspaces.js",
   "README.md",
   "PRIVACY.md",
-  "docs/codex-cli.md",
-  "docs/claude-desktop.md",
-  "docs/security-model.md",
-  "docs/mcp-app-architecture.md",
-  "docs/release.md",
   "LICENSE",
 ];
 
