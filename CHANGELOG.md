@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1
+
 - Flattened `tabula_export_copy` inputs so agents pass either `files` or
   `sessionId` directly, with described parameters, concrete examples, and
   actionable errors for invalid source combinations.
@@ -13,6 +15,11 @@
   without treating a fixed copy as a live collaboration Session.
 - Preserved exported workspace titles, active files, comments, and expiry
   metadata across Copy handoffs.
+- Replaced the oversized MCP App handoff panel with a single-row receipt for
+  encrypted Copies and live Sessions, including compact inline host approval
+  states and desktop/mobile height regression coverage.
+- Updated MCPB release verification to require the compact receipt instead of
+  the removed summary block.
 
 ## 0.4.0
 

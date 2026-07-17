@@ -250,13 +250,13 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   for (const expected of [
     "tabulaMark",
     "handoffEyebrow",
-    "handoffSummary",
     "handoffMeta",
     "openButton",
   ]) {
     assert(appHtml.includes(expected), `MCPB ${label} Document App is missing ${expected}`);
   }
   assert(appHtml.includes(">Tabula<"), `MCPB ${label} Document App must use the Tabula brand`);
+  assert(!appHtml.includes("handoffSummary"), `MCPB ${label} Document App must stay a compact handoff receipt`);
   assert(!appHtml.includes("sessionTitle"), `MCPB ${label} Document App must not present a document title in its chrome`);
   for (const toolName of ["tabula_start_session", "tabula_export_copy"]) {
     assert(!appHtml.includes(toolName), `MCPB ${label} Document App must not embed a stateful tool call to ${toolName}`);
