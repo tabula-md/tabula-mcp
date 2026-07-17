@@ -100,11 +100,15 @@ describe("Tabula document sharing", () => {
 
   it("encrypts multi-file workspaces into opaque JSON snapshot blobs", async () => {
     const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+      title: "Review workspace",
       files: [
         { id: "readme", title: "README.md", text: "# Readme\n" },
         { id: "plan", title: "Plan.md", text: "# Plan\n\nSecret plan" },
       ],
       activeFileId: "plan",
+      commentsByFileId: {
+        plan: [{ id: "comment-1", body: "Check this", createdAt: "2026-07-05T00:00:00.000Z" }],
+      },
       snapshotKey,
       now: () => new Date("2026-07-05T00:00:00.000Z"),
     });
@@ -118,11 +122,15 @@ describe("Tabula document sharing", () => {
 
   it("creates a schema v2 snapshot that Tabula can decrypt and parse", async () => {
     const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+      title: "Review workspace",
       files: [
         { id: "tabula-mcp-root", title: "README.md", text: "# Readme\n" },
         { id: "plan", title: "Plan.md", text: "# Plan\n\nReady to share" },
       ],
       activeFileId: "plan",
+      commentsByFileId: {
+        plan: [{ id: "comment-1", body: "Check this", createdAt: "2026-07-05T00:00:00.000Z" }],
+      },
       snapshotKey,
       now: () => new Date("2026-07-05T00:00:00.000Z"),
     });
@@ -138,7 +146,7 @@ describe("Tabula document sharing", () => {
       folders: [
         {
           id: "tabula-mcp-root-1",
-          title: "Tabula.md workspace",
+          title: "Review workspace",
           parentId: null,
           order: 0,
         },
@@ -159,7 +167,9 @@ describe("Tabula document sharing", () => {
           order: 1,
         },
       ],
-      commentsByFileId: {},
+      commentsByFileId: {
+        plan: [{ id: "comment-1", body: "Check this", createdAt: "2026-07-05T00:00:00.000Z" }],
+      },
     });
   });
 

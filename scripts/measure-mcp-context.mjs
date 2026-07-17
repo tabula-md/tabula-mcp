@@ -4,7 +4,7 @@ import { createTabulaMcpServer } from "../dist/index.js";
 
 const checkMode = process.argv.includes("--check");
 const budgets = {
-  listToolsBytes: 14_000,
+  listToolsBytes: 16_000,
 };
 const jsonBytes = (value) => Buffer.byteLength(JSON.stringify(value), "utf8");
 const assertBudget = (label, actual, budget) => {

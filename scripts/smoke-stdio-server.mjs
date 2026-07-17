@@ -16,6 +16,7 @@ const coreTools = [
   "tabula_search_files",
   "tabula_write_file",
   "tabula_write_files",
+  "tabula_import_copy",
   "tabula_export_copy",
 ];
 const uiCapabilities = {

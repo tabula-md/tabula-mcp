@@ -6,6 +6,7 @@ import {
   generateEncryptionKey,
   serializeShareSnapshot,
 } from "@tabula-md/tabula";
+import type { ShareSnapshotPayload } from "@tabula-md/tabula/data/json";
 import * as Y from "yjs";
 import { assertProductionEgressAllowed, normalizeServiceUrl } from "./egress-policy.js";
 import {
@@ -73,6 +74,7 @@ export type ShareMarkdownWorkspaceOptions = {
   title?: string;
   files: readonly ShareMarkdownWorkspaceFile[];
   activeFileId?: string;
+  commentsByFileId?: ShareSnapshotPayload["commentsByFileId"];
   appOrigin?: string;
   jsonServerUrl?: string;
   fetchImpl?: FetchLike;
@@ -254,12 +256,16 @@ const createShareRootFolderId = (files: readonly ShareMarkdownWorkspaceFile[]) =
 };
 
 const createMcpShareSnapshotPayload = ({
+  title,
   files,
   activeFileId,
+  commentsByFileId = {},
   now = () => new Date(),
 }: {
+  title?: string;
   files: readonly ShareMarkdownWorkspaceFile[];
   activeFileId?: string;
+  commentsByFileId?: ShareSnapshotPayload["commentsByFileId"];
   now?: () => Date;
 }) => {
   const snapshotFiles = files.map(normalizeShareFile).filter((file) => file.id);
@@ -272,7 +278,7 @@ const createMcpShareSnapshotPayload = ({
   usedIds.add(rootFolderId);
   const folderIds = new Map<string, string>([["", rootFolderId]]);
   const folders: Array<{ id: string; title: string; parentId: string | null; order: number }> = [
-    { id: rootFolderId, title: shareRootFolderTitle, parentId: null, order: 0 },
+    { id: rootFolderId, title: title?.trim() || shareRootFolderTitle, parentId: null, order: 0 },
   ];
   const createFolderId = (folderPath: string) => {
     const base = `folder_${Buffer.from(folderPath).toString("base64url")}`;
@@ -315,7 +321,7 @@ const createMcpShareSnapshotPayload = ({
     folders,
     rootFolderId,
     activeFileId: activeFile?.id ?? activeFileId ?? snapshotFiles[0]?.id ?? mainFileId,
-    commentsByFileId: {},
+    commentsByFileId,
     now,
   });
 };
@@ -332,6 +338,7 @@ export const createEncryptedJsonShareSnapshot = async ({
   now?: () => Date;
 }) => {
   const payload = createMcpShareSnapshotPayload({
+    title,
     files: [
       {
         id: mainFileId,
@@ -349,17 +356,21 @@ export const createEncryptedJsonShareSnapshot = async ({
 };
 
 export const createEncryptedJsonShareWorkspaceSnapshot = async ({
+  title,
   files,
   activeFileId,
+  commentsByFileId,
   snapshotKey,
   now,
 }: {
+  title?: string;
   files: readonly ShareMarkdownWorkspaceFile[];
   activeFileId?: string;
+  commentsByFileId?: ShareSnapshotPayload["commentsByFileId"];
   snapshotKey: string;
   now?: () => Date;
 }) => {
-  const payload = createMcpShareSnapshotPayload({ files, activeFileId, now });
+  const payload = createMcpShareSnapshotPayload({ title, files, activeFileId, commentsByFileId, now });
   return encodeEncryptedData(serializeShareSnapshot(payload), {
     encryptionKey: snapshotKey,
     metadata: { kind: "json-share", schemaVersion: payload.schemaVersion },
@@ -459,6 +470,7 @@ export const shareMarkdownWorkspace = async ({
   title,
   files,
   activeFileId,
+  commentsByFileId,
   appOrigin = defaultTabulaAppOrigin,
   jsonServerUrl,
   fetchImpl = fetch,
@@ -473,8 +485,10 @@ export const shareMarkdownWorkspace = async ({
     env,
   });
   const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+    title,
     files: normalizedFiles,
     activeFileId,
+    commentsByFileId,
     snapshotKey,
     now,
   });

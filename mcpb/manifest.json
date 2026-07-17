@@ -4,7 +4,7 @@
   "display_name": "Tabula.md MCP",
   "version": "0.4.0",
   "description": "Let Claude work with people in shared Tabula.md Markdown workspaces.",
-  "long_description": "Turn Markdown created in Claude or local files into shared Tabula.md workspaces. Claude can start or join encrypted live sessions, list, read, search, and write one or many Markdown files, and export fixed encrypted copies. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
+  "long_description": "Turn Markdown created in Claude or local files into shared Tabula.md workspaces. Claude can start or join encrypted live sessions, list, read, search, and write one or many Markdown files, export fixed encrypted copies, and import a #json copy for local materialization. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
   "author": {
     "name": "Tabula.md",
     "url": "https://tabula.md"
@@ -62,6 +62,10 @@
     {
       "name": "tabula_write_files",
       "description": "Create or replace multiple Markdown files and their folders in one live session transaction."
+    },
+    {
+      "name": "tabula_import_copy",
+      "description": "Decrypt a fixed #json copy into relative Markdown paths and contents for local materialization."
     },
     {
       "name": "tabula_export_copy",

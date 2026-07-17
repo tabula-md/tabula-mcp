@@ -76,8 +76,9 @@ try {
     "tabula_search_files",
     "tabula_write_file",
     "tabula_write_files",
+    "tabula_import_copy",
     "tabula_export_copy",
-  ]), "Vercel MCP endpoint did not expose exactly the eight core tools");
+  ]), "Vercel MCP endpoint did not expose exactly the nine core tools");
 } finally {
   await client.close();
 }

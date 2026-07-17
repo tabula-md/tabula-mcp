@@ -4,6 +4,7 @@ import { z } from "zod";
 import { coreErrorContent } from "../core-errors.js";
 import type { RuntimeEnvironment } from "../env.js";
 import { exportCopy, resolveExportCopySource, type ExportCopyInput } from "../export-copy-service.js";
+import { importCopy, maxImportedCopyFiles } from "../import-copy-service.js";
 import type { SessionRegistry } from "../registry.js";
 import { joinRoomSession, startWorkspaceSession } from "../session-service.js";
 import { createWorkspaceFromFiles } from "../workspaces.js";
@@ -274,6 +275,35 @@ export const registerCoreTools = (
     })),
   );
 
+  server.registerTool(
+    "tabula_import_copy",
+    {
+      title: "Import Copy",
+      description: "Decrypt a private Tabula #json copy and return its relative Markdown paths and contents. Then use the host's file tools to create them in a user-chosen local folder. This does not join a live session or write to the filesystem.",
+      inputSchema: {
+        copyUrl: z.string().url()
+          .describe("Complete private Tabula #json URL supplied by the user; keep it private."),
+      },
+      outputSchema: {
+        title: z.string(),
+        files: z.array(markdownFileSchema).min(1).max(maxImportedCopyFiles),
+        fileCount: z.number().int().positive(),
+        totalCharacters: z.number().int().nonnegative(),
+        activePath: z.string().optional(),
+        createdAt: z.string().datetime(),
+        commentCount: z.number().int().nonnegative(),
+      },
+      annotations: annotations(true, true),
+    },
+    async ({ copyUrl }: { copyUrl: string }) => run(async () => {
+      const imported = await importCopy({ copyUrl, env: options.env });
+      return {
+        value: imported,
+        text: `Imported ${imported.fileCount} Markdown file${imported.fileCount === 1 ? "" : "s"} from the encrypted Tabula copy. Preserve the returned relative paths when writing them locally, and do not overwrite existing files without the user's approval.`,
+      };
+    }),
+  );
+
   registerCoreAppTool(
     server,
     options.resourceUri,
@@ -301,6 +331,7 @@ export const registerCoreTools = (
         fileCount: z.number().int().positive(),
         encrypted: z.literal(true),
         createdAt: z.string().datetime(),
+        expiresAt: z.string().datetime().optional(),
       },
       annotations: annotations(false, true),
     },

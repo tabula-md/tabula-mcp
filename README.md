@@ -69,13 +69,18 @@ change. The browser sees the update immediately.
 
 - **Live session** — start from one or more Markdown files, or join an existing
   Tabula.md room and collaborate with people or other clients.
-- **Copy** — export one or more Markdown files as an encrypted `#json` snapshot
-  for a fixed handoff.
+- **Copy** — export one or more Markdown files as an encrypted `#json` snapshot,
+  or import a received copy as relative paths and Markdown for the agent to
+  materialize in a user-chosen local folder.
 - **Workspace files** — list, read, search, and atomically write files and
   nested folders in a connected session.
 
 Use a live session when work should continue. Use a copy when the recipient
 needs a snapshot instead of an ongoing workspace.
+
+Importing a copy does not join a room or write to the filesystem. The agent
+uses its host-native file tools, so local path access and overwrite approval
+remain under the host's control.
 
 ## References
 
