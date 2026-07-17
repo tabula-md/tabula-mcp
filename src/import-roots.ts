@@ -74,7 +74,7 @@ export const assertLocalImportRootAllowed = async ({
   const roots = [...(await rootsFromClient(server)), ...rootsFromEnvironment(env)];
   if (roots.length === 0) {
     throw new TabulaMcpError(
-      "Local Markdown workspace import requires MCP client roots or TABULA_MCP_ALLOWED_IMPORT_ROOTS. Use source.files when the MCP client cannot grant filesystem roots.",
+      "Local Markdown workspace import requires MCP client roots or TABULA_MCP_ALLOWED_IMPORT_ROOTS. Pass inline files when the MCP client cannot grant filesystem roots.",
     );
   }
 

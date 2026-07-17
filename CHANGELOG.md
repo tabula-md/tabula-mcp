@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Flattened `tabula_export_copy` inputs so agents pass either `files` or
+  `sessionId` directly, with described parameters, concrete examples, and
+  actionable errors for invalid source combinations.
+
 ## 0.4.0
 
 - Replaced the singular `tabula_read_file` tool with `tabula_read_files`, which

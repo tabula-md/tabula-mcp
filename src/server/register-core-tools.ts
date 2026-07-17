@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { coreErrorContent } from "../core-errors.js";
 import type { RuntimeEnvironment } from "../env.js";
-import { exportCopy, type ExportCopySource } from "../export-copy-service.js";
+import { exportCopy, resolveExportCopySource, type ExportCopyInput } from "../export-copy-service.js";
 import type { SessionRegistry } from "../registry.js";
 import { joinRoomSession, startWorkspaceSession } from "../session-service.js";
 import { createWorkspaceFromFiles } from "../workspaces.js";
@@ -268,21 +268,22 @@ export const registerCoreTools = (
     "tabula_export_copy",
     {
       title: "Export Copy",
-      description: "Create an encrypted #json handoff from one or more Markdown files or the current state of a live session. Use one files call for a multi-file Tabula workspace.",
-      inputSchema: {
-        source: z.discriminatedUnion("kind", [
-          z.object({
-            kind: z.literal("files"),
-            title: z.string().min(1).max(120).optional(),
-            files: z.array(markdownFileSchema).min(1).max(100),
-          }),
-          z.object({
-            kind: z.literal("session"),
-            sessionId: sessionIdSchema,
-            paths: z.array(filePathSchema).min(1).optional(),
-          }),
-        ]),
-      },
+      description: "Create an encrypted fixed #json copy for a non-live Markdown handoff. Pass files (and optional title) for host-native Markdown, or sessionId (and optional paths) for a connected session. Pass exactly one of files or sessionId. Keep copyUrl private unless the user asks to share it.",
+      inputSchema: z.object({
+        title: z.string().min(1).max(120).optional()
+          .describe("Optional copy title; valid only with files."),
+        files: z.array(markdownFileSchema).min(1).max(100).optional()
+          .describe("Markdown files to export. Use files or sessionId, never both."),
+        sessionId: sessionIdSchema.optional()
+          .describe("Connected session to copy. Use sessionId or files, never both."),
+        paths: z.array(filePathSchema).min(1).max(100).optional()
+          .describe("Session paths to copy; omit for all files. Valid only with sessionId."),
+      }).meta({
+        examples: [
+          { files: [{ path: "sample.md", content: "# Sample\n" }] },
+          { sessionId: "00000000-0000-4000-8000-000000000000", paths: ["sample.md"] },
+        ],
+      }),
       outputSchema: {
         copyUrl: z.string().url(),
         fileCount: z.number().int().positive(),
@@ -291,7 +292,8 @@ export const registerCoreTools = (
       },
       annotations: annotations(false, true),
     },
-    async ({ source }: { source: ExportCopySource }) => run(async () => {
+    async (input: ExportCopyInput) => run(async () => {
+      const source = resolveExportCopySource(input);
       const exported = await exportCopy({ source, registry, env: options.env });
       return {
         value: exported,

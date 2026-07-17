@@ -159,6 +159,48 @@ describe("core MCP contract", () => {
       expect(JSON.stringify(start?.inputSchema)).not.toContain("draftId");
       expect(JSON.stringify(exported?.inputSchema)).toContain('"files"');
       expect(JSON.stringify(exported?.inputSchema)).not.toContain("draftId");
+
+      const exportSchema = exported?.inputSchema as {
+        properties?: Record<string, { description?: string }>;
+        examples?: unknown[];
+      };
+      expect(Object.keys(exportSchema.properties ?? {})).toEqual(["title", "files", "sessionId", "paths"]);
+      expect(exportSchema.properties?.files?.description).toContain("never both");
+      expect(exportSchema.properties?.sessionId?.description).toContain("never both");
+      expect(exportSchema.examples).toEqual([
+        { files: [{ path: "sample.md", content: "# Sample\n" }] },
+        { sessionId: "00000000-0000-4000-8000-000000000000", paths: ["sample.md"] },
+      ]);
+      expect(JSON.stringify(exportSchema)).not.toContain('"source"');
+      expect(JSON.stringify(exportSchema)).not.toContain('"kind"');
+      expect(JSON.stringify(exportSchema)).not.toContain('"oneOf"');
+    });
+  });
+
+  it.each([
+    [{}, "exactly one source"],
+    [{ files: [{ path: "sample.md", content: "# Sample\n" }], sessionId: "00000000-0000-4000-8000-000000000000" }, "exactly one source"],
+    [{ files: [{ path: "sample.md", content: "# Sample\n" }], paths: ["sample.md"] }, "paths can only be used with sessionId"],
+    [{ sessionId: "00000000-0000-4000-8000-000000000000", title: "Sample" }, "title can only be used with files"],
+    [{ source: { kind: "files", files: [{ path: "sample.md", content: "# Sample\n" }] } }, "exactly one source"],
+  ])("returns one actionable tool error for invalid Export Copy input %#", async (argumentsValue, message) => {
+    await withClient(async (client) => {
+      const exported = await client.callTool({
+        name: "tabula_export_copy",
+        arguments: argumentsValue,
+      });
+      expect(exported.isError).toBe(true);
+      const error = JSON.parse(exported.content?.find((item) => item.type === "text")?.text ?? "{}");
+      expect(error).toMatchObject({
+        code: "invalid_input",
+        message: expect.stringContaining(message),
+        expected: expect.stringContaining("files"),
+        examples: [
+          { files: [{ path: "sample.md", content: "# Sample\n" }] },
+          { sessionId: "00000000-0000-4000-8000-000000000000", paths: ["sample.md"] },
+        ],
+        retry: expect.stringContaining("exactly one of files or sessionId"),
+      });
     });
   });
 
@@ -174,11 +216,8 @@ describe("core MCP contract", () => {
       const exported = await client.callTool({
         name: "tabula_export_copy",
         arguments: {
-          source: {
-            kind: "files",
-            title: "Export me",
-            files: [{ path: "export.md", content: "# Export me\n" }],
-          },
+          title: "Export me",
+          files: [{ path: "export.md", content: "# Export me\n" }],
         },
       });
       expect(exported.isError).not.toBe(true);
@@ -205,15 +244,12 @@ describe("core MCP contract", () => {
       const exported = await client.callTool({
         name: "tabula_export_copy",
         arguments: {
-          source: {
-            kind: "files",
-            title: "Three documents",
-            files: [
-              { path: "brief.md", content: "# Brief\n" },
-              { path: "research/findings.md", content: "# Findings\n" },
-              { path: "next-steps.md", content: "# Next steps\n" },
-            ],
-          },
+          title: "Three documents",
+          files: [
+            { path: "brief.md", content: "# Brief\n" },
+            { path: "research/findings.md", content: "# Findings\n" },
+            { path: "next-steps.md", content: "# Next steps\n" },
+          ],
         },
       });
 
@@ -243,11 +279,8 @@ describe("core MCP contract", () => {
       const exported = await client.callTool({
         name: "tabula_export_copy",
         arguments: {
-          source: {
-            kind: "files",
-            title: "Self hosted",
-            files: [{ path: "self-hosted.md", content: "# Self hosted\n" }],
-          },
+          title: "Self hosted",
+          files: [{ path: "self-hosted.md", content: "# Self hosted\n" }],
         },
       });
 

@@ -65,7 +65,7 @@ keeps the checkpoint format identical while avoiding browser-only APIs such as
 Local MCP exposes filesystem workspace import and accepts paths only when the
 client provides filesystem roots or the operator sets
 `TABULA_MCP_ALLOWED_IMPORT_ROOTS` to comma- or newline-separated directories.
-Hosted MCP exposes only inline `source.files` by default. A trusted self-hosted
+Hosted MCP accepts inline `files` for host-native Markdown. A trusted self-hosted
 operator can expose `local-path` for server-side directories by setting
 `TABULA_MCP_ALLOWED_IMPORT_ROOTS`; those paths are on the server, never the
 user's device.
