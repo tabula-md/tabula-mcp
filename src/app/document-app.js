@@ -5,7 +5,6 @@ import "./document-app.css";
 const elements = {
   tabulaMark: document.getElementById("tabulaMark"),
   eyebrow: document.getElementById("handoffEyebrow"),
-  summary: document.getElementById("handoffSummary"),
   meta: document.getElementById("handoffMeta"),
   message: document.getElementById("message"),
   openButton: document.getElementById("openButton"),
@@ -20,7 +19,6 @@ const state = {
 
 const hostColorMappings = {
   "--tabula-bg": "--color-background-primary",
-  "--tabula-subtle": "--color-background-secondary",
   "--tabula-text": "--color-text-primary",
   "--tabula-muted": "--color-text-secondary",
   "--tabula-border": "--color-border-primary",
@@ -44,6 +42,7 @@ const getErrorText = (result) => {
 
 const setMessage = (text, tone = "neutral") => {
   elements.message.textContent = text;
+  elements.message.title = text;
   elements.message.dataset.tone = tone;
 };
 
@@ -54,14 +53,13 @@ const updateActionState = () => {
   elements.openButton.textContent = state.mode === "session" ? "Open session" : "Open copy";
 };
 
-const fileLabel = (fileCount) => `${formatCount(fileCount)} Markdown file${Number(fileCount) === 1 ? "" : "s"}`;
+const fileLabel = (fileCount) => `${formatCount(fileCount)} file${Number(fileCount) === 1 ? "" : "s"}`;
 
 const renderCopy = (copy) => {
   state.mode = "copy";
   state.targetUrl = copy.copyUrl || "";
   elements.eyebrow.textContent = "Encrypted copy";
-  elements.summary.textContent = "A fixed Tabula.md workspace copy is ready to open.";
-  elements.meta.textContent = `${fileLabel(copy.fileCount)} · encrypted #json handoff`;
+  elements.meta.textContent = fileLabel(copy.fileCount);
   updateActionState();
 };
 
@@ -69,8 +67,7 @@ const renderSession = (session) => {
   state.mode = "session";
   state.targetUrl = session.sessionUrl || "";
   elements.eyebrow.textContent = "Live session";
-  elements.summary.textContent = "Claude is connected. Open Tabula.md to collaborate in the live workspace.";
-  elements.meta.textContent = `${fileLabel(session.fileCount)} · encrypted live room`;
+  elements.meta.textContent = fileLabel(session.fileCount);
   updateActionState();
 };
 
@@ -78,6 +75,8 @@ const renderToolResult = (result) => {
   if (result.isError) {
     state.mode = "idle";
     state.targetUrl = "";
+    elements.eyebrow.textContent = "Handoff failed";
+    elements.meta.textContent = "";
     updateActionState();
     setMessage(getErrorText(result), "error");
     return false;
@@ -101,21 +100,21 @@ const openTarget = async () => {
     return;
   }
   if (state.canOpenLinks === false || !state.app.openLink) {
-    setMessage("This MCP host cannot open external links.", "warning");
+    setMessage("Cannot open links", "warning");
     return;
   }
 
   elements.openButton.disabled = true;
-  setMessage("Waiting for link approval from the MCP host...");
+  setMessage("Awaiting approval");
   try {
     const result = await state.app.openLink({ url: state.targetUrl });
     if (result?.isError) {
-      setMessage("The link was not approved. Use the host link prompt, then try again.", "warning");
+      setMessage("Not approved", "warning");
       return;
     }
-    setMessage("Opened in Tabula.md.");
+    setMessage("Opened");
   } catch {
-    setMessage("The MCP host could not open the link. Try again from this card.", "warning");
+    setMessage("Could not open", "warning");
   } finally {
     updateActionState();
   }
@@ -152,7 +151,7 @@ const boot = async () => {
   state.app = app;
 
   app.ontoolinput = () => {
-    setMessage("Preparing Tabula.md handoff...");
+    setMessage("Preparing");
   };
 
   app.ontoolresult = (result) => {
@@ -175,7 +174,7 @@ const boot = async () => {
   applyHostContext(app.getHostContext?.());
   state.canOpenLinks = app.getHostCapabilities?.()?.openLinks !== undefined;
   if (state.canOpenLinks === false && state.targetUrl) {
-    setMessage("This MCP host cannot open external links.", "warning");
+    setMessage("Cannot open links", "warning");
   }
   updateActionState();
 };

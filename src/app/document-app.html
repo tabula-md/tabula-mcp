@@ -7,19 +7,20 @@
   </head>
   <body>
     <main class="handoff-card" aria-label="Tabula handoff">
-      <header class="handoff-header" aria-label="Tabula">
-        <img id="tabulaMark" class="handoff-mark" alt="" />
-        <span>Tabula</span>
-      </header>
+      <div class="handoff-row">
+        <header class="handoff-brand" aria-label="Tabula">
+          <img id="tabulaMark" class="handoff-mark" alt="" />
+          <span>Tabula</span>
+        </header>
 
-      <section class="handoff-body">
-        <p id="handoffEyebrow" class="handoff-eyebrow">Preparing handoff</p>
-        <p id="handoffSummary" class="handoff-summary">Tabula is preparing a secure handoff.</p>
-        <p id="handoffMeta" class="handoff-meta">Waiting for workspace</p>
+        <div class="handoff-details">
+          <span id="handoffEyebrow" class="handoff-eyebrow">Preparing handoff</span>
+          <span id="handoffMeta" class="handoff-meta">Waiting for workspace</span>
+          <span id="message" class="message" role="status" aria-live="polite"></span>
+        </div>
+
         <button id="openButton" class="handoff-action" type="button" hidden>Open</button>
-      </section>
-
-      <p id="message" class="message" role="status" aria-live="polite"></p>
+      </div>
     </main>
 
     <script type="module" src="./document-app.js"></script>
