@@ -185,6 +185,7 @@ describe("core MCP workflows", () => {
       });
 
       const listed = await client.callTool({ name: "tabula_list_files", arguments: { sessionId: session.sessionId } });
+      expect(listed.structuredContent).not.toHaveProperty("sessionId");
       expect((listed.structuredContent as { files: unknown[] }).files).toEqual(expect.arrayContaining([
         expect.objectContaining({ path: "shared.md" }),
       ]));
@@ -196,9 +197,21 @@ describe("core MCP workflows", () => {
       const readFiles = (read.structuredContent as {
         files: Array<{ path: string; content: string; revision: string }>;
       }).files;
+      expect(read.structuredContent).not.toHaveProperty("sessionId");
       expect(readFiles.map((file) => file.path)).toEqual(["shared.md", "docs/guide.md"]);
       const file = readFiles[0]!;
       expect(file.content).toBe("# Shared\n\nhello\n");
+
+      const searched = await client.callTool({
+        name: "tabula_search_files",
+        arguments: { sessionId: session.sessionId, query: "nested" },
+      });
+      expect(searched.isError).not.toBe(true);
+      expect(searched.structuredContent).not.toHaveProperty("sessionId");
+      expect(searched.structuredContent).toMatchObject({
+        matches: [expect.objectContaining({ path: "docs/guide.md", line: 3, excerpt: "nested" })],
+        truncated: false,
+      });
 
       const content = `${file.content}\nhi! 👋\n`;
       const written = await client.callTool({
@@ -206,6 +219,7 @@ describe("core MCP workflows", () => {
         arguments: { sessionId: session.sessionId, path: "shared.md", content, expectedRevision: file.revision },
       });
       expect(written.isError).not.toBe(true);
+      expect(written.structuredContent).not.toHaveProperty("sessionId");
       expect(written.structuredContent).toMatchObject({ changed: true, created: false, textLength: content.length });
 
       const reread = await client.callTool({
@@ -225,6 +239,7 @@ describe("core MCP workflows", () => {
         },
       });
       expect(writtenFiles.isError).not.toBe(true);
+      expect(writtenFiles.structuredContent).not.toHaveProperty("sessionId");
       expect(writtenFiles.structuredContent).toMatchObject({ createdCount: 2, changedCount: 2 });
     });
   });
@@ -271,6 +286,23 @@ describe("core MCP workflows", () => {
         copyUrl: expect.stringMatching(new RegExp(`^https://tabula\\.md/#json=${snapshotId},`)),
         fileCount: 1,
         encrypted: true,
+      });
+    });
+  });
+
+  it("returns a recoverable error for a URL that is not a private room link", async () => {
+    await withClient(async (client) => {
+      const joined = await client.callTool({
+        name: "tabula_join_room",
+        arguments: { roomUrl: "https://tabula.md/" },
+      });
+      expect(joined.isError).toBe(true);
+      const error = JSON.parse(joined.content?.find((item) => item.type === "text")?.text ?? "{}");
+      expect(error).toMatchObject({
+        code: "invalid_input",
+        message: expect.stringContaining("valid private Tabula room URL"),
+        expected: "https://tabula.md/#room=<room-id>,<room-key>",
+        retry: expect.stringContaining("complete #room URL"),
       });
     });
   });

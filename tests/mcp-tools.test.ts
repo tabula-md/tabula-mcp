@@ -62,6 +62,24 @@ const keysIn = (value: unknown): string[] => {
   return Object.entries(value).flatMap(([key, child]) => [key, ...keysIn(child)]);
 };
 
+const expectInputPropertiesDescribed = (schema: unknown, path = "inputSchema") => {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) return;
+  const value = schema as Record<string, unknown>;
+  if (value.properties && typeof value.properties === "object" && !Array.isArray(value.properties)) {
+    for (const [name, propertySchema] of Object.entries(value.properties)) {
+      const property = propertySchema as Record<string, unknown>;
+      expect(property.description, `${path}.${name} needs a description`).toEqual(expect.any(String));
+      expectInputPropertiesDescribed(property, `${path}.${name}`);
+    }
+  }
+  expectInputPropertiesDescribed(value.items, `${path}[]`);
+  for (const keyword of ["oneOf", "anyOf", "allOf"] as const) {
+    if (Array.isArray(value[keyword])) {
+      value[keyword].forEach((child, index) => expectInputPropertiesDescribed(child, `${path}.${keyword}[${index}]`));
+    }
+  }
+};
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
@@ -86,9 +104,11 @@ describe("core MCP contract", () => {
         expect(tool.description).toBeTruthy();
         expect(tool.inputSchema).toBeTruthy();
         expect(tool.outputSchema).toBeTruthy();
+        expectInputPropertiesDescribed(tool.inputSchema, tool.name);
+        const destructive = tool.name === "tabula_write_file" || tool.name === "tabula_write_files";
         expect(tool.annotations).toMatchObject({
           readOnlyHint: expect.any(Boolean),
-          destructiveHint: false,
+          destructiveHint: destructive,
           idempotentHint: expect.any(Boolean),
           openWorldHint: expect.any(Boolean),
         });
@@ -123,6 +143,30 @@ describe("core MCP contract", () => {
       expect(instructions).toContain("Export Copy");
       expect(instructions).toContain("Start Session");
       expect(instructions).not.toContain("tabula_read_me");
+    });
+  });
+
+  it("uses concise titles and decision-oriented descriptions", async () => {
+    await withClient(async (client) => {
+      const tools = Object.fromEntries((await client.listTools()).tools.map((tool) => [tool.name, tool]));
+      expect(Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, tool.title]))).toEqual({
+        tabula_start_session: "Start Session",
+        tabula_join_room: "Join Session",
+        tabula_list_files: "List Files",
+        tabula_read_files: "Read Files",
+        tabula_search_files: "Search Files",
+        tabula_write_file: "Write File",
+        tabula_write_files: "Write Files",
+        tabula_export_copy: "Export Copy",
+      });
+      expect(tools.tabula_start_session?.description).toContain("Markdown files");
+      expect(tools.tabula_join_room?.description).toContain("private #room URL");
+      expect(tools.tabula_list_files?.description).toContain("target path is unknown");
+      expect(tools.tabula_read_files?.description).toContain("revisions");
+      expect(tools.tabula_search_files?.description).toContain("line numbers");
+      expect(tools.tabula_write_file?.description).toContain("revision returned by Read Files");
+      expect(tools.tabula_write_files?.description).toContain("Atomically");
+      expect(tools.tabula_export_copy?.description).toContain("exactly one of files or sessionId");
     });
   });
 

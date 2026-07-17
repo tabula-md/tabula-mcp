@@ -109,7 +109,9 @@ export const readSessionFiles = async ({
   paths: readonly string[];
 }) => {
   if (paths.length === 0) {
-    throw new TabulaCoreError("invalid_input", "At least one Markdown file path is required.");
+    throw new TabulaCoreError("invalid_input", "At least one Markdown file path is required.", {
+      retry: "List files, then retry with one or more paths.",
+    });
   }
   if (paths.length > maxSessionReadFiles) {
     throw new TabulaCoreError("read_too_large", "Too many Markdown files were requested in one read.", {
@@ -120,7 +122,9 @@ export const readSessionFiles = async ({
 
   const filePaths = paths.map(normalizeWorkspaceFilePath);
   if (new Set(filePaths).size !== filePaths.length) {
-    throw new TabulaCoreError("invalid_path", "Each file path must be unique within one read.");
+    throw new TabulaCoreError("invalid_path", "Each file path must be unique within one read.", {
+      retry: "Remove duplicate paths and retry Read Files.",
+    });
   }
   const { snapshot } = await readReadySnapshot(registry, sessionId);
   const index = buildWorkspacePathIndex(snapshot.workspace);
@@ -211,7 +215,9 @@ export const writeSessionFiles = async ({
   files: readonly SessionFileWrite[];
 }) => {
   if (files.length === 0) {
-    throw new TabulaCoreError("invalid_input", "At least one Markdown file is required.");
+    throw new TabulaCoreError("invalid_input", "At least one Markdown file is required.", {
+      retry: "Retry with one or more file objects.",
+    });
   }
   const normalizedFiles = files.map((file) => ({
     ...file,
@@ -222,6 +228,7 @@ export const writeSessionFiles = async ({
     if (requestedPaths.has(file.path)) {
       throw new TabulaCoreError("invalid_path", "Each file path must be unique within one write.", {
         details: { path: file.path },
+        retry: "Remove the duplicate file path and retry the whole write.",
       });
     }
     requestedPaths.add(file.path);
@@ -246,6 +253,7 @@ export const writeSessionFiles = async ({
       if (existing.node.type !== "folder") {
         throw new TabulaCoreError("invalid_path", "A Markdown file blocks a requested folder path.", {
           details: { path: folderPath },
+          retry: "Choose a different nested path or rename the blocking file.",
         });
       }
       return existing.node.id;
@@ -253,6 +261,7 @@ export const writeSessionFiles = async ({
     if (requestedPaths.has(folderPath)) {
       throw new TabulaCoreError("invalid_path", "A requested file also needs to be a parent folder.", {
         details: { path: folderPath },
+        retry: "Do not create a file at a path that must contain another file.",
       });
     }
     const planned = plannedFolderIds.get(folderPath);
@@ -275,6 +284,7 @@ export const writeSessionFiles = async ({
       if (existing.node.type !== "document") {
         throw new TabulaCoreError("invalid_path", "A folder already exists at the requested file path.", {
           details: { path: file.path },
+          retry: "Choose a file path that is not already a folder.",
         });
       }
       const currentContent = snapshot.documents[existing.node.id] ?? "";
