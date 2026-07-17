@@ -32,7 +32,7 @@ export const createDevApp = () => ({
         this.ontoolresult?.(textResult("Started a live Tabula session.", clone(roomFixture)));
         return;
       }
-      this.ontoolinput?.({ arguments: { source: { kind: "files" } } });
+      this.ontoolinput?.({ arguments: { files: [{ path: "brief.md", content: "# Brief\n" }] } });
       this.ontoolresult?.(textResult("Created an encrypted Tabula copy.", clone(copyFixture)));
     });
   },

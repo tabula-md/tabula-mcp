@@ -250,6 +250,31 @@ describe("core MCP workflows", () => {
     });
   });
 
+  it("exports a connected session through the same flat first-call contract", async () => {
+    const snapshotId = "session_copy_123";
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ id: snapshotId, data: `https://json.tabula.md/api/v2/${snapshotId}` }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch;
+
+    await withClient(async (client) => {
+      const joined = await client.callTool({ name: "tabula_join_room", arguments: { roomUrl } });
+      const { sessionId } = joined.structuredContent as { sessionId: string };
+      const exported = await client.callTool({
+        name: "tabula_export_copy",
+        arguments: { sessionId, paths: ["shared.md"] },
+      });
+
+      expect(exported.isError).not.toBe(true);
+      expect(exported.structuredContent).toMatchObject({
+        copyUrl: expect.stringMatching(new RegExp(`^https://tabula\\.md/#json=${snapshotId},`)),
+        fileCount: 1,
+        encrypted: true,
+      });
+    });
+  });
+
   it("returns session_not_ready without discarding the connected session", async () => {
     roomMock.setStateReceived(false);
     await withClient(async (client) => {

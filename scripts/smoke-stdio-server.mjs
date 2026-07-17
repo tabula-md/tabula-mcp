@@ -102,11 +102,8 @@ const run = async () => {
       const exported = await client.callTool({
         name: "tabula_export_copy",
         arguments: {
-          source: {
-            kind: "files",
-            title: "Stdio Smoke",
-            files: [{ path: "stdio-smoke.md", content: "# Stdio Smoke\n\nHost-native plaintext.\n" }],
-          },
+          title: "Stdio Smoke",
+          files: [{ path: "stdio-smoke.md", content: "# Stdio Smoke\n\nHost-native plaintext.\n" }],
         },
       });
       assert.match(exported.structuredContent?.copyUrl || "", /^https:\/\/tabula\.md\/#json=[^,]+,/);

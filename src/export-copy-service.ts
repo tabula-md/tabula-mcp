@@ -1,4 +1,5 @@
 import { assertMarkdownSize } from "./documents/snapshot.js";
+import { TabulaCoreError } from "./core-errors.js";
 import type { RuntimeEnvironment } from "./env.js";
 import type { SessionRegistry } from "./registry.js";
 import { shareMarkdownWorkspace } from "./share.js";
@@ -12,6 +13,79 @@ export type ExportCopyFile = {
 export type ExportCopySource =
   | { kind: "files"; title?: string; files: readonly ExportCopyFile[] }
   | { kind: "session"; sessionId: string; paths?: readonly string[] };
+
+export type ExportCopyInput = {
+  title?: string;
+  files?: readonly ExportCopyFile[];
+  sessionId?: string;
+  paths?: readonly string[];
+};
+
+const invalidSourceOptions = {
+  details: {
+    expected: "Pass files for host-native Markdown or sessionId for a connected live session, but not both.",
+    examples: [
+      { files: [{ path: "sample.md", content: "# Sample\n" }] },
+      { sessionId: "00000000-0000-4000-8000-000000000000", paths: ["sample.md"] },
+    ],
+  },
+  retry: "Call Export Copy again with exactly one of files or sessionId.",
+};
+
+export const resolveExportCopySource = ({
+  title,
+  files,
+  sessionId,
+  paths,
+}: ExportCopyInput): ExportCopySource => {
+  const hasFiles = files !== undefined;
+  const hasSession = sessionId !== undefined;
+
+  if (hasFiles === hasSession) {
+    throw new TabulaCoreError(
+      "invalid_input",
+      "Export Copy requires exactly one source: files or sessionId.",
+      invalidSourceOptions,
+    );
+  }
+
+  if (hasFiles) {
+    if (paths !== undefined) {
+      throw new TabulaCoreError(
+        "invalid_input",
+        "paths can only be used with sessionId, not files.",
+        invalidSourceOptions,
+      );
+    }
+    return {
+      kind: "files",
+      files,
+      ...(title !== undefined ? { title } : {}),
+    };
+  }
+
+  if (title !== undefined) {
+    throw new TabulaCoreError(
+      "invalid_input",
+      "title can only be used with files, not sessionId.",
+      invalidSourceOptions,
+    );
+  }
+
+  if (sessionId === undefined) {
+    throw new TabulaCoreError(
+      "invalid_input",
+      "Export Copy requires exactly one source: files or sessionId.",
+      invalidSourceOptions,
+    );
+  }
+
+  return {
+    kind: "session",
+    sessionId,
+    ...(paths !== undefined ? { paths } : {}),
+  };
+};
 
 export const exportCopy = async ({
   source,

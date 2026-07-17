@@ -281,7 +281,7 @@ const tabTitles = async (page) =>
     })),
   );
 
-const openJsonCopy = async ({ browser, copyUrl, expectedText }) => {
+const openJsonCopy = async ({ browser, copyUrl, expectedText, expectedFileTitle }) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
   const parsedCopyUrl = new URL(copyUrl);
@@ -332,6 +332,11 @@ const openJsonCopy = async ({ browser, copyUrl, expectedText }) => {
   if (confirmationReady) {
     await modal.locator("button.share-modal-primary").click();
     await modal.waitFor({ state: "detached" });
+  }
+  if (expectedFileTitle) {
+    const expectedTab = page.locator(`.tab-item[data-file-name=${JSON.stringify(expectedFileTitle)}]`).first();
+    await expectedTab.waitFor();
+    await expectedTab.click();
   }
   const markdown = await waitForEditorText(page, expectedText);
   const [, copyKey = ""] = parsedCopyUrl.hash.replace(/^#json=/, "").split(",");
@@ -457,15 +462,12 @@ const run = async () => {
       assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), expectedTools);
 
       const inlineCopy = await callTool(client, "tabula_export_copy", {
-        source: {
-          kind: "files",
-          title: "Research handoff",
-          files: [
-            { path: "brief.md", content: "# Brief\n\nThree-file browser handoff.\n" },
-            { path: "research/notes.md", content: "# Notes\n\nNested Markdown file.\n" },
-            { path: "decision.md", content: "# Decision\n\nReady for review.\n" },
-          ],
-        },
+        title: "Research handoff",
+        files: [
+          { path: "brief.md", content: "# Brief\n\nThree-file browser handoff.\n" },
+          { path: "research/notes.md", content: "# Notes\n\nNested Markdown file.\n" },
+          { path: "decision.md", content: "# Decision\n\nReady for review.\n" },
+        ],
       });
       assert.equal(inlineCopy.fileCount, 3);
       const openedInlineCopy = await openJsonCopy({
@@ -539,13 +541,14 @@ const run = async () => {
       assert(afterHumanEdit?.content.includes("Human browser edit."), "MCP should observe browser-originated text");
 
       const sessionCopy = await callTool(client, "tabula_export_copy", {
-        source: { kind: "session", sessionId: session.sessionId },
+        sessionId: session.sessionId,
       });
       assert.equal(sessionCopy.fileCount, 3);
       const openedSessionCopy = await openJsonCopy({
         browser,
         copyUrl: sessionCopy.copyUrl,
         expectedText: "Human browser edit.",
+        expectedFileTitle: "README.md",
       });
       const copyTabs = await tabTitles(openedSessionCopy.page);
       assert(copyTabs.some((tab) => tab.title === "Agent Notes.md"), "Session Copy should preserve all exported files");
