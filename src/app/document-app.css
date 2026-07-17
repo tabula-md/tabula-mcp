@@ -1,7 +1,6 @@
 :root {
   color-scheme: light;
   --tabula-bg: #ffffff;
-  --tabula-subtle: #f7f7f8;
   --tabula-text: #1f1f1f;
   --tabula-muted: #67676b;
   --tabula-border: #e8e8ea;
@@ -13,7 +12,6 @@
 [data-theme="dark"] {
   color-scheme: dark;
   --tabula-bg: #111111;
-  --tabula-subtle: #232325;
   --tabula-text: #ededee;
   --tabula-muted: #9a9aa0;
   --tabula-border: #333337;
@@ -32,69 +30,75 @@ body {
 }
 
 .handoff-card {
-  display: grid;
   min-width: 0;
-  padding: 14px 16px 12px;
+  padding: 10px 12px;
   background: var(--tabula-bg);
-  text-align: center;
 }
 
-.handoff-header {
+.handoff-row,
+.handoff-brand,
+.handoff-details {
   display: flex;
   align-items: center;
-  justify-content: center;
+  min-width: 0;
+}
+
+.handoff-row {
+  gap: 12px;
+}
+
+.handoff-brand {
+  flex: 0 0 auto;
   gap: 8px;
   color: var(--tabula-text);
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.025em;
 }
 
 .handoff-mark {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
-.handoff-body {
-  display: grid;
-  justify-items: center;
-  gap: 7px;
-  padding-top: 12px;
+.handoff-details {
+  flex: 1 1 auto;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .handoff-eyebrow,
-.handoff-summary,
-.handoff-meta {
-  margin: 0;
+.handoff-meta,
+.message {
+  white-space: nowrap;
 }
 
 .handoff-eyebrow {
+  flex: 0 0 auto;
   color: var(--tabula-text);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
 }
 
-.handoff-summary {
-  max-width: 520px;
+.handoff-meta {
+  flex: 0 0 auto;
   color: var(--tabula-muted);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-.handoff-meta {
-  padding: 5px 9px;
-  border-radius: 999px;
+.handoff-meta::before,
+.message::before {
+  content: "·";
+  margin-right: 8px;
   color: var(--tabula-muted);
-  background: var(--tabula-subtle);
-  font-size: 11px;
-  line-height: 1.35;
 }
 
 .handoff-action {
+  flex: 0 0 auto;
   min-height: 34px;
-  margin-top: 3px;
   padding: 0 13px;
   border: 1px solid var(--tabula-text);
   border-radius: 8px;
@@ -120,16 +124,19 @@ body {
 }
 
 .message {
-  max-width: 520px;
-  min-height: 0;
-  margin: 0 auto;
-  padding-top: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--tabula-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
 .message:empty {
+  display: none;
+}
+
+.handoff-meta:empty {
   display: none;
 }
 
@@ -143,10 +150,20 @@ body {
 
 @media (max-width: 420px) {
   .handoff-card {
-    padding-inline: 12px;
+    padding-inline: 10px;
   }
 
-  .handoff-action {
-    width: 100%;
+  .handoff-row {
+    gap: 9px;
+  }
+
+  .handoff-brand,
+  .handoff-details {
+    gap: 6px;
+  }
+
+  .handoff-meta::before,
+  .message::before {
+    margin-right: 6px;
   }
 }

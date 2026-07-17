@@ -62,18 +62,21 @@ const assertHandoffPresentation = async (page, label) => {
   assert.equal(await page.locator("textarea").count(), 0, `${label} must not render a Markdown editor`);
   assert.equal(await page.locator("[data-tabula-document-workbench]").count(), 0, `${label} must not embed the Tabula workbench`);
   assert.equal(await page.getByRole("button", { name: /^Edit$/ }).count(), 0, `${label} must not offer an editing mode`);
+  assert.equal(await page.locator(".handoff-summary").count(), 0, `${label} must not render a redundant summary block`);
+  const card = await page.locator(".handoff-card").boundingBox();
+  assert(card && card.height <= 72, `${label} should remain a compact receipt, got ${card?.height ?? 0}px`);
 };
 
 const runCopyFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
   await page.getByText("Encrypted copy", { exact: true }).waitFor({ state: "visible" });
-  await page.getByText("3 Markdown files · encrypted #json handoff", { exact: true }).waitFor({ state: "visible" });
+  await page.getByText("3 files", { exact: true }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Open copy" }).waitFor({ state: "visible" });
   await assertHandoffPresentation(page, "copy handoff");
 
   await page.getByRole("button", { name: "Open copy" }).click();
-  await page.locator("#message", { hasText: "Opened in Tabula.md." }).waitFor({ state: "visible" });
+  await page.locator("#message", { hasText: "Opened" }).waitFor({ state: "visible" });
   const events = await getDevEvents(page);
   assert.equal(events.toolCalls.length, 0, "copy handoff must not call another server tool");
   assert(events.openLinks.some((request) => String(request?.url).includes("#json=")), "copy handoff should open the prepared #json link");
@@ -86,12 +89,12 @@ const runSessionFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=session`);
   await page.getByText("Live session", { exact: true }).waitFor({ state: "visible" });
-  await page.getByText("2 Markdown files · encrypted live room", { exact: true }).waitFor({ state: "visible" });
+  await page.getByText("2 files", { exact: true }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Open session" }).waitFor({ state: "visible" });
   await assertHandoffPresentation(page, "session handoff");
 
   await page.getByRole("button", { name: "Open session" }).click();
-  await page.locator("#message", { hasText: "Opened in Tabula.md." }).waitFor({ state: "visible" });
+  await page.locator("#message", { hasText: "Opened" }).waitFor({ state: "visible" });
   const events = await getDevEvents(page);
   assert.equal(events.toolCalls.length, 0, "session handoff must not call another server tool");
   assert(events.openLinks.some((request) => String(request?.url).includes("#room=")), "session handoff should open the prepared #room link");
@@ -105,7 +108,7 @@ const runDeniedLinkFlow = async (baseUrl, browser) => {
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=session&open-links=deny`);
   await page.getByRole("button", { name: "Open session" }).click();
   const message = page.locator("#message");
-  await message.filter({ hasText: "The link was not approved." }).waitFor({ state: "visible" });
+  await message.filter({ hasText: "Not approved" }).waitFor({ state: "visible" });
   assert.equal(await message.getAttribute("data-tone"), "warning");
   assert.equal((await message.textContent())?.includes("blocked by this MCP host"), false);
   assert.equal((await message.textContent())?.startsWith("{"), false, "host denial must not render raw JSON");
@@ -120,7 +123,7 @@ const runUnsupportedLinkFlow = async (baseUrl, browser) => {
   const button = page.getByRole("button", { name: "Open copy" });
   await button.waitFor({ state: "visible" });
   assert.equal(await button.isDisabled(), true);
-  await page.locator("#message", { hasText: "cannot open external links" }).waitFor({ state: "visible" });
+  await page.locator("#message", { hasText: "Cannot open links" }).waitFor({ state: "visible" });
   assertNoPageErrors(consoleErrors, pageErrors);
   await page.close();
 };

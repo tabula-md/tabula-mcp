@@ -23,7 +23,6 @@ const main = async () => {
   for (const expected of [
     "tabulaMark",
     "handoffEyebrow",
-    "handoffSummary",
     "handoffMeta",
     "openButton",
   ]) {
@@ -42,8 +41,8 @@ const main = async () => {
 
   assertIncludes(devHtml, "/src/app-dev/main.js", "dev harness");
   assertIncludes(builtHtml, ">Tabula<", "built session card");
-  if (builtHtml.includes("Tabula.md</span>") || builtHtml.includes("sessionTitle")) {
-    throw new Error("built session card must use the centered Tabula brand without a document title header");
+  if (builtHtml.includes("Tabula.md</span>") || builtHtml.includes("sessionTitle") || builtHtml.includes("handoffSummary")) {
+    throw new Error("built session card must stay a compact Tabula handoff receipt without a document title or summary block");
   }
   assertIncludes(builtHtml, "Encrypted copy", "built handoff card");
   if (builtHtml.includes("TabulaEmbeddedDocumentWorkbench") || builtHtml.includes("data-tabula-document-workbench")) {
