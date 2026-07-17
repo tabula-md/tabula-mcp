@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "tabula-mcp",
   "display_name": "Tabula.md MCP",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Let Claude work with people in shared Tabula.md Markdown workspaces.",
   "long_description": "Turn Markdown created in Claude or local files into shared Tabula.md workspaces. Claude can start or join encrypted live sessions, list, read, search, and write one or many Markdown files, export fixed encrypted copies, and import a #json copy for local materialization. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
   "author": {
