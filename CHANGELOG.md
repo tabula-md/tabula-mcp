@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0
+
 - Replaced the singular `tabula_read_file` tool with `tabula_read_files`, which
   reads one or more Markdown files in input order and returns each revision in
   one bounded response without silently truncating content.

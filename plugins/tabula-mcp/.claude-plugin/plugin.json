@@ -1,7 +1,7 @@
 {
   "name": "tabula-mcp",
   "description": "Connect Claude Code to shared Tabula.md Markdown workspaces.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": {
     "name": "Tabula.md"
   }

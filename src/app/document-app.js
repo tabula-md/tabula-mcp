@@ -142,7 +142,7 @@ const createAppClient = () => {
   }
 
   return new App(
-    { name: "Tabula Handoff", version: "0.3.0" },
+    { name: "Tabula Handoff", version: "0.4.0" },
     { availableDisplayModes: ["inline"] },
   );
 };
