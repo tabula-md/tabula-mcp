@@ -36,6 +36,10 @@ The expected write flow is:
 Join Session → List Files → Read Files → Write File / Write Files
 ```
 
+For a fixed handoff, Claude can call **Import Copy** with a private `#json`
+link. It receives relative Markdown paths and contents for host-native local
+file creation; it does not join a live Session or write files by itself.
+
 Claude Desktop's approval setting governs mutating MCP calls. A writable Tabula MCP connection does not require a second in-product agent permission.
 
 The compact MCP App appears only after Claude finishes **Start Session** or

@@ -19,5 +19,9 @@ Claude should call `tabula_join_room`, list and read relevant files, then call
 pass Markdown read from the local filesystem directly to Start Session, Export
 Copy, or Write Files.
 
+For a received `#json` link, Claude calls `tabula_import_copy` and then uses its
+host file tools to materialize the returned relative Markdown paths. It must
+ask before overwriting existing files. Import Copy is not a live Session.
+
 Version 0.2 has no legacy tool adapter. Restart Claude Code after upgrading so
-it reloads the eight core tool definitions.
+it reloads the nine core tool definitions.

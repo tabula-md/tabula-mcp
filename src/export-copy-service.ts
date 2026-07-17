@@ -118,6 +118,7 @@ export const exportCopy = async ({
       fileCount: source.files.length,
       encrypted: true as const,
       createdAt: createdAt.toISOString(),
+      ...(shared.expiresAt ? { expiresAt: shared.expiresAt } : {}),
     };
   }
 
@@ -131,6 +132,7 @@ export const exportCopy = async ({
     title: rootTitle ?? "Tabula session",
     files: snapshot.files,
     activeFileId: snapshot.activeDocumentId,
+    commentsByFileId: snapshot.commentsByFileId,
     appOrigin: env?.TABULA_APP_ORIGIN?.trim() || "https://tabula.md",
     env,
     now: () => createdAt,
@@ -140,5 +142,6 @@ export const exportCopy = async ({
     fileCount: snapshot.files.length,
     encrypted: true as const,
     createdAt: createdAt.toISOString(),
+    ...(shared.expiresAt ? { expiresAt: shared.expiresAt } : {}),
   };
 };

@@ -120,6 +120,7 @@ describe("Tabula MCP Web handler", () => {
         "tabula_search_files",
         "tabula_write_file",
         "tabula_write_files",
+        "tabula_import_copy",
         "tabula_export_copy",
       ]);
     } finally {
@@ -177,6 +178,7 @@ describe("Tabula MCP Web handler", () => {
         "tabula_search_files",
         "tabula_write_file",
         "tabula_write_files",
+        "tabula_import_copy",
         "tabula_export_copy",
       ]);
       expect(transport.sessionId).toMatch(/^[0-9a-f-]{36}$/i);
@@ -354,6 +356,7 @@ describe("Tabula MCP Web handler", () => {
         "tabula_search_files",
         "tabula_write_file",
         "tabula_write_files",
+        "tabula_import_copy",
         "tabula_export_copy",
       ]);
       expect(transport.sessionId).toMatch(/^[0-9a-f-]{36}$/i);

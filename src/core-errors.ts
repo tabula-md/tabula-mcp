@@ -1,4 +1,5 @@
 export type TabulaCoreErrorCode =
+  | "copy_import_failed"
   | "file_not_found"
   | "invalid_input"
   | "invalid_path"

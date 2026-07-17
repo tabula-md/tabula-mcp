@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryDocumentStore, type DocumentStoreDeploymentMode } from "../src/documents/store.js";
 import type { RuntimeEnvironment } from "../src/env.js";
 import { createTabulaMcpServer, resolveWriteEnabled } from "../src/index.js";
+import { createEncryptedJsonShareWorkspaceSnapshot, generateJsonShareKey } from "../src/share.js";
 
 const originalFetch = globalThis.fetch;
 const coreTools = [
@@ -14,6 +15,7 @@ const coreTools = [
   "tabula_search_files",
   "tabula_write_file",
   "tabula_write_files",
+  "tabula_import_copy",
   "tabula_export_copy",
 ];
 
@@ -93,11 +95,11 @@ describe("write access configuration", () => {
 });
 
 describe("core MCP contract", () => {
-  it.each([false, true])("exposes exactly eight high-level tools (MCP Apps=%s)", async (mcpApps) => {
+  it.each([false, true])("exposes exactly nine high-level tools (MCP Apps=%s)", async (mcpApps) => {
     await withClient(async (client) => {
       const listed = await client.listTools();
       expect(listed.tools.map((tool) => tool.name)).toEqual(coreTools);
-      expect(Buffer.byteLength(JSON.stringify(listed), "utf8")).toBeLessThan(14_000);
+      expect(Buffer.byteLength(JSON.stringify(listed), "utf8")).toBeLessThan(16_000);
 
       for (const tool of listed.tools) {
         expect(tool.title).toBeTruthy();
@@ -141,6 +143,8 @@ describe("core MCP contract", () => {
       expect(instructions).toContain("Read existing files with Read Files");
       expect(instructions).toContain("pass their revisions to Write File or Write Files");
       expect(instructions).toContain("Export Copy");
+      expect(instructions).toContain("Import Copy");
+      expect(instructions).toContain("does not join a live session");
       expect(instructions).toContain("Start Session");
       expect(instructions).not.toContain("tabula_read_me");
     });
@@ -157,6 +161,7 @@ describe("core MCP contract", () => {
         tabula_search_files: "Search Files",
         tabula_write_file: "Write File",
         tabula_write_files: "Write Files",
+        tabula_import_copy: "Import Copy",
         tabula_export_copy: "Export Copy",
       });
       expect(tools.tabula_start_session?.description).toContain("Markdown files");
@@ -166,6 +171,7 @@ describe("core MCP contract", () => {
       expect(tools.tabula_search_files?.description).toContain("line numbers");
       expect(tools.tabula_write_file?.description).toContain("revision returned by Read Files");
       expect(tools.tabula_write_files?.description).toContain("Atomically");
+      expect(tools.tabula_import_copy?.description).toContain("does not join a live session");
       expect(tools.tabula_export_copy?.description).toContain("exactly one of files or sessionId");
     });
   });
@@ -177,7 +183,7 @@ describe("core MCP contract", () => {
         const tool = listed.tools.find((candidate) => candidate.name === name);
         expect(tool?._meta?.["ui/resourceUri"]).toMatch(/^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/);
       }
-      for (const name of ["tabula_join_room", "tabula_list_files", "tabula_read_files", "tabula_search_files", "tabula_write_file", "tabula_write_files"]) {
+      for (const name of ["tabula_join_room", "tabula_list_files", "tabula_read_files", "tabula_search_files", "tabula_write_file", "tabula_write_files", "tabula_import_copy"]) {
         const tool = listed.tools.find((candidate) => candidate.name === name);
         expect(tool?._meta?.["ui/resourceUri"]).toBeUndefined();
       }
@@ -310,6 +316,73 @@ describe("core MCP contract", () => {
     });
   });
 
+  it("imports one encrypted copy as relative Markdown paths without joining a session", async () => {
+    const snapshotId = "import_copy_123";
+    const snapshotKey = generateJsonShareKey();
+    const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+      title: "Research handoff",
+      files: [
+        { id: "brief", path: "brief.md", title: "brief.md", text: "# Brief\n" },
+        { id: "findings", path: "research/findings.md", title: "findings.md", text: "# Findings\n" },
+      ],
+      activeFileId: "findings",
+      snapshotKey,
+      now: () => new Date("2026-07-17T12:00:00.000Z"),
+    });
+    globalThis.fetch = vi.fn(async () => new Response(encrypted, {
+      status: 200,
+      headers: { "content-type": "application/octet-stream" },
+    })) as typeof fetch;
+
+    await withClient(async (client) => {
+      const imported = await client.callTool({
+        name: "tabula_import_copy",
+        arguments: { copyUrl: `https://tabula.md/#json=${snapshotId},${snapshotKey}` },
+      });
+      expect(imported.isError).not.toBe(true);
+      expect(imported.structuredContent).toEqual({
+        title: "Research handoff",
+        files: [
+          { path: "brief.md", content: "# Brief\n" },
+          { path: "research/findings.md", content: "# Findings\n" },
+        ],
+        fileCount: 2,
+        totalCharacters: 19,
+        activePath: "research/findings.md",
+        createdAt: "2026-07-17T12:00:00.000Z",
+        commentCount: 0,
+      });
+      expect(JSON.stringify(imported.structuredContent)).not.toContain("#json=");
+      const resources = await client.listResources();
+      expect(resources.resources.map((resource) => resource.uri)).not.toEqual(
+        expect.arrayContaining([expect.stringMatching(/^tabula:\/\/session\//)]),
+      );
+    });
+  });
+
+  it("returns an actionable error for a missing or invalid copy key", async () => {
+    const snapshotKey = generateJsonShareKey();
+    const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+      files: [{ id: "brief", path: "brief.md", title: "brief.md", text: "# Brief\n" }],
+      snapshotKey,
+    });
+    globalThis.fetch = vi.fn(async () => new Response(encrypted, { status: 200 })) as typeof fetch;
+
+    await withClient(async (client) => {
+      const imported = await client.callTool({
+        name: "tabula_import_copy",
+        arguments: { copyUrl: `https://tabula.md/#json=import_copy_123,${generateJsonShareKey()}` },
+      });
+      expect(imported.isError).toBe(true);
+      const error = JSON.parse(imported.content?.find((item) => item.type === "text")?.text ?? "{}");
+      expect(error).toMatchObject({
+        code: "copy_import_failed",
+        message: expect.stringContaining("could not be decrypted"),
+        retry: expect.stringContaining("complete #json URL"),
+      });
+    });
+  });
+
   it("uses the configured app and JSON origins when exporting a copy", async () => {
     const snapshotId = "self_hosted_copy_123";
     const fetchMock = vi.fn(async () =>
@@ -345,7 +418,7 @@ describe("core MCP contract", () => {
     });
   });
 
-  it("keeps the same eight-tool contract in read-only mode", async () => {
+  it("keeps the same nine-tool contract in read-only mode", async () => {
     await withClient(async (client) => {
       expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(coreTools);
     }, { writeEnabled: false });

@@ -457,7 +457,7 @@ const run = async () => {
     await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, async (client) => {
       const expectedTools = [
         "tabula_start_session", "tabula_join_room", "tabula_list_files", "tabula_read_files",
-        "tabula_search_files", "tabula_write_file", "tabula_write_files", "tabula_export_copy",
+        "tabula_search_files", "tabula_write_file", "tabula_write_files", "tabula_import_copy", "tabula_export_copy",
       ];
       assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), expectedTools);
 
@@ -470,6 +470,15 @@ const run = async () => {
         ],
       });
       assert.equal(inlineCopy.fileCount, 3);
+      const importedInlineCopy = await callTool(client, "tabula_import_copy", {
+        copyUrl: inlineCopy.copyUrl,
+      });
+      assert.equal(importedInlineCopy.title, "Research handoff");
+      assert.deepEqual(importedInlineCopy.files, [
+        { path: "brief.md", content: "# Brief\n\nThree-file browser handoff.\n" },
+        { path: "decision.md", content: "# Decision\n\nReady for review.\n" },
+        { path: "research/notes.md", content: "# Notes\n\nNested Markdown file.\n" },
+      ]);
       const openedInlineCopy = await openJsonCopy({
         browser,
         copyUrl: inlineCopy.copyUrl,
@@ -611,6 +620,7 @@ const run = async () => {
         afterHumanEditMarkdown: afterHumanEdit.content,
         tabsAfterMcp,
         inlineCopyOpened: true,
+        inlineCopyImportedByAgent: true,
         sessionCopyImmutable: true,
         peerOnlyBrowserText,
       }, null, 2));

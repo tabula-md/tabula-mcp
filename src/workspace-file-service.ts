@@ -420,5 +420,16 @@ export const readSessionExportSnapshot = async ({
       retry: "List files and retry with valid paths.",
     });
   }
-  return { ...snapshot, files };
+  const selectedIds = new Set(files.map((file) => file.id));
+  const commentsByFileId = Object.fromEntries(
+    Object.entries(snapshot.commentsByFileId).filter(([fileId]) => selectedIds.has(fileId)),
+  );
+  return {
+    ...snapshot,
+    activeDocumentId: snapshot.activeDocumentId && selectedIds.has(snapshot.activeDocumentId)
+      ? snapshot.activeDocumentId
+      : files[0]?.id,
+    commentsByFileId,
+    files,
+  };
 };

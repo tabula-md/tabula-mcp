@@ -11,6 +11,8 @@ export const createCoreInstructions = ({
   "Read existing files with Read Files before replacing them and pass their revisions to Write File or Write Files.",
   "Use Search Files to find content across a session.",
   "Use Write Files once when several generated or local Markdown files should be added to an existing session.",
+  "When given a #json URL, use Import Copy, keep the URL private, and preserve the returned relative paths when the user asks to materialize the Markdown locally.",
+  "Import Copy does not join a live session or write to the filesystem; use the host's file tools and do not overwrite existing files without the user's approval.",
   "When the user wants multiple new Markdown files without a live session, call Export Copy once with files so they open as one Tabula workspace.",
   "Use Export Copy for a fixed #json handoff. Keep every returned copy URL private unless the user explicitly asks to share it.",
   "Use Start Session with files when people or agents should continue editing together.",

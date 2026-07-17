@@ -8,6 +8,11 @@
 - Described every model-facing input, corrected destructive annotations for
   file replacement, removed redundant session ids from file-tool results, and
   made invalid room links and path conflicts recoverable.
+- Added `tabula_import_copy` so agents can decrypt a received `#json` handoff
+  into safe relative Markdown paths for host-native local materialization,
+  without treating a fixed copy as a live collaboration Session.
+- Preserved exported workspace titles, active files, comments, and expiry
+  metadata across Copy handoffs.
 
 ## 0.4.0
 

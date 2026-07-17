@@ -29,6 +29,14 @@ The model never supplies Yjs updates, document IDs, or text patch offsets.
 
 File and Session export use one `exportCopy()` service and the official `@tabula-md/tabula` schema-v2 serializer. This prevents the MCP App and model tool from producing incompatible `#json` payloads.
 
+## Copy import
+
+`tabula_import_copy` downloads encrypted bytes using the public snapshot ID,
+decrypts them with the client-only fragment key, validates the schema, and
+returns safe relative Markdown paths. It does not join a Room, persist a live
+connection, or write to the local filesystem. Filesystem writes and overwrite
+approval remain the MCP host's responsibility.
+
 ## MCP resources
 
 Tabula registers read-only Session manifest and Session file resource templates. Resource URIs contain only session handles and encoded file paths. Resources never contain `#room` or `#json` URLs, room keys, relay URLs, CRDT node identifiers, or checkpoint metadata. Resource reads share the same plaintext trust boundary as the corresponding MCP read tools, while all mutations remain tool calls governed by the MCP host.
