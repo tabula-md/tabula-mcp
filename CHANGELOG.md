@@ -5,6 +5,9 @@
 - Flattened `tabula_export_copy` inputs so agents pass either `files` or
   `sessionId` directly, with described parameters, concrete examples, and
   actionable errors for invalid source combinations.
+- Described every model-facing input, corrected destructive annotations for
+  file replacement, removed redundant session ids from file-tool results, and
+  made invalid room links and path conflicts recoverable.
 
 ## 0.4.0
 

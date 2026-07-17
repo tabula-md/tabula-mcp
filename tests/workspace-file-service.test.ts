@@ -128,7 +128,7 @@ describe("workspace file service", () => {
   it("rejects duplicate, oversized, and over-broad batch reads without truncating content", async () => {
     const { docs, registry } = await createHarness();
     await expect(readSessionFiles({ registry, sessionId, paths: ["README.md", "README.md"] }))
-      .rejects.toMatchObject({ code: "invalid_path" });
+      .rejects.toMatchObject({ code: "invalid_path", retry: expect.stringContaining("duplicate") });
     await expect(readSessionFiles({
       registry,
       sessionId,

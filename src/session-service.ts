@@ -30,7 +30,18 @@ export const joinRoomSession = async ({
   env?: RuntimeEnvironment;
   writeEnabled: boolean;
 }) => {
-  const parsedRoom = parseRoomShareUrl(roomUrl);
+  let parsedRoom: ReturnType<typeof parseRoomShareUrl>;
+  try {
+    parsedRoom = parseRoomShareUrl(roomUrl);
+  } catch (error) {
+    throw new TabulaCoreError("invalid_input", "The supplied URL is not a valid private Tabula room URL.", {
+      details: {
+        expected: "https://tabula.md/#room=<room-id>,<room-key>",
+        reason: error instanceof Error ? error.message : "Invalid room URL.",
+      },
+      retry: "Use the complete #room URL copied from Tabula and keep it private.",
+    });
+  }
   const roomServerUrl = resolveRoomServerUrl({
     appOrigin: parsedRoom.appOrigin,
     ...(env ? { env } : {}),

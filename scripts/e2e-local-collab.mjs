@@ -474,6 +474,7 @@ const run = async () => {
         browser,
         copyUrl: inlineCopy.copyUrl,
         expectedText: "Three-file browser handoff.",
+        expectedFileTitle: "brief.md",
       });
       const inlineCopyTabs = await tabTitles(openedInlineCopy.page);
       assert.equal(inlineCopyTabs.length, 3, "Inline Export Copy should open all three Markdown files");
