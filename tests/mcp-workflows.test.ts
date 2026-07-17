@@ -189,8 +189,15 @@ describe("core MCP workflows", () => {
         expect.objectContaining({ path: "shared.md" }),
       ]));
 
-      const read = await client.callTool({ name: "tabula_read_file", arguments: { sessionId: session.sessionId, path: "shared.md" } });
-      const file = read.structuredContent as { content: string; revision: string };
+      const read = await client.callTool({
+        name: "tabula_read_files",
+        arguments: { sessionId: session.sessionId, paths: ["shared.md", "docs/guide.md"] },
+      });
+      const readFiles = (read.structuredContent as {
+        files: Array<{ path: string; content: string; revision: string }>;
+      }).files;
+      expect(readFiles.map((file) => file.path)).toEqual(["shared.md", "docs/guide.md"]);
+      const file = readFiles[0]!;
       expect(file.content).toBe("# Shared\n\nhello\n");
 
       const content = `${file.content}\nhi! 👋\n`;
@@ -201,8 +208,11 @@ describe("core MCP workflows", () => {
       expect(written.isError).not.toBe(true);
       expect(written.structuredContent).toMatchObject({ changed: true, created: false, textLength: content.length });
 
-      const reread = await client.callTool({ name: "tabula_read_file", arguments: { sessionId: session.sessionId, path: "shared.md" } });
-      expect(reread.structuredContent).toMatchObject({ content });
+      const reread = await client.callTool({
+        name: "tabula_read_files",
+        arguments: { sessionId: session.sessionId, paths: ["shared.md"] },
+      });
+      expect(reread.structuredContent).toMatchObject({ files: [expect.objectContaining({ content })] });
 
       const writtenFiles = await client.callTool({
         name: "tabula_write_files",

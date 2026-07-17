@@ -8,7 +8,7 @@ export const createCoreInstructions = ({
   "Tabula turns Markdown produced by the host or local filesystem into live shared sessions or encrypted copies.",
   "When given a #room URL, join it and keep the URL private.",
   "List files first when the target file is unknown.",
-  "Read existing files before replacing them and pass their revisions to Write File or Write Files.",
+  "Read existing files with Read Files before replacing them and pass their revisions to Write File or Write Files.",
   "Use Search Files to find content across a session.",
   "Use Write Files once when several generated or local Markdown files should be added to an existing session.",
   "When the user wants multiple new Markdown files without a live session, call Export Copy once with files so they open as one Tabula workspace.",

@@ -1,6 +1,6 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SessionRegistry } from "./registry.js";
-import { listSessionFiles, readSessionFile } from "./workspace-file-service.js";
+import { listSessionFiles, readSessionFiles } from "./workspace-file-service.js";
 import { normalizeWorkspaceFilePath } from "./workspace-paths.js";
 
 const scheme = "tabula";
@@ -92,7 +92,9 @@ export const registerFileResources = (
     async (uri, variables) => {
       const sessionId = decodeVariable(variables.sessionId, "sessionId");
       const filePath = normalizeWorkspaceFilePath(decodeVariable(variables.path, "path"));
-      const file = await readSessionFile({ registry, sessionId, path: filePath });
+      const { files } = await readSessionFiles({ registry, sessionId, paths: [filePath] });
+      const file = files[0];
+      if (!file) throw new Error("Tabula session file was not returned.");
       return {
         contents: [{
           uri: uri.toString(),

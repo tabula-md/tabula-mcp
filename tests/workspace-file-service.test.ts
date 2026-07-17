@@ -3,7 +3,9 @@ import type { SessionRegistry } from "../src/registry.js";
 import type { WorkspaceChange, WorkspaceRoomState } from "../src/workspace-contract.js";
 import {
   listSessionFiles,
-  readSessionFile,
+  maxSessionReadCharacters,
+  maxSessionReadFiles,
+  readSessionFiles,
   searchSessionFiles,
   writeSessionFile,
   writeSessionFiles,
@@ -108,17 +110,45 @@ describe("workspace file service", () => {
 
   it("reads and searches Markdown without exposing document ids", async () => {
     const { registry } = await createHarness();
-    const read = await readSessionFile({ registry, sessionId, path: "docs/security.md" });
-    expect(read).toMatchObject({ path: "docs/security.md", content: expect.stringContaining("Authentication"), textLength: 44 });
+    const read = await readSessionFiles({ registry, sessionId, paths: ["docs/security.md", "README.md"] });
+    expect(read).toMatchObject({
+      files: [
+        { path: "docs/security.md", content: expect.stringContaining("Authentication"), textLength: 44 },
+        { path: "README.md", content: expect.stringContaining("Workspace"), textLength: 38 },
+      ],
+      totalCharacters: 82,
+    });
     expect(read).not.toHaveProperty("documentId");
+    expect(read.files.every((file) => !("documentId" in file))).toBe(true);
 
     const searched = await searchSessionFiles({ registry, sessionId, query: "authentication", maxResults: 1 });
     expect(searched).toMatchObject({ truncated: true, matches: [expect.objectContaining({ line: 3 })] });
   });
 
+  it("rejects duplicate, oversized, and over-broad batch reads without truncating content", async () => {
+    const { docs, registry } = await createHarness();
+    await expect(readSessionFiles({ registry, sessionId, paths: ["README.md", "README.md"] }))
+      .rejects.toMatchObject({ code: "invalid_path" });
+    await expect(readSessionFiles({
+      registry,
+      sessionId,
+      paths: Array.from({ length: maxSessionReadFiles + 1 }, (_, index) => `file-${index}.md`),
+    })).rejects.toMatchObject({
+      code: "read_too_large",
+      details: { maxFiles: maxSessionReadFiles },
+    });
+
+    docs.readme = "x".repeat(maxSessionReadCharacters + 1);
+    await expect(readSessionFiles({ registry, sessionId, paths: ["README.md"] }))
+      .rejects.toMatchObject({
+        code: "read_too_large",
+        details: { maxCharacters: maxSessionReadCharacters },
+      });
+  });
+
   it("replaces an existing file with one server-computed patch", async () => {
     const { checkpoint, registry, docs } = await createHarness();
-    const current = await readSessionFile({ registry, sessionId, path: "README.md" });
+    const current = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
     const content = `${current.content}\nDone.\n`;
     const written = await writeSessionFile({
       registry,
@@ -134,7 +164,7 @@ describe("workspace file service", () => {
 
   it("returns no-op and stale outcomes and creates missing parent folders", async () => {
     const { checkpoint, registry } = await createHarness();
-    const current = await readSessionFile({ registry, sessionId, path: "README.md" });
+    const current = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
     await expect(writeSessionFile({
       registry, sessionId, path: "README.md", content: current.content, expectedRevision: current.revision,
     })).resolves.toMatchObject({ changed: false });
@@ -169,7 +199,7 @@ describe("workspace file service", () => {
 
   it("writes multiple files and missing folders in one workspace transaction", async () => {
     const { checkpoint, registry, docs, session } = await createHarness();
-    const current = await readSessionFile({ registry, sessionId, path: "README.md" });
+    const current = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
     let transactionCount = 0;
     const apply = session.applyWorkspaceChanges.bind(session);
     session.applyWorkspaceChanges = async (input) => {
@@ -245,7 +275,7 @@ describe("workspace file service", () => {
 
   it("normalizes live collaboration failures as write_failed", async () => {
     const { registry, session } = await createHarness();
-    const current = await readSessionFile({ registry, sessionId, path: "README.md" });
+    const current = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
     session.applyWorkspaceChanges = async () => {
       throw new Error("transport closed");
     };
@@ -265,7 +295,7 @@ describe("workspace file service", () => {
 
   it("returns write_failed when the durable checkpoint cannot be flushed", async () => {
     const { registry, session } = await createHarness();
-    const current = await readSessionFile({ registry, sessionId, path: "README.md" });
+    const current = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
     session.flushCheckpoint = async () => {
       throw new Error("checkpoint unavailable");
     };

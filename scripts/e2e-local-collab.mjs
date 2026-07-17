@@ -451,7 +451,7 @@ const run = async () => {
 
     await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, async (client) => {
       const expectedTools = [
-        "tabula_start_session", "tabula_join_room", "tabula_list_files", "tabula_read_file",
+        "tabula_start_session", "tabula_join_room", "tabula_list_files", "tabula_read_files",
         "tabula_search_files", "tabula_write_file", "tabula_write_files", "tabula_export_copy",
       ];
       assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), expectedTools);
@@ -493,7 +493,11 @@ const run = async () => {
       const browserInitialText = await waitForEditorText(page, "Initial from MCP.");
       const listed = await callTool(client, "tabula_list_files", { sessionId: session.sessionId });
       assert(listed.files.some((file) => file.path === "README.md"));
-      const readme = await callTool(client, "tabula_read_file", { sessionId: session.sessionId, path: "README.md" });
+      const readmeBatch = await callTool(client, "tabula_read_files", {
+        sessionId: session.sessionId,
+        paths: ["README.md"],
+      });
+      const readme = readmeBatch.files[0];
       assert.equal(readme.content, "# MCP Local E2E\n\nInitial from MCP.\n");
 
       const nextContent = `${readme.content}\nEdited by tabula-mcp local E2E.\n`;
@@ -524,7 +528,11 @@ const run = async () => {
       let afterHumanEdit;
       const deadline = Date.now() + 12_000;
       while (Date.now() < deadline) {
-        afterHumanEdit = await callTool(client, "tabula_read_file", { sessionId: session.sessionId, path: "README.md" });
+        const readBatch = await callTool(client, "tabula_read_files", {
+          sessionId: session.sessionId,
+          paths: ["README.md"],
+        });
+        afterHumanEdit = readBatch.files[0];
         if (afterHumanEdit.content.includes("Human browser edit.")) break;
         await wait(250);
       }
@@ -581,7 +589,11 @@ const run = async () => {
       }, async (peerClient) => {
         const joined = await callTool(peerClient, "tabula_join_room", { roomUrl: peerSession.sessionUrl });
         assert.equal(joined.ready, true);
-        const peerRead = await callTool(peerClient, "tabula_read_file", { sessionId: joined.sessionId, path: "README.md" });
+        const peerReadBatch = await callTool(peerClient, "tabula_read_files", {
+          sessionId: joined.sessionId,
+          paths: ["README.md"],
+        });
+        const peerRead = peerReadBatch.files[0];
         assert.equal(peerRead.content, "# Peer-only recovery\n\nLoaded from the live MCP participant.\n");
       });
       await peerOnlyPage.close();

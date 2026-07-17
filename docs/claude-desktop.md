@@ -33,7 +33,7 @@ https://tabula.md/#room=...
 The expected write flow is:
 
 ```text
-Join Session → List Files → Read File → Write File / Write Files
+Join Session → List Files → Read Files → Write File / Write Files
 ```
 
 Claude Desktop's approval setting governs mutating MCP calls. A writable Tabula MCP connection does not require a second in-product agent permission.

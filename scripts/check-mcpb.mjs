@@ -51,7 +51,7 @@ const requiredTools = [
   "tabula_start_session",
   "tabula_join_room",
   "tabula_list_files",
-  "tabula_read_file",
+  "tabula_read_files",
   "tabula_search_files",
   "tabula_write_file",
   "tabula_write_files",
