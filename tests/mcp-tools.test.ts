@@ -10,7 +10,7 @@ const coreTools = [
   "tabula_start_session",
   "tabula_join_room",
   "tabula_list_files",
-  "tabula_read_file",
+  "tabula_read_files",
   "tabula_search_files",
   "tabula_write_file",
   "tabula_write_files",
@@ -118,6 +118,7 @@ describe("core MCP contract", () => {
     await withClient(async (client) => {
       const instructions = client.getInstructions() ?? "";
       expect(instructions).toContain("keep the URL private");
+      expect(instructions).toContain("Read existing files with Read Files");
       expect(instructions).toContain("pass their revisions to Write File or Write Files");
       expect(instructions).toContain("Export Copy");
       expect(instructions).toContain("Start Session");
@@ -132,11 +133,21 @@ describe("core MCP contract", () => {
         const tool = listed.tools.find((candidate) => candidate.name === name);
         expect(tool?._meta?.["ui/resourceUri"]).toMatch(/^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/);
       }
-      for (const name of ["tabula_join_room", "tabula_list_files", "tabula_read_file", "tabula_search_files", "tabula_write_file", "tabula_write_files"]) {
+      for (const name of ["tabula_join_room", "tabula_list_files", "tabula_read_files", "tabula_search_files", "tabula_write_file", "tabula_write_files"]) {
         const tool = listed.tools.find((candidate) => candidate.name === name);
         expect(tool?._meta?.["ui/resourceUri"]).toBeUndefined();
       }
     }, { mcpApps: true });
+  });
+
+  it("reads one or many files through one array-based tool contract", async () => {
+    await withClient(async (client) => {
+      const tools = await client.listTools();
+      const read = tools.tools.find((tool) => tool.name === "tabula_read_files");
+      expect(JSON.stringify(read?.inputSchema)).toContain('"paths"');
+      expect(JSON.stringify(read?.inputSchema)).not.toContain('"path"');
+      expect(tools.tools.map((tool) => tool.name)).not.toContain("tabula_read_file");
+    });
   });
 
   it("accepts host-native Markdown files instead of exposing a private draft API", async () => {

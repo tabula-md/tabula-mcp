@@ -48,8 +48,8 @@
       "description": "List Markdown files and folders in a live session."
     },
     {
-      "name": "tabula_read_file",
-      "description": "Read one Markdown file and its current revision."
+      "name": "tabula_read_files",
+      "description": "Read one or more Markdown files and their current revisions."
     },
     {
       "name": "tabula_search_files",

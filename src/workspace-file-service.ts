@@ -54,6 +54,9 @@ export type SessionFileWrite = {
   expectedRevision?: string;
 };
 
+export const maxSessionReadFiles = 20;
+export const maxSessionReadCharacters = 100_000;
+
 export const listSessionFiles = async ({
   registry,
   sessionId,
@@ -96,37 +99,72 @@ export const listSessionFiles = async ({
   return { sessionId, files, truncated: false };
 };
 
-export const readSessionFile = async ({
+export const readSessionFiles = async ({
   registry,
   sessionId,
-  path: requestedPath,
+  paths,
 }: {
   registry: SessionRegistry;
   sessionId: string;
-  path: string;
+  paths: readonly string[];
 }) => {
-  const filePath = normalizeWorkspaceFilePath(requestedPath);
+  if (paths.length === 0) {
+    throw new TabulaCoreError("invalid_input", "At least one Markdown file path is required.");
+  }
+  if (paths.length > maxSessionReadFiles) {
+    throw new TabulaCoreError("read_too_large", "Too many Markdown files were requested in one read.", {
+      details: { requestedFiles: paths.length, maxFiles: maxSessionReadFiles },
+      retry: "Read a smaller group of files or use Search Files to narrow the result.",
+    });
+  }
+
+  const filePaths = paths.map(normalizeWorkspaceFilePath);
+  if (new Set(filePaths).size !== filePaths.length) {
+    throw new TabulaCoreError("invalid_path", "Each file path must be unique within one read.");
+  }
   const { snapshot } = await readReadySnapshot(registry, sessionId);
-  const entry = buildWorkspacePathIndex(snapshot.workspace).byPath.get(filePath);
-  if (!entry || entry.node.type !== "document") {
-    throw new TabulaCoreError("file_not_found", "Markdown file was not found in the Tabula session.", {
-      details: { path: filePath },
-      retry: "List files to find the correct path.",
+  const index = buildWorkspacePathIndex(snapshot.workspace);
+  const files = [];
+  let totalCharacters = 0;
+
+  for (const filePath of filePaths) {
+    const entry = index.byPath.get(filePath);
+    if (!entry || entry.node.type !== "document") {
+      throw new TabulaCoreError("file_not_found", "Markdown file was not found in the Tabula session.", {
+        details: { path: filePath },
+        retry: "List files to find the correct path.",
+      });
+    }
+    const content = snapshot.documents[entry.node.id];
+    if (content === undefined) {
+      throw new TabulaCoreError("session_not_ready", "The file content has not arrived yet.", {
+        details: { sessionId, path: filePath },
+        retry: "Wait for session state and retry.",
+      });
+    }
+    totalCharacters += content.length;
+    if (totalCharacters > maxSessionReadCharacters) {
+      throw new TabulaCoreError("read_too_large", "The requested Markdown files are too large to return in one read.", {
+        details: {
+          requestedFiles: filePaths.length,
+          totalCharacters,
+          maxCharacters: maxSessionReadCharacters,
+        },
+        retry: "Read a smaller group of files or use Search Files to narrow the result.",
+      });
+    }
+    files.push({
+      path: filePath,
+      content,
+      revision: entry.node.sha256,
+      textLength: content.length,
     });
   }
-  const content = snapshot.documents[entry.node.id];
-  if (content === undefined) {
-    throw new TabulaCoreError("session_not_ready", "The file content has not arrived yet.", {
-      details: { sessionId, path: filePath },
-      retry: "Wait for session state and retry.",
-    });
-  }
+
   return {
     sessionId,
-    path: filePath,
-    content,
-    revision: entry.node.sha256,
-    textLength: content.length,
+    files,
+    totalCharacters,
   };
 };
 

@@ -3,6 +3,7 @@ export type TabulaCoreErrorCode =
   | "invalid_input"
   | "invalid_path"
   | "parent_folder_not_found"
+  | "read_too_large"
   | "session_not_found"
   | "session_not_ready"
   | "stale_revision"

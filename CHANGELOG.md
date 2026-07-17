@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Replaced the singular `tabula_read_file` tool with `tabula_read_files`, which
+  reads one or more Markdown files in input order and returns each revision in
+  one bounded response without silently truncating content.
+
 ## 0.3.0
 
 - Removed Tabula's private-draft tools and resources. Claude, Codex, and local

@@ -9,7 +9,8 @@ import { joinRoomSession, startWorkspaceSession } from "../session-service.js";
 import { createWorkspaceFromFiles } from "../workspaces.js";
 import {
   listSessionFiles,
-  readSessionFile,
+  maxSessionReadFiles,
+  readSessionFiles,
   searchSessionFiles,
   writeSessionFile,
   writeSessionFiles,
@@ -155,23 +156,29 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_read_file",
+    "tabula_read_files",
     {
-      title: "Read File",
-      description: "Read the complete Markdown content of one file and return its current revision. Use the returned revision when updating the file.",
-      inputSchema: { sessionId: sessionIdSchema, path: filePathSchema },
+      title: "Read Files",
+      description: "Read the complete Markdown content and current revision of up to 20 files in a live Tabula session. Preserve the returned revisions when updating existing files; large batches fail instead of returning truncated content.",
+      inputSchema: {
+        sessionId: sessionIdSchema,
+        paths: z.array(filePathSchema).min(1).max(maxSessionReadFiles),
+      },
       outputSchema: {
         sessionId: z.string().uuid(),
-        path: z.string(),
-        content: z.string(),
-        revision: sha256Schema,
-        textLength: z.number().int().nonnegative(),
+        files: z.array(z.object({
+          path: z.string(),
+          content: z.string(),
+          revision: sha256Schema,
+          textLength: z.number().int().nonnegative(),
+        })).max(maxSessionReadFiles),
+        totalCharacters: z.number().int().nonnegative(),
       },
       annotations: annotations(true, true),
     },
-    async ({ sessionId, path }) => run(async () => ({
-      value: await readSessionFile({ registry, sessionId, path }),
-      text: `Read "${path}" from the Tabula session.`,
+    async ({ sessionId, paths }) => run(async () => ({
+      value: await readSessionFiles({ registry, sessionId, paths }),
+      text: `Read ${paths.length} Markdown file${paths.length === 1 ? "" : "s"} from the Tabula session.`,
     })),
   );
 
