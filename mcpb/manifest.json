@@ -16,7 +16,9 @@
   "homepage": "https://tabula.md",
   "documentation": "https://github.com/tabula-md/tabula-mcp#readme",
   "support": "https://github.com/tabula-md/tabula-mcp/issues",
-  "privacy_policies": ["https://mcp.tabula.md/privacy"],
+  "privacy_policies": [
+    "https://mcp.tabula.md/privacy"
+  ],
   "icon": "assets/icon.png",
   "icons": [
     {
@@ -25,101 +27,112 @@
     }
   ],
   "license": "MIT",
-  "keywords": ["tabula", "markdown", "collaboration", "mcp", "mcp-app"],
+  "keywords": [
+    "tabula",
+    "markdown",
+    "collaboration",
+    "mcp",
+    "mcp-app"
+  ],
   "server": {
     "type": "node",
     "entry_point": "server/index.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/server/index.js"]
+      "args": [
+        "${__dirname}/server/index.js"
+      ]
     }
   },
   "tools": [
     {
       "name": "start_session",
-      "description": "Start an encrypted live Tabula session from one or more Markdown files."
+      "description": "Use this when the user explicitly wants Markdown opened as a new live Tabula.md collaboration session. Do not use it for a private host draft, a fixed Copy, or an existing #room URL."
     },
     {
       "name": "join_room",
-      "description": "Join an encrypted live Tabula session from a private #room URL."
+      "description": "Use this when the user provides a private Tabula.md #room URL. Join that existing live session, keep the URL private, and do not start a replacement session."
     },
     {
       "name": "leave_session",
-      "description": "Disconnect this Tabula agent from one live session without deleting its files."
+      "description": "Use this when the user asks the agent to disconnect from one live Tabula.md session. It does not delete the Room or its files."
     },
     {
       "name": "list_files",
-      "description": "List Markdown files and folders in a live session."
+      "description": "Use this when the target path is unknown or a directory view is needed inside a connected Tabula.md session. Do not use it for the host's local filesystem."
     },
     {
       "name": "read_file",
-      "description": "Read one Markdown file or a bounded line range with its current revision."
+      "description": "Use this when reading one Markdown file or bounded line range inside a connected Tabula.md session. Do not use it for local or host-native files."
     },
     {
       "name": "read_multiple_files",
-      "description": "Read one or more Markdown files and their current revisions."
+      "description": "Use this when reading a known small batch of complete Markdown files with revisions inside a connected Tabula.md session. Do not use it for local files."
     },
     {
       "name": "search_files",
-      "description": "Search Markdown paths and contents with line-numbered context."
+      "description": "Use this when searching paths or Markdown content with nearby line context inside a connected Tabula.md session. Do not use it for the host's local filesystem."
     },
     {
       "name": "list_comments",
-      "description": "List open, resolved, or all comment threads in a live session."
+      "description": "Use this when finding open, resolved, or all product comment threads inside a connected Tabula.md session before acting on a comment ID."
     },
     {
       "name": "add_comment",
-      "description": "Add a file-level or line-anchored comment to a Markdown file."
+      "description": "Use this when the user wants a file-level or inclusive line-anchored product comment added inside a connected Tabula.md session."
     },
     {
       "name": "reply_to_comment",
-      "description": "Reply to an existing comment thread in a live session."
+      "description": "Use this when replying to an existing product comment thread inside a connected Tabula.md session. Obtain its comment ID from List Comments."
     },
     {
       "name": "resolve_comment",
-      "description": "Resolve or reopen a comment thread in a live session."
+      "description": "Use this when resolving or reopening an existing product comment thread inside a connected Tabula.md session."
     },
     {
       "name": "delete_comment",
-      "description": "Permanently delete a comment thread and its replies."
+      "description": "Use this when the user explicitly wants to permanently delete an existing product comment thread and its replies from a connected Tabula.md session."
     },
     {
       "name": "write_file",
-      "description": "Create or replace one Markdown file with revision protection."
+      "description": "Use this when creating or replacing one complete Markdown file inside a connected Tabula.md session. Read an existing file first and pass its revision; do not use it for local files."
     },
     {
       "name": "write_files",
-      "description": "Create or replace one or more Markdown files and their folders in one live session transaction."
+      "description": "Use this when one atomic multi-file create or replace operation is needed inside a connected Tabula.md session. Pass revisions for existing files; do not use it for local files."
     },
     {
       "name": "edit_file",
-      "description": "Apply exact, safely rebased replacements and return a bounded diff."
+      "description": "Use this when making small exact-text replacements inside one Markdown file in a connected Tabula.md session. Read it first and pass its revision; stale edits rebase only on safe matches."
     },
     {
       "name": "create_directory",
-      "description": "Create a directory and any missing parent directories in a live session."
+      "description": "Use this when creating a directory and missing parents inside a connected Tabula.md session. An existing directory is a no-op; this does not affect local folders."
     },
     {
       "name": "move_file",
-      "description": "Move or rename a file or directory in a live session."
+      "description": "Use this when moving or renaming one file or directory inside a connected Tabula.md session. The destination parent must exist, and files require their current revision."
     },
     {
       "name": "delete_path",
-      "description": "Delete a revision-guarded file or an explicitly recursive directory path."
+      "description": "Use this when the user explicitly wants to delete a path inside a connected Tabula.md session. Files need revisions and non-empty directories require recursive true."
     },
     {
       "name": "import_copy",
-      "description": "Decrypt a fixed #json copy into relative Markdown paths and contents for local materialization."
+      "description": "Use this when the user provides a private Tabula.md #json URL. It returns relative Markdown files but does not join a live Room or write them to the local filesystem."
     },
     {
       "name": "export_copy",
-      "description": "Create an encrypted fixed #json copy from Markdown files or a live session."
+      "description": "Use this when the user wants a fixed encrypted Tabula.md #json handoff from files or a live session. Use Start Session instead for continued live collaboration."
     }
   ],
   "tools_generated": true,
   "compatibility": {
     "claude_desktop": ">=0.13.91",
-    "platforms": ["darwin", "win32"],
+    "platforms": [
+      "darwin",
+      "win32"
+    ],
     "runtimes": {
       "node": "^20.19.0 || >=22.12.0"
     }
