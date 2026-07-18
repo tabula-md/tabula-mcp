@@ -60,7 +60,7 @@ jobs:
             "dist/tabula-mcp-${VERSION}.mcpb.sha256#SHA-256 checksum ${VERSION}" \
             "dist/tabula-mcp.mcpb#Latest Claude Desktop extension" \
             "dist/tabula-mcp.mcpb.sha256#Latest SHA-256 checksum" \
-            --title "Tabula.md MCP ${VERSION}" \
+            --title "Tabula MCP ${VERSION}" \
             --generate-notes \
             --verify-tag
 

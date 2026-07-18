@@ -9,20 +9,20 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const coreTools = [
-  "tabula_start_session",
-  "tabula_join_room",
-  "tabula_list_files",
-  "tabula_read_file",
-  "tabula_read_files",
-  "tabula_search_files",
-  "tabula_write_file",
-  "tabula_write_files",
-  "tabula_edit_file",
-  "tabula_create_directory",
-  "tabula_move_file",
-  "tabula_delete_path",
-  "tabula_import_copy",
-  "tabula_export_copy",
+  "start_session",
+  "join_room",
+  "list_files",
+  "read_file",
+  "read_multiple_files",
+  "search_files",
+  "write_file",
+  "write_files",
+  "edit_file",
+  "create_directory",
+  "move_file",
+  "delete_path",
+  "import_copy",
+  "export_copy",
 ];
 const uiCapabilities = {
   extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } },
@@ -106,7 +106,7 @@ const run = async () => {
       assert(client.getInstructions()?.includes("Export Copy"));
 
       const exported = await client.callTool({
-        name: "tabula_export_copy",
+        name: "export_copy",
         arguments: {
           title: "Stdio Smoke",
           files: [{ path: "stdio-smoke.md", content: "# Stdio Smoke\n\nHost-native plaintext.\n" }],

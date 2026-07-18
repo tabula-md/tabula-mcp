@@ -26,7 +26,7 @@ const jsonShareApiPrefix = "/api/v2/";
 const jsonSharePostPath = "/api/v2/post/";
 const mainFileId = "main";
 const shareRootFolderIdBase = "tabula-mcp-root";
-const shareRootFolderTitle = "Tabula.md workspace";
+const shareRootFolderTitle = "Tabula workspace";
 
 type FetchLike = typeof fetch;
 
@@ -108,7 +108,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const requireNonEmptyString = (value: unknown, fieldName: string) => {
   if (typeof value !== "string" || !value) {
-    throw new TabulaMcpError(`Encrypted Tabula.md snapshot upload returned an invalid ${fieldName}.`);
+    throw new TabulaMcpError(`Encrypted Tabula snapshot upload returned an invalid ${fieldName}.`);
   }
   return value;
 };
@@ -119,7 +119,7 @@ const optionalIsoDateString = (value: unknown) => {
   }
   const text = requireNonEmptyString(value, "expiresAt");
   if (!Number.isFinite(Date.parse(text))) {
-    throw new TabulaMcpError("Encrypted Tabula.md snapshot upload returned an invalid expiresAt.");
+    throw new TabulaMcpError("Encrypted Tabula snapshot upload returned an invalid expiresAt.");
   }
   return text;
 };
@@ -233,13 +233,13 @@ const normalizeShareFile = (file: ShareMarkdownWorkspaceFile) => {
   const title = file.title.trim() || "Untitled Document";
   const rawPath = file.path?.replaceAll("\\", "/").trim();
   if (rawPath && (rawPath.startsWith("/") || /^[A-Za-z]:\//.test(rawPath))) {
-    throw new TabulaMcpError("Tabula.md snapshot file paths must be relative.");
+    throw new TabulaMcpError("Tabula snapshot file paths must be relative.");
   }
   const normalizedPath = rawPath
     ? path.posix.normalize(rawPath)
     : title;
   if (!normalizedPath || normalizedPath === "." || normalizedPath === ".." || normalizedPath.startsWith("../")) {
-    throw new TabulaMcpError("Tabula.md snapshot file paths must stay inside the workspace.");
+    throw new TabulaMcpError("Tabula snapshot file paths must stay inside the workspace.");
   }
   return { id: file.id.trim(), path: normalizedPath, title, text: file.text };
 };
@@ -270,7 +270,7 @@ const createMcpShareSnapshotPayload = ({
 }) => {
   const snapshotFiles = files.map(normalizeShareFile).filter((file) => file.id);
   if (snapshotFiles.length === 0) {
-    throw new TabulaMcpError("At least one Markdown file is required for a Tabula.md snapshot link.");
+    throw new TabulaMcpError("At least one Markdown file is required for a Tabula snapshot link.");
   }
   const activeFile = snapshotFiles.find((file) => file.id === activeFileId) ?? snapshotFiles[0];
   const rootFolderId = createShareRootFolderId(snapshotFiles);
@@ -379,18 +379,18 @@ export const createEncryptedJsonShareWorkspaceSnapshot = async ({
 
 const validateJsonShareCreateResponse = (value: unknown, serviceUrl: string): JsonShareCreateResponse => {
   if (!isRecord(value)) {
-    throw new TabulaMcpError("Encrypted Tabula.md snapshot upload returned an invalid response.");
+    throw new TabulaMcpError("Encrypted Tabula snapshot upload returned an invalid response.");
   }
 
   const id = requireNonEmptyString(value.id, "id");
   if (!/^[A-Za-z0-9_-]+$/.test(id)) {
-    throw new TabulaMcpError("Encrypted Tabula.md snapshot upload returned an invalid id.");
+    throw new TabulaMcpError("Encrypted Tabula snapshot upload returned an invalid id.");
   }
 
   const data = requireNonEmptyString(value.data, "data");
   const expectedData = `${trimTrailingSlash(serviceUrl)}${jsonShareApiPrefix}${id}`;
   if (data !== expectedData) {
-    throw new TabulaMcpError("Encrypted Tabula.md snapshot upload returned an invalid data URL.");
+    throw new TabulaMcpError("Encrypted Tabula snapshot upload returned an invalid data URL.");
   }
 
   const expiresAt = optionalIsoDateString(value.expiresAt);
@@ -443,7 +443,7 @@ export const shareMarkdownDocument = async ({
   });
 
   if (!response.ok) {
-    throw new TabulaMcpError(`Encrypted Tabula.md snapshot upload failed with HTTP ${response.status}: ${await readJsonShareError(response)}.`);
+    throw new TabulaMcpError(`Encrypted Tabula snapshot upload failed with HTTP ${response.status}: ${await readJsonShareError(response)}.`);
   }
 
   const created = validateJsonShareCreateResponse((await response.json()) as unknown, normalizedJsonServerUrl);
@@ -501,7 +501,7 @@ export const shareMarkdownWorkspace = async ({
   });
 
   if (!response.ok) {
-    throw new TabulaMcpError(`Encrypted Tabula.md snapshot upload failed with HTTP ${response.status}: ${await readJsonShareError(response)}.`);
+    throw new TabulaMcpError(`Encrypted Tabula snapshot upload failed with HTTP ${response.status}: ${await readJsonShareError(response)}.`);
   }
 
   const created = validateJsonShareCreateResponse((await response.json()) as unknown, normalizedJsonServerUrl);

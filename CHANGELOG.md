@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-- Added focused `tabula_read_file` and `tabula_write_file` tools alongside the
+- Removed the redundant `tabula_` prefix from all model-facing tools. MCP hosts
+  already namespace tools by server, so agents now use concise names such as
+  `read_file`, `read_multiple_files`, `edit_file`, and `export_copy`.
+- Standardized the product-facing name as **Tabula** and the integration name
+  as **Tabula MCP**. Technical identifiers such as `tabula.md`, `@tabula-md`,
+  and existing local checkpoint paths remain compatible.
+- Added focused `read_file` and `write_file` tools alongside the
   existing batch contracts. Single reads support head, middle, and tail line
   ranges without exposing collaboration offsets.
 - Added search context and bounded edit diffs. Exact edits can now rebase onto
@@ -91,15 +97,15 @@
 
 ## 0.1.5
 
-- Aligned encrypted **Open a copy** `#json` snapshots with Tabula.md's shared
+- Aligned encrypted **Open a copy** `#json` snapshots with Tabula's shared
   schema v2 contract, including the workspace root folder and ordered file
-  placement required by the Tabula.md app.
+  placement required by the Tabula app.
 - Reused the shared Tabula encryption and snapshot codec instead of maintaining
   a divergent MCP copy, with an interoperability test that decrypts and parses
   MCP snapshots through the Tabula package.
-- Replaced the MCP App's cloned Markdown editor with a compact Tabula.md
+- Replaced the MCP App's cloned Markdown editor with a compact Tabula
   Session Card. Actual writing and real-time collaboration now always happen
-  in Tabula.md through **Open a copy** or **Open session**.
+  in Tabula through **Open a copy** or **Open session**.
 - Fingerprinted the bundled MCP App resource URI so Claude Desktop cannot reuse
   a stale App resource after an MCPB update.
 - Released the card as a new MCPB/plugin version so Claude Desktop recognizes
@@ -107,12 +113,12 @@
 
 ## 0.1.4
 
-- Rebuilt the MCP App around the same Tabula.md visual language: branded app
+- Rebuilt the MCP App around the same Tabula visual language: branded app
   chrome, a local-draft state, and the existing Tabula workbench for local
   Markdown editing.
 - Made a connected Room a distinct live-session handoff rather than a second,
   misleading editor. Inline results keep a compact preview and **Open
-  session**; fullscreen presents one focused Tabula.md session surface.
+  session**; fullscreen presents one focused Tabula session surface.
 - Display the active Room document title instead of the internal Room ID in
   the MCP App and its Room snapshots.
 
@@ -148,7 +154,7 @@
 ## 0.1.1
 
 - Added directory-ready MCPB metadata: an HTTPS privacy policy URL, complete
-  tool display titles, and the white-background Tabula.md icon.
+  tool display titles, and the white-background Tabula icon.
 - Added a release check that keeps the npm package, Claude Code plugin, MCPB,
   privacy policy, and generated directory submission assets aligned.
 - Prepared stateful Cloudflare MCP HTTP deployment for workspace-room tools.

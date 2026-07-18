@@ -305,15 +305,17 @@ describe("default document store", () => {
         env: {},
         platform: "darwin",
         homedir: "/Users/taeha",
+        pathExists: () => false,
       }),
-    ).toBe("/Users/taeha/Library/Application Support/Tabula.md MCP/documents");
+    ).toBe("/Users/taeha/Library/Application Support/Tabula MCP/documents");
     expect(
       resolveDefaultDocumentStoreDirectory({
         env: { LOCALAPPDATA: "C:\\Users\\taeha\\AppData\\Local" },
         platform: "win32",
         homedir: "C:\\Users\\taeha",
+        pathExists: () => false,
       }),
-    ).toContain("Tabula.md MCP");
+    ).toContain("Tabula MCP");
     expect(
       resolveDefaultDocumentStoreDirectory({
         env: { XDG_STATE_HOME: "/home/taeha/.local/state" },
@@ -321,5 +323,16 @@ describe("default document store", () => {
         homedir: "/home/taeha",
       }),
     ).toBe("/home/taeha/.local/state/tabula-mcp/documents");
+  });
+
+  it("continues using a legacy branded local checkpoint directory when it already exists", () => {
+    expect(
+      resolveDefaultDocumentStoreDirectory({
+        env: {},
+        platform: "darwin",
+        homedir: "/Users/taeha",
+        pathExists: (candidate) => candidate.includes("Tabula.md MCP"),
+      }),
+    ).toBe("/Users/taeha/Library/Application Support/Tabula.md MCP/documents");
   });
 });

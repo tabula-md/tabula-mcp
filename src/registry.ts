@@ -20,12 +20,12 @@ export class SessionRegistry {
     }
 
     if (this.sessions.size === 0) {
-      throw new TabulaMcpError("No Tabula session is connected. Call tabula_join_room first.");
+      throw new TabulaMcpError("No Tabula session is connected. Call join_room first.");
     }
     if (this.sessions.size === 1) {
       const session = [...this.sessions.values()][0];
       if (!session) {
-        throw new TabulaMcpError("No Tabula session is connected. Call tabula_join_room first.");
+        throw new TabulaMcpError("No Tabula session is connected. Call join_room first.");
       }
       return session;
     }

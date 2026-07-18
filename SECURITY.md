@@ -24,7 +24,7 @@ Tabula MCP has two different data paths:
 
 - MCP document checkpoints are agent working state and may contain plaintext
   Markdown.
-- `tabula_export_copy` exports through Tabula JSON encrypted snapshot links;
+- `export_copy` exports through Tabula JSON encrypted snapshot links;
   the decryption key stays in the `#json` URL fragment.
 
 Hosted room access makes the hosted MCP server a trusted plaintext processor
