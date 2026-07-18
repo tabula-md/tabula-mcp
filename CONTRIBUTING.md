@@ -31,9 +31,10 @@ Hosted production behavior should stay safe by default:
 - local HTTP binds to `127.0.0.1` unless a host is configured
 - production remote HTTP declares either `TABULA_MCP_AUTH_TOKEN` or the
   explicit public policy `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1`
-- production remote checkpoints require Redis/Upstash REST credentials unless
-  memory is explicitly requested with `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory`
-  and `TABULA_MCP_ALLOW_MEMORY_STORE=1`
+- private Markdown remains host-native until a user explicitly starts a live
+  session or exports an encrypted copy
+- hosted sessions keep decrypted working state only for the active MCP/Room
+  session; do not add a separate plaintext draft/checkpoint database
 - production browser Origins are denied unless `TABULA_MCP_ALLOWED_ORIGINS` is configured
 
 If a change weakens one of these defaults, document why and add tests covering

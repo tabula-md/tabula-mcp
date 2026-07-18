@@ -1,254 +1,156 @@
 # Deployment
 
-Tabula MCP supports two hosted deployment targets:
+Tabula MCP supports local stdio and stateful Streamable HTTP deployments. The
+official hosted endpoint is:
 
-- Vercel Functions through `api/mcp.ts` and `vercel.json`
-- Cloudflare Workers through `workers/tabula-mcp-worker.ts` and `wrangler.jsonc`
-
-The same MIT-licensed repository is intended to power self-hosted deployments
-and the official hosted target:
-
-```txt
+```text
 https://mcp.tabula.md/mcp
 ```
 
-Cloudflare Workers is the preferred target for the official hosted service. The
-Cloudflare target routes `/mcp` traffic through a `TabulaMcpSessionDurableObject`
-binding so each MCP session id is pinned to one stateful Durable Object.
-Vercel remains supported for previews, self-hosting, and compatibility testing.
+Cloudflare Workers is the official production target. Vercel remains a build-
+verified preview and self-hosting target, but it is suitable for live sessions
+only when the operator supplies single-instance or sticky session affinity.
 
-The official `mcp.tabula.md` endpoint is a public app-style MCP endpoint. It
-does not require a bearer token, matching Tabula's no-login document product.
-Keep authenticated account/workspace MCP on a separate future API endpoint.
+## Data and state model
 
-Both targets use the shared Web-standard MCP handler in `src/server/web.ts`.
-Both expose:
+Tabula MCP does not keep a second private-draft or plaintext document-checkpoint
+database. Claude, Codex, ChatGPT, or the local filesystem owns Markdown until a
+user explicitly starts or joins a live Room, or exports/imports a fixed Copy.
 
-- `GET /` for service metadata
-- `GET /health` for version, write policy, and process health metadata
-- `GET /ready` for the same runtime contract plus checkpoint-store readiness
-- `/mcp` for Streamable HTTP MCP
-- `/sse` and `/message` as compatibility rewrites to `/mcp`
+During a live session, the MCP runtime is a trusted plaintext participant and
+holds the room key and decrypted Yjs working state. The Room relay receives
+encrypted collaboration envelopes. Optional recovery writes encrypted Yjs
+checkpoint blobs to Firebase Storage and an opaque generation pointer to
+Firestore. Export Copy uploads only an encrypted snapshot to Tabula JSON.
 
-## Production Checkpoint Store
+Consequently:
 
-Hosted MCP document checkpoints are plaintext working state for agent editing.
-Do not use the default memory store for official production traffic. Configure
-Upstash Redis or Vercel KV-compatible REST credentials:
+- `/health` reports process policy and version, not a fictitious document store.
+- `/ready` reports that the MCP runtime can accept requests; Room/Copy provider
+  failures are reported by the operation that uses them.
+- closing an MCP session must close its Room connections and clear decrypted
+  working state.
+
+## HTTP surface
+
+Both HTTP targets expose:
+
+- `GET /` — service metadata
+- `GET /health` — version, write policy, deployment mode, and public policy
+- `GET /ready` — runtime readiness
+- `/mcp` — Streamable HTTP MCP
+- `/sse` and `/message` — compatibility rewrites to `/mcp`
+
+Remote deployments require stateful MCP sessions. `TABULA_MCP_STATELESS_HTTP=1`
+is rejected because Room connections and decrypted Yjs state must survive
+between tool calls.
+
+## Public endpoint guardrails
+
+Production mode is enabled by `TABULA_MCP_PRODUCTION=1`,
+`TABULA_MCP_PUBLIC_ENDPOINT=1`, or Vercel production. Configure:
 
 ```sh
 TABULA_MCP_DEPLOYMENT_MODE=remote
 TABULA_MCP_PRODUCTION=1
 TABULA_MCP_PUBLIC_UNAUTHENTICATED=1
-TABULA_MCP_DOCUMENT_STORE_DRIVER=redis
-UPSTASH_REDIS_REST_URL=https://...
-UPSTASH_REDIS_REST_TOKEN=...
+TABULA_MCP_ALLOWED_ORIGINS=https://tabula.md
 ```
 
-The hosted connector has read/write Room capabilities by default; the MCP host
-controls approval for each mutating call. Start it with `--read-only` only for
-a review-only deployment. Confirm the effective policy through `GET /health`
-before advertising live agent editing.
+Use `TABULA_MCP_AUTH_TOKEN` instead of
+`TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` for a private deployment. The official
+no-login endpoint intentionally uses the public policy.
 
-The same store is used by both Vercel and Cloudflare deployments. Export/share
-still goes through `tabula-json` as encrypted `#json` snapshot links.
-Live room recovery is a separate encrypted checkpoint path: configure
-`TABULA_MCP_FIREBASE_CONFIG`, `TABULA_FIREBASE_CONFIG`, or
-`VITE_TABULA_FIREBASE_CONFIG` with the Firebase Web SDK config used by
-Tabula. The MCP server encrypts the complete workspace Y.Doc update locally
-with the `#room` key, writes the ciphertext blob to Firebase Storage, and uses
-Firestore only for the generation pointer.
-Production runtimes use the Firebase Storage and Firestore REST APIs through
-standard `fetch`; Firebase emulators continue to use the SDK transport. This
-keeps the checkpoint format identical while avoiding browser-only APIs such as
-`XMLHttpRequest` in Cloudflare Workers.
-Local MCP exposes filesystem workspace import and accepts paths only when the
-client provides filesystem roots or the operator sets
-`TABULA_MCP_ALLOWED_IMPORT_ROOTS` to comma- or newline-separated directories.
-Hosted MCP accepts inline `files` for host-native Markdown. A trusted self-hosted
-operator can expose `local-path` for server-side directories by setting
-`TABULA_MCP_ALLOWED_IMPORT_ROOTS`; those paths are on the server, never the
-user's device.
-When production mode is enabled, startup fails if the auth token is missing
-unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is explicitly set. Redis REST
-credentials are required by default. Excalidraw-style production memory fallback
-is available only when both `TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` and
-`TABULA_MCP_ALLOW_MEMORY_STORE=1` are set; public unauthenticated production
-still rejects that memory fallback and must use Redis.
+Additional guardrails:
 
-## Public Endpoint Guardrails
+- production browser Origins are denied unless allowlisted;
+- production Room/JSON egress is restricted to official services plus
+  `TABULA_MCP_ALLOWED_ROOM_SERVER_URLS` and
+  `TABULA_MCP_ALLOWED_JSON_SERVER_URLS`;
+- request bodies, request duration, mutations, Copy bytes, active sessions, and
+  active Rooms are bounded by their `TABULA_MCP_*` limits;
+- Cloudflare quota shards use an HMAC of the normalized client network prefix,
+  so opening a new MCP session does not reset quota;
+- Room URLs, Copy URLs, keys, Markdown, and prompts must not enter logs;
+- file and comment tools require the explicit `sessionId` returned by Start
+  Session or Join Room.
 
-Production mode is enabled by `TABULA_MCP_PRODUCTION=1`,
-`TABULA_MCP_PUBLIC_ENDPOINT=1`, or Vercel's production runtime. In production:
+The hosted endpoint has read/write Room capabilities by default. The MCP host
+continues to approve mutating tool calls. Use `--read-only` only for an
+intentionally review-only self-hosted deployment.
 
-- `/mcp` requires `Authorization: Bearer <TABULA_MCP_AUTH_TOKEN>` unless `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` is set.
-- `TABULA_MCP_PUBLIC_UNAUTHENTICATED=1` makes `/mcp` public/no-auth and ignores any configured auth token.
-- memory document checkpoints require explicit unsafe opt-in; configure Redis/Upstash REST for official production.
-- browser requests with an `Origin` header are rejected unless the origin is in
-  `TABULA_MCP_ALLOWED_ORIGINS`.
-- production egress for room and JSON services is restricted to official Tabula
-  services plus `TABULA_MCP_ALLOWED_ROOM_SERVER_URLS` and
-  `TABULA_MCP_ALLOWED_JSON_SERVER_URLS`. Firebase endpoints come from the
-  operator-supplied Web SDK configuration.
-- remote room/workspace tools require stateful MCP HTTP sessions because connected
-  room transports and workspace state live across tool calls. Cloudflare uses a
-  Durable Object session binding for this affinity; Vercel requires sticky
-  routing, a single instance, or an external session coordinator.
-- MCP request bodies are capped by `TABULA_MCP_HTTP_MAX_REQUEST_BYTES`.
-- per-client request rate is capped by `TABULA_MCP_RATE_LIMIT_MAX` per
-  `TABULA_MCP_RATE_LIMIT_WINDOW_MS`. Mutation calls have a separate
-  `TABULA_MCP_MUTATION_RATE_LIMIT_MAX`, and Export Copy request bytes are
-  bounded by `TABULA_MCP_EXPORT_BYTES_LIMIT` per
-  `TABULA_MCP_EXPORT_LIMIT_WINDOW_MS`. Cloudflare routes every session from the
-  same normalized client network prefix to the same quota shard, so opening a
-  new MCP session does not reset these counters.
-- active MCP sessions are capped per client by
-  `TABULA_MCP_MAX_SESSIONS_PER_CLIENT` (default 10). Expiring leases are cleaned
-  by Durable Object alarms after abnormal disconnects. Configure a coarse
-  account-wide Cloudflare WAF/rate-limiting rule separately; the application
-  deliberately avoids one global Durable Object that would serialize all users.
-- one MCP connection may hold at most `TABULA_MCP_MAX_ROOMS_PER_SESSION`
-  Room connections (default 8), and Cloudflare caps Room leases across a client
-  quota shard with `TABULA_MCP_MAX_ROOMS_PER_CLIENT` (default 32). Room quota
-  records contain only random connection IDs and expiry times, never Room URLs,
-  keys, or Markdown. Leave Session releases one lease; MCP DELETE and Session
-  Durable Object alarms release all remaining leases and WebSockets.
-- Room file tools require the explicit `sessionId` returned by Join Room or
-  Start Session. MCP Resources advertise parameterized URI templates but do not
-  enumerate connected Room handles or file paths.
-- request handling is bounded by `TABULA_MCP_REQUEST_TIMEOUT_MS`. A timeout
-  aborts pre-commit Room work and closes its affected MCP session. A committed
-  mutation keeps the session and its short-lived operation receipt so an exact
-  retry returns the original result. Export uploads also keep the MCP session
-  long enough to retry against the Copy service's idempotency key.
-- structured JSON request logs are controlled by `TABULA_MCP_LOG_LEVEL`.
+## Cloudflare Workers (official)
 
-Hosted production exposes the same agent workspace surface as local stdio:
-workspace creation/import from inline files, encrypted workspace export, room
-creation, and room connection. A hosted MCP server that joins a room becomes a
-trusted plaintext processor for that room key and decrypted Markdown.
-Cloudflare deployments route stateful MCP sessions through
-`TabulaMcpSessionDurableObject`; non-Cloudflare deployments need equivalent
-session affinity.
+The Cloudflare target uses:
 
-For trusted self-hosted Tabula deployments, set:
+- `workers/tabula-mcp-worker.ts`
+- `wrangler.jsonc`
+- one `TabulaMcpSessionDurableObject` per MCP session for transport and Room
+  affinity
+- `TabulaMcpQuotaDurableObject` shards for request, mutation, export-byte,
+  active-session, and active-Room limits
+
+Set the quota identity HMAC key:
+
+```sh
+npx wrangler secret put TABULA_MCP_QUOTA_HASH_SECRET
+```
+
+Use a new random value; do not reuse an MCP authorization token. Configure
+optional encrypted Room recovery with the same Firebase Web SDK config used by
+Tabula:
+
+```sh
+npx wrangler secret put VITE_TABULA_FIREBASE_CONFIG
+```
+
+Deploy and validate:
+
+```sh
+npm run check:cloudflare
+npm run deploy:cloudflare
+```
+
+The Session Durable Object owns live plaintext working state only while its MCP
+session is active. The Quota Durable Object stores leases and counters, never
+Room/Copy URLs, keys, or Markdown.
+
+## Vercel (preview/self-host compatibility)
+
+The Vercel target uses `api/mcp.ts`, `api/health.ts`, `api/ready.ts`, and
+`vercel.json`. It is retained to verify that the Web-standard handler bundles
+outside Cloudflare.
+
+Vercel Functions do not by themselves guarantee that successive stateful MCP
+requests reach the process holding the Room connection. An operator must use a
+single long-lived instance, sticky routing, or an external session coordinator.
+Without that, Start/Join can appear to succeed and a later file tool can report
+`session_not_found`. This is why Vercel is not the official production target.
+
+Validate or deploy a trusted self-hosted preview:
+
+```sh
+npm run check:vercel
+npm run deploy:vercel
+```
+
+## Trusted custom services
+
+For trusted self-hosted Tabula services:
 
 ```sh
 TABULA_MCP_ALLOWED_ROOM_SERVER_URLS=https://rooms.example.com
 TABULA_MCP_ALLOWED_JSON_SERVER_URLS=https://json.example.com
 ```
 
-`TABULA_MCP_ALLOW_ANY_EGRESS=1` disables this protection and should not be used
-on the official public endpoint.
-
-## Vercel
-
-The Vercel target uses:
-
-- `vercel.json`
-- `api/mcp.ts`
-- `api/health.ts`
-- `api/ready.ts`
-
-Configure environment variables in Vercel project settings or with the Vercel
-CLI:
-
-```sh
-TABULA_MCP_DEPLOYMENT_MODE=remote
-TABULA_MCP_PRODUCTION=1
-TABULA_MCP_ALLOWED_ORIGINS=https://tabula.md
-TABULA_MCP_PUBLIC_UNAUTHENTICATED=1
-TABULA_MCP_DOCUMENT_STORE_DRIVER=redis
-UPSTASH_REDIS_REST_URL=https://...
-UPSTASH_REDIS_REST_TOKEN=...
-VITE_TABULA_FIREBASE_CONFIG='{"apiKey":"...","projectId":"..."}'
-```
-
-Deploy:
-
-```sh
-npm run deploy:vercel
-```
-
-Validate locally before deploying:
-
-```sh
-npm run check:vercel
-```
-
-## Cloudflare Workers
-
-The Cloudflare target uses:
-
-- `wrangler.jsonc`
-- `workers/tabula-mcp-worker.ts`
-- `TabulaMcpSessionDurableObject` for `/mcp` session affinity
-- `TabulaMcpQuotaDurableObject` shards request and active-session limits by a
-  secret HMAC of the normalized client network prefix
-
-`wrangler.jsonc` enables `nodejs_compat`, runs `npm run build` before bundling,
-imports the generated `dist/document-app.html` as a text module, and declares
-the session and quota Durable Object bindings and migrations. The quota class
-is introduced by the `v2` migration and must be deployed before production
-traffic uses the updated Worker.
-
-Set Redis REST credentials and the quota identity HMAC key as secrets:
-
-```sh
-npx wrangler secret put UPSTASH_REDIS_REST_URL
-npx wrangler secret put UPSTASH_REDIS_REST_TOKEN
-npx wrangler secret put TABULA_MCP_QUOTA_HASH_SECRET
-```
-
-Use a new random value for `TABULA_MCP_QUOTA_HASH_SECRET`; do not reuse the MCP
-authorization token. The Worker never stores the source IP or Room/Copy URLs in
-quota state. Rotating this secret resets quota shard identities.
-
-Set non-secret environment values in `wrangler.jsonc` or through your deployment
-environment:
-
-```json
-{
-  "vars": {
-    "TABULA_MCP_DEPLOYMENT_MODE": "remote",
-    "TABULA_MCP_PRODUCTION": "1",
-    "TABULA_MCP_PUBLIC_UNAUTHENTICATED": "1",
-    "TABULA_MCP_ALLOWED_ORIGINS": "https://tabula.md",
-    "TABULA_MCP_DOCUMENT_STORE_DRIVER": "redis"
-  }
-}
-```
-
-Deploy:
-
-```sh
-npm run deploy:cloudflare
-```
-
-Validate bundling without deploying:
-
-```sh
-npm run check:cloudflare
-```
-
-## Session Boundary
-
-Remote deployments use stateful HTTP sessions because the public tool surface
-includes room/workspace operations. Stateful mode keeps active MCP transports,
-connected room sessions, and local workspace state in runtime memory. The
-Cloudflare Worker routes each MCP session id to `TabulaMcpSessionDurableObject`.
-For Vercel or another platform, use sticky routing, a single instance, or an
-external session coordinator.
-
-`TABULA_MCP_STATELESS_HTTP=1` is rejected for remote deployments. You may set
-`TABULA_MCP_STATEFUL_HTTP=1` explicitly, but it is already the remote default.
+`TABULA_MCP_ALLOW_ANY_EGRESS=1` disables egress protection and must not be used
+for the official public endpoint.
 
 ## Validation
 
-Run both deployment target checks:
+Run both deployment build checks and the complete release gate:
 
 ```sh
 npm run check:deploy-targets
+npm run release:verify
 ```
-
-The release gate includes this check.

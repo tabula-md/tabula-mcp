@@ -1,7 +1,5 @@
 import { strict as assert } from "node:assert";
 import { createServer as createHttpServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -97,10 +95,8 @@ const withClient = async ({ options, env, mcpApps }, callback) => {
 
 const run = async () => {
   const options = parseArgs(process.argv.slice(2));
-  const storeDir = await mkdtemp(path.join(tmpdir(), "tabula-mcp-stdio-"));
   const shareServer = await createShareServer();
   const env = {
-    TABULA_MCP_DOCUMENT_STORE_DIR: storeDir,
     TABULA_JSON_URL: shareServer.url,
     TABULA_MCP_ALLOWED_JSON_SERVER_URLS: shareServer.url,
   };
@@ -143,7 +139,6 @@ const run = async () => {
     });
   } finally {
     await shareServer.close();
-    await rm(storeDir, { recursive: true, force: true });
   }
   console.log(`${options.label} smoke passed`);
 };

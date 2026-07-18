@@ -6,6 +6,13 @@
   file-level comments, replying, resolving or reopening, and deleting threads.
 - Kept one agent identity across every Room joined by the same MCP connection,
   with host-aware names and optional operator overrides.
+- Removed the obsolete private-document registry and file/Redis checkpoint
+  stores. Drafts remain host-native; live plaintext now exists only inside an
+  active MCP/Room session, while recovery and Copy payloads remain encrypted.
+- Corrected health, readiness, privacy, security, package-export, MCPB, and
+  deployment contracts to match that state model. Cloudflare Durable Objects
+  are the official production session boundary; Vercel requires operator-
+  supplied affinity and remains a preview/self-host compatibility target.
 
 ## 0.5.0
 

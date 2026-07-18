@@ -37,6 +37,4 @@ try {
 } finally {
   await Promise.allSettled([client.close(), instance.server.close()]);
   await instance.registry.clear();
-  instance.workspaces.clear();
-  await instance.documents.clear();
 }

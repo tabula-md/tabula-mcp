@@ -1,9 +1,9 @@
-import type { DocumentStoreDeploymentMode } from "../documents/store.js";
+import type { DeploymentMode } from "../deployment.js";
 
 export const createCoreInstructions = ({
   deploymentMode,
 }: {
-  deploymentMode: DocumentStoreDeploymentMode;
+  deploymentMode: DeploymentMode;
 }) => [
   "Tabula turns Markdown produced by the host or local filesystem into live shared sessions or encrypted copies.",
   "When given a #room URL, join it and keep the URL private.",

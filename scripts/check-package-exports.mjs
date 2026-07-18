@@ -30,11 +30,6 @@ const expectedExports = [
     declaration: "dist/protocol.d.ts",
     values: ["parseRoomShareUrl", "resolveRoomServerUrl"],
   },
-  {
-    specifier: "./documents",
-    declaration: "dist/documents/index.d.ts",
-    values: ["DocumentRegistry", "MemoryDocumentStore", "FileDocumentStore", "UpstashRedisDocumentStore"],
-  },
 ];
 
 const main = async () => {
