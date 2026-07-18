@@ -1,50 +1,30 @@
 import { randomUUID } from "node:crypto";
 import {
-  ROOM_CHECKPOINT_RETENTION_MS,
   WORKSPACE_ROOM_ROOT_ID,
+  WORKSPACE_ROOM_SCHEMA_VERSION,
   createRoomActor,
-  createRoomEnvelope,
-  createWorkspaceRoomCrdt,
-  createWorkspaceRoomDocument,
-  createWorkspaceRoomFolder,
-  createWorkspaceRoomSyncController,
-  decryptRoomEnvelope,
-  decryptWorkspaceRoomCheckpoint,
-  deleteWorkspaceRoomNode,
-  getWorkspaceRoomSnapshot,
-  getWorkspaceRoomStructureSnapshot,
-  isRemoteSyncOrigin,
-  moveWorkspaceRoomNode,
-  parseRoomActor,
-  renameWorkspaceRoomNode,
-  validateWorkspaceRoomLimits,
-  validateWorkspaceRoomStructure,
-  encryptWorkspaceRoomCheckpoint,
   type EncryptedEnvelope,
-  type EnvelopeKind,
   type RoomActor,
   type RoomCapability,
   type WorkspaceRoomCheckpointStore,
-  type WorkspaceRoomCrdt,
   type WorkspaceRoomNode,
-  type WorkspaceRoomSyncController,
+  type WorkspaceRoomSnapshot,
+} from "@tabula-md/tabula/collaboration";
+import {
+  createHeadlessRoomClient,
+  createHeadlessRoomSyncAdapters,
+  type HeadlessRoomChange,
+  type HeadlessRoomClientState,
   type WorkspaceRoomSyncAdapters,
   type WorkspaceRoomTransportHandlers,
-} from "@tabula-md/tabula/collaboration";
-import { io, type Socket } from "socket.io-client";
-import * as Y from "yjs";
-import {
-  Awareness,
-  removeAwarenessStates,
-} from "y-protocols/awareness";
-import { importRoomKey, sha256Text } from "./crypto.js";
+} from "@tabula-md/tabula/room-client";
+import { io } from "socket.io-client";
+import { sha256Text } from "./crypto.js";
 import {
   type ParsedRoomShareUrl,
   TabulaMcpError,
 } from "./protocol.js";
-import {
-  createFirebaseWorkspaceRoomCheckpointStore,
-} from "./room-checkpoints.js";
+import { createFirebaseWorkspaceRoomCheckpointStore } from "./room-checkpoints.js";
 import type {
   WorkspaceChange,
   WorkspaceDocumentNode,
@@ -56,8 +36,15 @@ import {
   normalizeTextPatches,
 } from "./text.js";
 
+type CoreRoomClient = Awaited<ReturnType<typeof createHeadlessRoomClient>>;
+
 export type ConnectionStatus = "connecting" | "connected" | "offline" | "closed";
-export type RoomRecoveryStatus = "local-bootstrap" | "checkpoint-loaded" | "checkpoint-missing" | "checkpoint-disabled" | "checkpoint-failed";
+export type RoomRecoveryStatus =
+  | "local-bootstrap"
+  | "checkpoint-loaded"
+  | "checkpoint-missing"
+  | "checkpoint-disabled"
+  | "checkpoint-failed";
 export type RoomHydrationStatus = "waiting-for-peer-state" | "ready";
 
 export type LiveSelection = {
@@ -131,34 +118,11 @@ type Waiter = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-type HydrationWaiter = {
-  resolve: (value: RoomHydrationStatus) => void;
-  timer: ReturnType<typeof setTimeout>;
-};
-
-const LOCAL_DIRECT_ORIGIN = Symbol("tabula-mcp.direct-edit");
-const CHECKPOINT_DELAY_MS = 5_000;
-
-const createClock = () => ({
-  setTimeout(callback: () => void, delayMs: number) {
-    return globalThis.setTimeout(callback, delayMs);
-  },
-  clearTimeout(handle: unknown) {
-    globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>);
-  },
-  createId: randomUUID,
-});
-
-const createSocketTransport = ({
+const createSocketTransport: WorkspaceRoomSyncAdapters["createRoomTransport"] = ({
   baseUrl,
   roomId,
   clientId,
   handlers,
-}: {
-  baseUrl: string;
-  roomId: string;
-  clientId: string;
-  handlers: WorkspaceRoomTransportHandlers;
 }) => {
   const socket = io(baseUrl, {
     autoConnect: false,
@@ -179,35 +143,18 @@ const createSocketTransport = ({
     get connected() {
       return socket.connected;
     },
-    connect() {
-      socket.connect();
-    },
-    sendEnvelope(envelope: EncryptedEnvelope) {
-      socket.emit("room:message", envelope);
-    },
-    sendVolatileEnvelope(envelope: EncryptedEnvelope) {
-      socket.volatile.emit("room:volatile-message", envelope);
-    },
-    disconnect() {
-      socket.disconnect();
-    },
+    connect: () => socket.connect(),
+    sendEnvelope: (envelope: EncryptedEnvelope) => socket.emit("room:message", envelope),
+    sendVolatileEnvelope: (envelope: EncryptedEnvelope) => socket.volatile.emit("room:volatile-message", envelope),
+    disconnect: () => socket.disconnect(),
   };
 };
 
-const getActorFromAwareness = (awareness: Awareness, actorId: string) => {
-  for (const state of awareness.getStates().values()) {
-    const actor = parseRoomActor(state?.actor);
-    if (actor?.id === actorId) return actor;
-  }
-  return null;
-};
-
-const getDocumentIdForType = (room: WorkspaceRoomCrdt, type: unknown) => {
-  let documentId: string | undefined;
-  room.documents.forEach((text: Y.Text, id: string) => {
-    if (text === type) documentId = id;
-  });
-  return documentId;
+const toLegacyStatus = (status: HeadlessRoomClientState["status"]): ConnectionStatus => {
+  if (status === "connected") return "connected";
+  if (status === "closed") return "closed";
+  if (status === "offline" || status === "failed") return "offline";
+  return "connecting";
 };
 
 export class TabulaRoomClient {
@@ -218,26 +165,17 @@ export class TabulaRoomClient {
   readonly writeAccess: boolean;
   readonly actor: RoomActor;
 
-  private readonly roomKeyValue: string;
   private readonly checkpointStore: WorkspaceRoomCheckpointStore;
-  private readonly doc = new Y.Doc();
-  private readonly room: WorkspaceRoomCrdt;
-  private readonly awareness: Awareness;
-  private readonly syncController: WorkspaceRoomSyncController;
-  private readonly waiters = new Set<Waiter>();
-  private readonly hydrationWaiters = new Set<HydrationWaiter>();
-  private roomKey: CryptoKey | null = null;
-  private statusValue: ConnectionStatus = "connecting";
-  private lastErrorValue = "";
-  private peerCount = 0;
+  private readonly adapters: WorkspaceRoomSyncAdapters;
+  private clientPromise: Promise<CoreRoomClient> | null = null;
+  private client: CoreRoomClient | null = null;
+  private unsubscribe: (() => void) | null = null;
   private activeDocumentId: string | undefined;
-  private workspaceVersion = 1;
-  private hasReceivedState = false;
+  private connected = false;
+  private closed = false;
   private lastStateReceivedAtValue = "";
-  private checkpointGeneration = 0;
-  private checkpointTimer: ReturnType<typeof setTimeout> | null = null;
-  private checkpointInFlight: Promise<void> | null = null;
-  private checkpointStatusValue: RoomCheckpointStoreStatus;
+  private initialWorkspacePublished = false;
+  private readonly waiters = new Set<Waiter>();
 
   constructor({
     parsedRoom,
@@ -251,21 +189,13 @@ export class TabulaRoomClient {
   }: RoomClientOptions) {
     this.roomId = parsedRoom.roomId;
     this.shareUrl = parsedRoom.shareUrl;
-    this.roomKeyValue = parsedRoom.roomKey;
     this.roomServerUrl = roomServerUrl;
     this.checkpointStore = roomCheckpointStore;
-    this.checkpointStatusValue = {
-      enabled: roomCheckpointStore.enabled,
-      store: roomCheckpointStore.enabled ? "firebase-storage" : "none",
-      status: roomCheckpointStore.enabled ? "missing" : "disabled",
-    };
-
-    const actorId = `tabula-mcp-${randomUUID()}`;
     const capabilities = actorCapabilities?.filter((capability) =>
       capability === "presence" || capability === "read" || capability === "write"
     ) ?? (writeAccess ? ["presence", "read", "write"] : ["presence", "read"]);
     this.actor = createRoomActor({
-      id: actorId,
+      id: `tabula-mcp-${randomUUID()}`,
       kind: "agent",
       client: "tabula-mcp",
       name: identityName,
@@ -274,105 +204,39 @@ export class TabulaRoomClient {
       joinedAt: new Date().toISOString(),
     });
     this.writeAccess = this.actor.capabilities.includes("write");
-    this.room = createWorkspaceRoomCrdt({ roomId: this.roomId, doc: this.doc });
-    this.awareness = new Awareness(this.doc);
-    this.awareness.setLocalState({
-      actor: this.actor,
-      user: {
-        name: this.actor.name,
-        color: this.actor.color,
-        colorLight: `${this.actor.color}33`,
-      },
-      lastSeen: Date.now(),
-    });
-
-    this.syncController = createWorkspaceRoomSyncController({
-      roomId: this.roomId,
-      doc: this.doc,
-      awareness: this.awareness,
-      adapters: {
-        clock: createClock(),
-        crypto: {
-          encryptEnvelope: (
-            key: CryptoKey,
-            roomIdValue: string,
-            kind: EnvelopeKind,
-            version: number,
-            plaintext: Uint8Array,
-          ) =>
-            createRoomEnvelope({ roomKey: key, roomId: roomIdValue, kind, version, plaintext }),
-          decryptEnvelope: (key: CryptoKey, envelope: EncryptedEnvelope) =>
-            decryptRoomEnvelope({ roomKey: key, envelope }),
-        },
-        createRoomTransport,
-      },
-      isClosed: () => this.statusValue === "closed",
-      getIdentityId: () => this.actor.id,
-      getSenderActor: (senderId: string) => getActorFromAwareness(this.awareness, senderId),
-      onCapacityExceeded: () => {
-        this.lastErrorValue = "The live workspace exceeds the supported collaboration size.";
-      },
-      onInvalidMessage: (message: string) => {
-        this.lastErrorValue = message;
-      },
-      onUnsupportedMessage: () => {
-        this.lastErrorValue = "This room uses an unsupported collaboration protocol.";
-      },
-    });
-
-    this.doc.on("update", (update: Uint8Array, origin: unknown) => {
-      if (!isRemoteSyncOrigin(origin)) this.syncController.handleLocalUpdate(update);
-      this.workspaceVersion += 1;
-      this.markReceivedState();
-      this.scheduleCheckpoint();
-      this.notifyChange();
-    });
-    this.awareness.on("update", (
-      changes: { added: number[]; updated: number[]; removed: number[] },
-      origin: unknown,
-    ) => {
-      this.syncController.handleAwarenessUpdate(changes, origin);
-      this.notifyChange();
-    });
+    this.adapters = createHeadlessRoomSyncAdapters({ createRoomTransport });
   }
 
-  get status() {
-    return this.statusValue;
+  get status(): ConnectionStatus {
+    if (this.closed) return "closed";
+    return this.client ? toLegacyStatus(this.client.getState().status) : "connecting";
   }
 
   get lastError() {
-    return this.lastErrorValue;
+    return this.client?.getState().lastError ?? "";
   }
 
   get markdown() {
-    return this.getActiveText()?.toString() ?? "";
+    const snapshot = this.safeSnapshot();
+    const documentId = this.activeDocumentId ?? snapshot?.nodes.find((node) => node.type === "document")?.id;
+    return documentId ? snapshot?.documents[documentId] ?? "" : "";
   }
 
   get collaboratorList(): Collaborator[] {
-    const collaborators: Collaborator[] = [];
-    this.awareness.getStates().forEach((state, clientId) => {
-      if (clientId === this.awareness.clientID) return;
-      const actor = parseRoomActor(state?.actor);
-      if (!actor || actor.id === this.actor.id || !actor.capabilities.includes("presence")) return;
-      const selection = this.readSelection(state?.cursor);
-      collaborators.push({
-        id: actor.id,
-        name: actor.name,
-        color: actor.color ?? "#2563eb",
-        lastSeen: typeof state?.lastSeen === "number" ? state.lastSeen : Date.now(),
-        activeDocumentId: typeof state?.activeDocumentId === "string" ? state.activeDocumentId : undefined,
-        fileTitle: typeof state?.fileTitle === "string" ? state.fileTitle : undefined,
-        selection,
-        actor,
-      });
-    });
-    return collaborators.sort((first, second) =>
-      first.name.localeCompare(second.name) || first.id.localeCompare(second.id)
-    );
+    return (this.client?.getState().collaborators ?? []).map((collaborator) => ({
+      id: collaborator.actor.id,
+      name: collaborator.actor.name,
+      color: collaborator.actor.color ?? "#2563eb",
+      lastSeen: collaborator.lastSeen,
+      activeDocumentId: collaborator.activeDocumentId,
+      fileTitle: collaborator.fileTitle,
+      selection: collaborator.selection,
+      actor: collaborator.actor,
+    }));
   }
 
   get hydrationStatus(): RoomHydrationStatus {
-    return this.hasReceivedState ? "ready" : "waiting-for-peer-state";
+    return this.client?.getState().hydrationStatus === "ready" ? "ready" : "waiting-for-peer-state";
   }
 
   get recoveryMode(): "durable" | "temporary" {
@@ -380,84 +244,44 @@ export class TabulaRoomClient {
   }
 
   async connect({ waitForStateMs = 0 }: { waitForStateMs?: number } = {}) {
-    this.statusValue = "connecting";
-    await this.ensureRoomKey();
-    const recoveryStatus = this.hasReceivedState
-      ? "local-bootstrap"
-      : await this.loadCheckpoint();
-    if (recoveryStatus === "checkpoint-failed") {
-      throw new TabulaMcpError(
-        this.checkpointStatusValue.error ?? "The encrypted live room could not be opened.",
-      );
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      this.syncController.connect(this.roomServerUrl, {
-        onConnect: () => undefined,
-        onJoined: (message: { roomId: string; clientId: string; peerCount: number }) => {
-          this.peerCount = message.peerCount;
-          this.statusValue = "connected";
-          this.syncController.onJoined();
-          if (!settled) {
-            settled = true;
-            resolve();
-          }
-        },
-        onPeerJoined: () => this.syncController.onPeerJoined(),
-        onPeers: (message: { roomId: string; peers: string[] }) => {
-          this.peerCount = message.peers.length;
-          this.removeStaleAwareness(message.peers);
-        },
-        onError: (message: { error?: string }) => {
-          this.lastErrorValue = message.error ?? "Room relay error.";
-        },
-        onDisconnect: () => {
-          this.statusValue = this.statusValue === "closed" ? "closed" : "offline";
-          this.syncController.onTransportDisconnected();
-        },
-        onConnectError: () => {
-          this.lastErrorValue = "Live room connection failed.";
-          if (!settled) {
-            settled = true;
-            reject(new TabulaMcpError(this.lastErrorValue));
-          }
-        },
-      });
-    });
-    this.publishLocalPresence();
-    await this.waitForInitialState(waitForStateMs);
-    return recoveryStatus;
+    const client = await this.ensureClient();
+    const localBootstrap = this.initialWorkspacePublished;
+    await client.connect({ waitForStateMs });
+    this.connected = true;
+    if (client.getState().hydrationStatus === "ready") this.markReceivedState();
+    return localBootstrap ? "local-bootstrap" : this.recoveryStatus();
   }
 
   async getStatus() {
-    const workspace = await this.projectWorkspaceState();
+    const client = await this.ensureClient();
+    const state = client.getState();
+    const workspace = state.hydrationStatus === "ready" ? await this.projectWorkspaceState() : null;
     const activeDocumentTitle = this.activeDocumentId
-      ? this.getDocumentNode(this.activeDocumentId)?.title
+      ? workspace?.nodes.find((node) => node.id === this.activeDocumentId)?.title
       : undefined;
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
       shareUrl: this.shareUrl,
       roomServerUrl: this.roomServerUrl,
-      status: this.statusValue,
+      status: toLegacyStatus(state.status),
       writeAccess: this.writeAccess,
       actor: this.actor,
       capabilities: this.actor.capabilities,
       textLength: this.markdown.length,
       sha256: await sha256Text(this.markdown),
-      socketConnected: this.syncController.isConnected(),
+      socketConnected: state.status === "connected",
       ...this.roomStateReadiness(),
-      peerCount: this.peerCount,
+      peerCount: state.collaborators.length,
       collaborators: this.collaboratorList,
       workspaceMode: true,
       activeDocumentId: this.activeDocumentId,
       activeDocumentTitle,
-      workspaceVersion: workspace.version,
+      workspaceVersion: state.version,
       recoveryMode: this.recoveryMode,
-      checkpointStatus: this.checkpointStatusValue,
+      checkpointStatus: this.checkpointStatus(),
       metadata: null,
-      lastError: this.lastErrorValue || undefined,
+      lastError: state.lastError,
     };
   }
 
@@ -503,10 +327,10 @@ export class TabulaRoomClient {
 
   async readWorkspaceSnapshot() {
     this.assertHydrated("read the workspace snapshot");
-    const snapshot = getWorkspaceRoomSnapshot(this.room);
+    const snapshot = this.requireClient().getWorkspaceSnapshot();
     return {
       sessionId: this.sessionId,
-      workspace: await this.projectWorkspaceState(),
+      workspace: await this.projectWorkspaceState(snapshot),
       documents: snapshot.documents,
       commentsByFileId: snapshot.commentsByFileId,
       activeDocumentId: this.activeDocumentId,
@@ -515,20 +339,17 @@ export class TabulaRoomClient {
 
   async readWorkspaceDocument({ documentId }: { documentId: string }) {
     this.assertHydrated("read workspace documents");
-    const node = this.getDocumentNode(documentId);
-    const text = this.room.documents.get(documentId);
-    if (!node || !text) throw new TabulaMcpError("Workspace document was not found.");
-    const markdown = text.toString();
+    const document = await this.requireClient().readDocument(documentId);
     this.activeDocumentId = documentId;
-    this.publishLocalPresence();
+    this.requireClient().setPresence({ activeDocumentId: documentId, fileTitle: document.title });
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
       documentId,
-      title: node.title,
-      markdown,
-      textLength: markdown.length,
-      sha256: await sha256Text(markdown),
+      title: document.title,
+      markdown: document.markdown,
+      textLength: document.markdown.length,
+      sha256: document.revision,
       cachedAt: new Date().toISOString(),
       ...this.roomStateReadiness(),
     };
@@ -542,54 +363,57 @@ export class TabulaRoomClient {
     documents: readonly WorkspaceSnapshotDocument[];
   }) {
     this.assertWritable("publish workspace state");
-    await this.ensureRoomKey();
     if (workspace.roomId !== this.roomId) {
       throw new TabulaMcpError("Workspace roomId must match the connected room.");
     }
+    if (this.clientPromise) {
+      throw new TabulaMcpError("Workspace state must be published before the Room client is opened.");
+    }
     const documentsById = new Map(documents.map((document) => [document.documentId, document]));
-    this.doc.transact(() => {
-      for (const node of workspace.nodes.filter((candidate) => candidate.id !== workspace.rootId)) {
-        if (node.type === "folder") {
-          createWorkspaceRoomFolder(this.room, {
-            id: node.id,
-            parentId: !node.parentId || node.parentId === workspace.rootId
-              ? WORKSPACE_ROOM_ROOT_ID
-              : node.parentId,
-            title: node.title,
-            order: node.order ?? 0,
-            createdAt: node.createdAt,
-          });
-        } else {
-          const document = documentsById.get(node.id);
-          if (!document) throw new TabulaMcpError(`Workspace checkpoint is missing document ${node.id}.`);
-          createWorkspaceRoomDocument(this.room, {
-            id: node.id,
-            parentId: !node.parentId || node.parentId === workspace.rootId
-              ? WORKSPACE_ROOM_ROOT_ID
-              : node.parentId,
-            title: node.title,
-            order: node.order ?? 0,
-            createdAt: node.createdAt,
-            markdown: document.markdown,
-          });
-        }
-      }
-    }, LOCAL_DIRECT_ORIGIN);
-    this.activeDocumentId = workspace.activeDocumentId ?? documents[0]?.documentId;
-    this.publishLocalPresence();
-    this.markReceivedState();
-    if (this.checkpointStore.enabled) {
-      await this.saveCheckpointNow();
-      if (this.checkpointStatusValue.status !== "saved") {
-        throw new TabulaMcpError(
-          this.checkpointStatusValue.error ?? "The encrypted live room could not be saved.",
-        );
+    const nodes: WorkspaceRoomNode[] = workspace.nodes
+      .filter((node) => node.id !== workspace.rootId)
+      .map((node) => ({
+        ...node,
+        parentId: !node.parentId || node.parentId === workspace.rootId
+          ? WORKSPACE_ROOM_ROOT_ID
+          : node.parentId,
+      }));
+    for (const node of nodes) {
+      if (node.type === "document" && !documentsById.has(node.id)) {
+        throw new TabulaMcpError(`Workspace checkpoint is missing document ${node.id}.`);
       }
     }
+    const initialWorkspace: WorkspaceRoomSnapshot = {
+      roomId: this.roomId,
+      schemaVersion: WORKSPACE_ROOM_SCHEMA_VERSION,
+      rootId: WORKSPACE_ROOM_ROOT_ID,
+      nodes: [
+        {
+          id: WORKSPACE_ROOM_ROOT_ID,
+          type: "folder",
+          parentId: null,
+          title: "Workspace",
+          order: 0,
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        },
+        ...nodes,
+      ],
+      documents: Object.fromEntries(nodes.filter((node) => node.type === "document").map((node) => [
+        node.id,
+        documentsById.get(node.id)?.markdown ?? "",
+      ])),
+      commentsByFileId: {},
+    };
+    this.activeDocumentId = workspace.activeDocumentId ?? documents[0]?.documentId;
+    this.initialWorkspacePublished = true;
+    const client = await this.ensureClient(initialWorkspace);
+    if (this.activeDocumentId) client.setPresence({ activeDocumentId: this.activeDocumentId });
+    if (this.checkpointStore.enabled) await client.flushCheckpoint();
     return {
       emittedWorkspace: true,
       emittedDocumentCount: documents.length,
-      checkpointStatus: this.checkpointStatusValue,
+      checkpointStatus: this.checkpointStatus(),
     };
   }
 
@@ -597,98 +421,93 @@ export class TabulaRoomClient {
     this.assertWritable("edit workspace documents");
     this.assertHydrated("edit workspace documents");
     if (changes.length === 0) throw new TabulaMcpError("At least one workspace change is required.");
-
-    const draftDoc = new Y.Doc();
-    Y.applyUpdate(draftDoc, Y.encodeStateAsUpdate(this.doc));
-    const draftRoom = createWorkspaceRoomCrdt({ roomId: this.roomId, doc: draftDoc, initialize: false });
-    const changedDocumentIds = new Set<string>();
+    const client = this.requireClient();
+    const snapshot = client.getWorkspaceSnapshot();
+    const documents = new Map(Object.entries(snapshot.documents));
+    const coreChanges: HeadlessRoomChange[] = [];
     const appliedChanges: WorkspaceChange[] = [];
-    try {
-      for (const input of changes) {
-        if (input.type === "folder.create") {
-          if (!createWorkspaceRoomFolder(draftRoom, {
-            id: input.folderId,
-            parentId: input.parentId ?? WORKSPACE_ROOM_ROOT_ID,
-            title: input.title,
-            order: this.nextOrder(draftRoom),
-            createdAt: new Date().toISOString(),
-          })) throw new TabulaMcpError("Workspace folder could not be created.");
-          appliedChanges.push(input);
-          continue;
-        }
-        if (input.type === "document.patch") {
-          const text = draftRoom.documents.get(input.documentId);
-          if (!text) throw new TabulaMcpError(`Workspace document ${input.documentId} was not found.`);
-          const markdown = text.toString();
-          if (await sha256Text(markdown) !== input.baseSha256) {
-            throw new TabulaMcpError(`Workspace document ${input.documentId} changed before the edit could be applied.`);
-          }
-          const patches = normalizeTextPatches(input.patches);
-          const next = applyTextPatchesToString(markdown, patches);
-          if (next === null) throw new TabulaMcpError("Workspace document patches are invalid or overlap.");
-          for (const patch of [...patches].sort((left, right) => right.from - left.from)) {
-            if (patch.to > patch.from) text.delete(patch.from, patch.to - patch.from);
-            if (patch.insert) text.insert(patch.from, patch.insert);
-          }
-          changedDocumentIds.add(input.documentId);
-          appliedChanges.push({ ...input, patches });
-          continue;
-        }
-        if (input.type === "document.create") {
-          const documentId = randomUUID();
-          if (!createWorkspaceRoomDocument(draftRoom, {
-            id: documentId,
-            parentId: input.parentId ?? WORKSPACE_ROOM_ROOT_ID,
-            title: input.title,
-            order: this.nextOrder(draftRoom),
-            createdAt: new Date().toISOString(),
-            markdown: input.markdown,
-          })) throw new TabulaMcpError("Workspace document could not be created.");
-          changedDocumentIds.add(documentId);
-          appliedChanges.push(input);
-          continue;
-        }
-        const node = draftRoom.nodes.get(input.nodeId);
-        if (!node) throw new TabulaMcpError(`Workspace node ${input.nodeId} was not found.`);
-        if (node.get("title") !== input.baseTitle || node.get("parentId") !== input.baseParentId) {
-          throw new TabulaMcpError(`Workspace path changed before the operation could be applied.`);
-        }
-        const text = draftRoom.documents.get(input.nodeId)?.toString();
-        if (input.baseSha256 && text !== undefined && await sha256Text(text) !== input.baseSha256) {
-          throw new TabulaMcpError(`Workspace document ${input.nodeId} changed before the operation.`);
-        }
-        if (input.type === "node.move") {
-          if (input.title !== input.baseTitle && !renameWorkspaceRoomNode(draftRoom, input.nodeId, input.title)) {
-            throw new TabulaMcpError("Workspace path could not be renamed.");
-          }
-          if (input.parentId !== input.baseParentId && !moveWorkspaceRoomNode(
-            draftRoom,
-            input.nodeId,
-            input.parentId ?? WORKSPACE_ROOM_ROOT_ID,
-          )) {
-            throw new TabulaMcpError("Workspace path could not be moved.");
-          }
-        } else {
-          deleteWorkspaceRoomNode(draftRoom, input.nodeId);
-        }
-        if (text !== undefined) changedDocumentIds.add(input.nodeId);
-        appliedChanges.push(input);
-      }
+    const changedDocumentIds = new Set<string>();
 
-      const structure = validateWorkspaceRoomStructure(draftRoom, this.roomId);
-      if (!structure.ok) throw new TabulaMcpError(structure.message);
-      const limits = validateWorkspaceRoomLimits(getWorkspaceRoomSnapshot(draftRoom));
-      if (!limits.ok) throw new TabulaMcpError(limits.message);
-      const update = Y.encodeStateAsUpdate(draftDoc, Y.encodeStateVector(this.doc));
-      Y.applyUpdate(this.doc, update, LOCAL_DIRECT_ORIGIN);
-    } finally {
-      draftDoc.destroy();
+    for (const input of changes) {
+      if (input.type === "folder.create") {
+        coreChanges.push({
+          type: "folder.create",
+          folderId: input.folderId,
+          parentId: input.parentId,
+          title: input.title,
+        });
+        appliedChanges.push(input);
+        continue;
+      }
+      if (input.type === "document.patch") {
+        const markdown = documents.get(input.documentId);
+        if (markdown === undefined) throw new TabulaMcpError(`Workspace document ${input.documentId} was not found.`);
+        if (await sha256Text(markdown) !== input.baseSha256) {
+          throw new TabulaMcpError(`Workspace document ${input.documentId} changed before the edit could be applied.`);
+        }
+        const patches = normalizeTextPatches(input.patches);
+        const next = applyTextPatchesToString(markdown, patches);
+        if (next === null) throw new TabulaMcpError("Workspace document patches are invalid or overlap.");
+        documents.set(input.documentId, next);
+        coreChanges.push({
+          type: "document.write",
+          documentId: input.documentId,
+          markdown: next,
+          expectedRevision: input.baseSha256,
+          preferredPatches: patches,
+        });
+        changedDocumentIds.add(input.documentId);
+        appliedChanges.push({ ...input, patches });
+        continue;
+      }
+      if (input.type === "document.create") {
+        const documentId = randomUUID();
+        documents.set(documentId, input.markdown);
+        coreChanges.push({
+          type: "document.create",
+          documentId,
+          parentId: input.parentId,
+          title: input.title,
+          markdown: input.markdown,
+        });
+        changedDocumentIds.add(documentId);
+        appliedChanges.push(input);
+        continue;
+      }
+      if (input.type === "node.move") {
+        coreChanges.push({
+          type: "node.update",
+          nodeId: input.nodeId,
+          title: input.title,
+          parentId: input.parentId,
+          expected: {
+            title: input.baseTitle,
+            parentId: input.baseParentId,
+            revision: input.baseSha256,
+          },
+        });
+        if (documents.has(input.nodeId)) changedDocumentIds.add(input.nodeId);
+        appliedChanges.push(input);
+        continue;
+      }
+      coreChanges.push({
+        type: "node.delete",
+        nodeId: input.nodeId,
+        expected: {
+          title: input.baseTitle,
+          parentId: input.baseParentId,
+          revision: input.baseSha256,
+        },
+      });
+      if (documents.has(input.nodeId)) changedDocumentIds.add(input.nodeId);
+      appliedChanges.push(input);
     }
 
-    if (this.activeDocumentId && !this.room.documents.has(this.activeDocumentId)) {
+    await client.applyChanges(coreChanges);
+    if (this.activeDocumentId && !client.getWorkspaceSnapshot().documents[this.activeDocumentId]) {
       this.activeDocumentId = this.firstDocumentId();
     }
-    this.publishLocalPresence();
+    client.setPresence({ activeDocumentId: this.activeDocumentId });
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
@@ -701,20 +520,23 @@ export class TabulaRoomClient {
   }
 
   async flushCheckpoint() {
-    if (!this.checkpointStore.enabled) return;
-    if (this.checkpointTimer) clearTimeout(this.checkpointTimer);
-    this.checkpointTimer = null;
-    await this.saveCheckpointNow();
-    if (this.checkpointStatusValue.status !== "saved") {
-      throw new TabulaMcpError(
-        this.checkpointStatusValue.error ?? "The encrypted live room could not be saved.",
-      );
+    await this.requireClient().flushCheckpoint();
+    if (this.checkpointStore.enabled && this.requireClient().getState().checkpointStatus !== "saved") {
+      throw new TabulaMcpError(this.lastError || "The encrypted live room could not be saved.");
     }
   }
 
   async setPresence(selection?: LiveSelection, fileTitle?: string) {
     if (selection?.documentId) this.activeDocumentId = selection.documentId;
-    this.publishLocalPresence(selection, fileTitle);
+    this.requireClient().setPresence({
+      activeDocumentId: this.activeDocumentId,
+      fileTitle,
+      selection: selection?.documentId ? {
+        documentId: selection.documentId,
+        from: selection.from,
+        to: selection.to,
+      } : undefined,
+    });
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
@@ -732,9 +554,7 @@ export class TabulaRoomClient {
 
   async waitForChange(sinceSha256?: string, timeoutMs = 15_000): Promise<WaitResult> {
     const currentSha256 = await sha256Text(this.markdown);
-    if (sinceSha256 && sinceSha256 !== currentSha256) {
-      return this.createWaitResult(true, currentSha256);
-    }
+    if (sinceSha256 && sinceSha256 !== currentSha256) return this.createWaitResult(true, currentSha256);
     return new Promise((resolve) => {
       const timer = setTimeout(async () => {
         this.waiters.delete(waiter);
@@ -746,55 +566,59 @@ export class TabulaRoomClient {
   }
 
   disconnect() {
-    if (this.statusValue === "closed") return;
-    this.statusValue = "closed";
-    if (this.checkpointTimer) clearTimeout(this.checkpointTimer);
-    this.checkpointTimer = null;
-    removeAwarenessStates(this.awareness, [this.awareness.clientID], "tabula.disconnect");
-    this.syncController.dispose();
-    this.awareness.destroy();
+    if (this.closed) return;
+    this.closed = true;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     for (const waiter of this.waiters) clearTimeout(waiter.timer);
     this.waiters.clear();
-    for (const waiter of this.hydrationWaiters) {
-      clearTimeout(waiter.timer);
-      waiter.resolve("waiting-for-peer-state");
+    if (this.client) void this.client.disconnect();
+  }
+
+  private async ensureClient(initialWorkspace?: WorkspaceRoomSnapshot) {
+    if (this.clientPromise) return this.clientPromise;
+    this.clientPromise = createHeadlessRoomClient({
+      roomUrl: this.shareUrl,
+      roomServerUrl: this.roomServerUrl,
+      actor: this.actor,
+      adapters: this.adapters,
+      checkpointStore: this.checkpointStore,
+      initialWorkspace,
+    }).then((client) => {
+      this.client = client;
+      this.unsubscribe = client.subscribe((state) => {
+        if (state.hydrationStatus === "ready") this.markReceivedState();
+        this.notifyChange();
+      });
+      return client;
+    });
+    return this.clientPromise;
+  }
+
+  private requireClient() {
+    if (!this.client) throw new TabulaMcpError("The Tabula Room client is not open.");
+    return this.client;
+  }
+
+  private safeSnapshot() {
+    try {
+      return this.client?.getWorkspaceSnapshot() ?? null;
+    } catch {
+      return null;
     }
-    this.hydrationWaiters.clear();
-    this.doc.destroy();
-  }
-
-  private getActiveText() {
-    const documentId = this.activeDocumentId ?? this.firstDocumentId();
-    if (documentId && !this.activeDocumentId) this.activeDocumentId = documentId;
-    return documentId ? this.room.documents.get(documentId) ?? null : null;
-  }
-
-  private async ensureRoomKey() {
-    if (this.roomKey) return this.roomKey;
-    this.roomKey = await importRoomKey(this.roomKeyValue);
-    this.syncController.setRoomKey(this.roomKey);
-    return this.roomKey;
   }
 
   private firstDocumentId() {
-    return getWorkspaceRoomStructureSnapshot(this.room).nodes.find(
-      (node: WorkspaceRoomNode) => node.type === "document",
-    )?.id;
+    return this.safeSnapshot()?.nodes.find((node) => node.type === "document")?.id;
   }
 
-  private getDocumentNode(documentId: string) {
-    return getWorkspaceRoomStructureSnapshot(this.room).nodes.find(
-      (node: WorkspaceRoomNode) => node.id === documentId && node.type === "document",
-    );
-  }
-
-  private async projectWorkspaceState(): Promise<WorkspaceRoomState> {
-    const structure = getWorkspaceRoomStructureSnapshot(this.room);
-    const nodes = await Promise.all(structure.nodes.map(async (node: WorkspaceRoomNode) => {
-      if (node.type === "folder") return node;
-      const markdown = this.room.documents.get(node.id)?.toString() ?? "";
+  private async projectWorkspaceState(snapshot = this.requireClient().getWorkspaceSnapshot()): Promise<WorkspaceRoomState> {
+    const nodes = await Promise.all(snapshot.nodes.map(async (node) => {
+      if (node.type === "folder") return { ...node, type: "folder" as const };
+      const markdown = snapshot.documents[node.id] ?? "";
       return {
         ...node,
+        type: "document" as const,
         sha256: await sha256Text(markdown),
         textLength: markdown.length,
       };
@@ -802,67 +626,11 @@ export class TabulaRoomClient {
     return {
       roomId: this.roomId,
       mode: "workspace",
-      version: this.workspaceVersion,
-      rootId: structure.rootId,
+      version: this.requireClient().getState().version,
+      rootId: snapshot.rootId,
       nodes,
       activeDocumentId: this.activeDocumentId,
     };
-  }
-
-  private readSelection(cursor: unknown): LiveSelection | undefined {
-    if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) return undefined;
-    const value = cursor as { anchor?: Y.RelativePosition; head?: Y.RelativePosition };
-    if (!value.anchor || !value.head) return undefined;
-    try {
-      const anchor = Y.createAbsolutePositionFromRelativePosition(value.anchor, this.doc);
-      const head = Y.createAbsolutePositionFromRelativePosition(value.head, this.doc);
-      if (!anchor || !head || anchor.type !== head.type) return undefined;
-      const documentId = getDocumentIdForType(this.room, anchor.type);
-      return documentId
-        ? { documentId, from: Math.min(anchor.index, head.index), to: Math.max(anchor.index, head.index) }
-        : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private publishLocalPresence(selection?: LiveSelection, fileTitle?: string) {
-    const state = { ...this.awareness.getLocalState() } as Record<string, unknown>;
-    state.actor = this.actor;
-    state.user = {
-      name: this.actor.name,
-      color: this.actor.color,
-      colorLight: `${this.actor.color}33`,
-    };
-    state.lastSeen = Date.now();
-    if (this.activeDocumentId) state.activeDocumentId = this.activeDocumentId;
-    else delete state.activeDocumentId;
-    if (fileTitle) state.fileTitle = fileTitle;
-    if (selection && this.activeDocumentId) {
-      const text = this.room.documents.get(this.activeDocumentId);
-      if (text) {
-        const from = Math.max(0, Math.min(selection.from, text.length));
-        const to = Math.max(0, Math.min(selection.to, text.length));
-        state.cursor = {
-          anchor: Y.createRelativePositionFromTypeIndex(text, from),
-          head: Y.createRelativePositionFromTypeIndex(text, to),
-        };
-      }
-    } else {
-      state.cursor = null;
-    }
-    this.awareness.setLocalState(state);
-  }
-
-  private removeStaleAwareness(peerIds: readonly string[]) {
-    const allowed = new Set(peerIds);
-    const stale: number[] = [];
-    this.awareness.getStates().forEach((state, clientId) => {
-      if (clientId === this.awareness.clientID) return;
-      const actor = parseRoomActor(state?.actor);
-      if (actor && !allowed.has(actor.id)) stale.push(clientId);
-    });
-    if (stale.length) removeAwarenessStates(this.awareness, stale, "transport.peers");
   }
 
   private assertWritable(action: string) {
@@ -870,161 +638,43 @@ export class TabulaRoomClient {
   }
 
   private assertHydrated(action: string) {
-    if (!this.hasReceivedState) {
+    if (this.hydrationStatus !== "ready") {
       throw new TabulaMcpError(
         `Room is connected but waiting for workspace state. Wait for a live peer or encrypted checkpoint before attempting to ${action}.`,
       );
     }
   }
 
-  private nextOrder(room: WorkspaceRoomCrdt) {
-    const nodes = getWorkspaceRoomStructureSnapshot(room).nodes;
-    return Math.max(0, ...nodes.map((node: WorkspaceRoomNode) => node.order)) + 1;
-  }
-
   private roomStateReadiness() {
+    const stateReceived = this.hydrationStatus === "ready";
     return {
       hydrationStatus: this.hydrationStatus,
-      stateReceived: this.hasReceivedState,
-      lastStateReceivedAt: this.lastStateReceivedAtValue || undefined,
+      stateReceived,
+      lastStateReceivedAt: stateReceived ? this.lastStateReceivedAtValue || undefined : undefined,
     };
   }
 
   private markReceivedState() {
-    const wasHydrated = this.hasReceivedState;
-    this.hasReceivedState = true;
-    this.lastStateReceivedAtValue = new Date().toISOString();
-    if (wasHydrated) return;
-    for (const waiter of this.hydrationWaiters) {
-      clearTimeout(waiter.timer);
-      waiter.resolve("ready");
-    }
-    this.hydrationWaiters.clear();
+    if (!this.lastStateReceivedAtValue) this.lastStateReceivedAtValue = new Date().toISOString();
   }
 
-  private async waitForInitialState(timeoutMs: number): Promise<RoomHydrationStatus> {
-    if (this.hasReceivedState || timeoutMs <= 0) return this.hydrationStatus;
-    const boundedTimeout = Math.max(0, Math.min(timeoutMs, 30_000));
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.hydrationWaiters.delete(waiter);
-        resolve(this.hydrationStatus);
-      }, boundedTimeout);
-      const waiter = { resolve, timer };
-      this.hydrationWaiters.add(waiter);
-    });
-  }
-
-  private scheduleCheckpoint() {
-    if (!this.checkpointStore.enabled || !this.roomKey || this.statusValue === "closed") return;
-    if (this.checkpointTimer) clearTimeout(this.checkpointTimer);
-    this.checkpointTimer = setTimeout(() => {
-      this.checkpointTimer = null;
-      void this.saveCheckpointNow();
-    }, CHECKPOINT_DELAY_MS);
-  }
-
-  private async loadCheckpoint(): Promise<RoomRecoveryStatus> {
-    if (!this.checkpointStore.enabled || !this.roomKey) return "checkpoint-disabled";
-    try {
-      const loaded = await this.checkpointStore.loadEncryptedCheckpoint(this.roomId);
-      if (!loaded) {
-        this.checkpointStatusValue = { enabled: true, store: "firebase-storage", status: "missing" };
-        return "checkpoint-missing";
-      }
-      this.checkpointGeneration = loaded.generation;
-      if (loaded.status === "expired") {
-        this.checkpointStatusValue = {
-          enabled: true,
-          store: "firebase-storage",
-          status: "failed",
-          checkpointVersion: loaded.generation,
-          error: "This live room has expired.",
-        };
-        return "checkpoint-failed";
-      }
-      const update = await decryptWorkspaceRoomCheckpoint({
-        encryptedCheckpoint: loaded.encryptedCheckpoint,
-        roomId: this.roomId,
-        roomKey: this.roomKey,
-      });
-      Y.applyUpdate(this.doc, update, { type: Symbol("checkpoint") });
-      this.activeDocumentId = this.firstDocumentId();
-      this.markReceivedState();
-      this.checkpointStatusValue = {
-        enabled: true,
-        store: "firebase-storage",
-        status: "loaded",
-        checkpointVersion: loaded.generation,
-        updatedAt: new Date().toISOString(),
-      };
-      return "checkpoint-loaded";
-    } catch (error) {
-      this.checkpointStatusValue = {
-        enabled: true,
-        store: "firebase-storage",
-        status: "failed",
-        error: error instanceof Error ? error.message : "Room checkpoint could not be loaded.",
-      };
-      return "checkpoint-failed";
-    }
-  }
-
-  private async saveCheckpointNow() {
-    if (!this.checkpointStore.enabled || !this.roomKey || this.statusValue === "closed") return;
-    if (this.checkpointInFlight) return this.checkpointInFlight;
-    this.checkpointInFlight = this.performCheckpointSave().finally(() => {
-      this.checkpointInFlight = null;
-    });
-    return this.checkpointInFlight;
-  }
-
-  private async performCheckpointSave() {
-    if (!this.roomKey) return;
-    const save = async (expectedGeneration: number) => {
-      const encryptedCheckpoint = await encryptWorkspaceRoomCheckpoint({
-        roomId: this.roomId,
-        update: Y.encodeStateAsUpdate(this.doc),
-        roomKey: this.roomKey!,
-      });
-      return this.checkpointStore.saveEncryptedCheckpoint(this.roomId, {
-        expectedGeneration,
-        encryptedCheckpoint,
-        expiresAt: Date.now() + ROOM_CHECKPOINT_RETENTION_MS,
-      });
+  private checkpointStatus(): RoomCheckpointStoreStatus {
+    const status = this.client?.getState().checkpointStatus ?? (this.checkpointStore.enabled ? "missing" : "disabled");
+    return {
+      enabled: this.checkpointStore.enabled,
+      store: this.checkpointStore.enabled ? "firebase-storage" : "none",
+      status,
+      ...(status === "saved" || status === "loaded" ? { updatedAt: new Date().toISOString() } : {}),
+      ...(status === "failed" && this.lastError ? { error: this.lastError } : {}),
     };
-    try {
-      let result = await save(this.checkpointGeneration);
-      if (!result.ok) {
-        const latest = await this.checkpointStore.loadEncryptedCheckpoint(this.roomId);
-        if (latest?.status === "ready") {
-          const update = await decryptWorkspaceRoomCheckpoint({
-            encryptedCheckpoint: latest.encryptedCheckpoint,
-            roomId: this.roomId,
-            roomKey: this.roomKey,
-          });
-          Y.applyUpdate(this.doc, update, { type: Symbol("checkpoint-merge") });
-          this.checkpointGeneration = latest.generation;
-          result = await save(latest.generation);
-        }
-      }
-      if (!result.ok) throw new Error("Room checkpoint changed during save.");
-      this.checkpointGeneration = result.generation;
-      this.checkpointStatusValue = {
-        enabled: true,
-        store: "firebase-storage",
-        status: "saved",
-        checkpointVersion: result.generation,
-        updatedAt: new Date().toISOString(),
-      };
-    } catch (error) {
-      this.checkpointStatusValue = {
-        enabled: true,
-        store: "firebase-storage",
-        status: "failed",
-        error: error instanceof Error ? error.message : "Room checkpoint could not be saved.",
-      };
-    }
+  }
+
+  private recoveryStatus(): RoomRecoveryStatus {
+    const status = this.requireClient().getState().checkpointStatus;
+    if (status === "loaded") return "checkpoint-loaded";
+    if (status === "disabled") return "checkpoint-disabled";
+    if (status === "failed") return "checkpoint-failed";
+    return "checkpoint-missing";
   }
 
   private async workspaceWaitSnapshot() {
@@ -1042,7 +692,7 @@ export class TabulaRoomClient {
       activeDocumentId: this.activeDocumentId,
       workspace,
       documents,
-      checkpointStatus: this.checkpointStatusValue,
+      checkpointStatus: this.checkpointStatus(),
     };
   }
 
