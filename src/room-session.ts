@@ -5,6 +5,7 @@ import { createFirebaseWorkspaceRoomCheckpointStore } from "./room-checkpoints.j
 import { TabulaRoomClient } from "./room-client.js";
 import { createRoomShareUrl, generateRoomId, generateRoomKey } from "./share.js";
 import { withWorkspaceRoomId, type StoredWorkspace } from "./workspaces.js";
+import { abortableOperation, markOperationCommitted, throwIfOperationAborted } from "./server/operation-context.js";
 
 export const startWorkspaceRoom = async ({
   registry,
@@ -56,15 +57,25 @@ export const startWorkspaceRoom = async ({
     identityColor,
     roomCheckpointStore,
   });
+  await registry.reserve(client.sessionId);
+  let committed = false;
 
   try {
+    throwIfOperationAborted();
     const published = await client.publishWorkspaceSnapshot({
       workspace: roomWorkspace.workspace,
       documents: roomWorkspace.documents,
+      persistCheckpoint: false,
     });
-    const recoveryStatus = await client.connect();
-    registry.add(client);
+    throwIfOperationAborted();
+    const recoveryStatus = await abortableOperation(client.connect(), () => client.disconnect());
+    throwIfOperationAborted();
     const status = await client.getStatus();
+    throwIfOperationAborted();
+    registry.add(client);
+    committed = true;
+    markOperationCommitted("start_session");
+    const checkpoint = await client.persistCheckpointAfterMutation();
     const temporary = status.recoveryMode === "temporary";
 
     return {
@@ -73,12 +84,14 @@ export const startWorkspaceRoom = async ({
       roomUrl,
       recoveryStatus,
       published,
+      checkpointPending: checkpoint === "pending",
       note: temporary
         ? "Started a temporary Tabula session. It stays available while this Claude window or another participant remains connected. Claude is connected as a collaborator."
         : "Started a durable Tabula session with an encrypted room checkpoint. Claude is connected as a collaborator.",
     };
   } catch (error) {
-    client.disconnect();
+    if (!committed) client.disconnect();
+    if (!committed) await registry.cancelReservation(client.sessionId);
     throw error;
   }
 };

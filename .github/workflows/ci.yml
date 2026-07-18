@@ -38,7 +38,7 @@ jobs:
   release-verify:
     name: Release Verify
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -50,6 +50,12 @@ jobs:
           node-version: 22.12.0
           cache: npm
 
+      - name: Setup Java for Firebase emulators
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
       - name: Install dependencies
         run: npm ci
 
@@ -58,3 +64,31 @@ jobs:
 
       - name: Verify release gate
         run: npm run release:verify
+
+      - name: Checkout Tabula browser dependencies
+        uses: actions/checkout@v4
+        with:
+          repository: tabula-md/tabula-md
+          path: deps/tabula-md
+
+      - name: Checkout Room service
+        uses: actions/checkout@v4
+        with:
+          repository: tabula-md/tabula-room
+          path: deps/tabula-room
+
+      - name: Checkout Copy service
+        uses: actions/checkout@v4
+        with:
+          repository: tabula-md/tabula-json
+          path: deps/tabula-json
+
+      - name: Install interoperability dependencies
+        run: npm ci --prefix deps/tabula-md && npm ci --prefix deps/tabula-room && npm ci --prefix deps/tabula-json
+
+      - name: Verify live collaboration and Copy browser round trips
+        env:
+          TABULA_MD_REPO_DIR: ${{ github.workspace }}/deps/tabula-md
+          TABULA_ROOM_REPO_DIR: ${{ github.workspace }}/deps/tabula-room
+          TABULA_JSON_REPO_DIR: ${{ github.workspace }}/deps/tabula-json
+        run: npm run test:e2e:local-collab

@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { TabulaMcpError } from "../protocol.js";
 import { isTruthyEnvValue, positiveIntegerFromEnv, resolveProductionMode, type RuntimeEnvironment } from "../env.js";
 import type { DocumentStoreDeploymentMode } from "../documents/store.js";
+import { operationCommitForSignal } from "./operation-context.js";
 
 export type LogLevel = "silent" | "error" | "warn" | "info" | "debug";
 
@@ -70,8 +71,20 @@ export class RequestTooLargeError extends Error {
 }
 
 export class RequestTimeoutError extends Error {
-  constructor() {
-    super("Request timed out.");
+  readonly committed: boolean;
+  readonly retryable: boolean;
+  readonly operationKind?: string;
+
+  constructor(commit: { committed: boolean; kind?: string } = { committed: false }) {
+    super(commit.committed
+      ? "Request timed out after the operation committed. Retry the same request to recover its result."
+      : "Request timed out before the operation committed. It is safe to retry.");
+    this.name = "RequestTimeoutError";
+    this.committed = commit.committed;
+    // A pre-commit retry starts cleanly. A post-commit retry must use the same
+    // request so the operation ledger can return the original result.
+    this.retryable = true;
+    this.operationKind = commit.kind;
   }
 }
 
@@ -202,21 +215,48 @@ export const authorizeBearerToken = (authorizationHeader: string | null | undefi
   return timingSafeEqual(actual, expected);
 };
 
-export const withTimeout = async <T>(operation: Promise<T>, timeoutMs: number): Promise<T> => {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new RequestTimeoutError()), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-  }
+export const withTimeout = async <T>(
+  operation: Promise<T> | ((signal: AbortSignal) => Promise<T>),
+  timeoutMs: number,
+): Promise<T> => {
+  const controller = new AbortController();
+  const pending = typeof operation === "function" ? operation(controller.signal) : operation;
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const error = new RequestTimeoutError(operationCommitForSignal(controller.signal));
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+    pending.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
 };
+
+export const timeoutErrorData = (error: RequestTimeoutError) => ({
+  code: "operation_timed_out",
+  committed: error.committed,
+  retryable: error.retryable,
+  retrySameRequest: error.committed,
+  ...(error.operationKind ? { operationKind: error.operationKind } : {}),
+});
+
+export const shouldCleanupTimedOutSession = (error: RequestTimeoutError) =>
+  !error.committed && error.operationKind !== "export_copy";
 
 export const errorMessageForClient = (error: unknown, production: boolean) => {
   if (error instanceof RequestTooLargeError || error instanceof RequestTimeoutError || error instanceof SyntaxError) {

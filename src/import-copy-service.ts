@@ -5,15 +5,16 @@ import {
   parseShareSnapshot,
 } from "@tabula-md/tabula";
 import { sha256Text } from "./crypto.js";
+import { maxCopyCharacters, maxCopyFiles, maxEncryptedCopyBytes } from "./copy-limits.js";
 import { TabulaCoreError } from "./core-errors.js";
 import type { RuntimeEnvironment } from "./env.js";
 import { resolveJsonShareServerUrl } from "./share.js";
 import type { WorkspaceRoomState } from "./workspace-contract.js";
 import { buildWorkspacePathIndex } from "./workspace-paths.js";
+import { currentOperationSignal, throwIfOperationAborted } from "./server/operation-context.js";
 
-const maxEncryptedCopyBytes = 8 * 1024 * 1024;
-export const maxImportedCopyFiles = 100;
-export const maxImportedCopyCharacters = 200_000;
+export const maxImportedCopyFiles = maxCopyFiles;
+export const maxImportedCopyCharacters = maxCopyCharacters;
 
 type ImportedCopyPayload = {
   createdAt: string;
@@ -82,6 +83,7 @@ const fetchCopyPayload = async ({
   });
   const response = await fetchImpl(
     `${serviceUrl}${JSON_SHARE_API_PREFIX}${encodeURIComponent(route.snapshotId)}`,
+    { signal: currentOperationSignal() },
   );
   if (response.status === 404) {
     throw importFailed(
@@ -114,6 +116,7 @@ const fetchCopyPayload = async ({
   }
 
   let decrypted: Uint8Array;
+  throwIfOperationAborted();
   try {
     decrypted = (await decodeEncryptedData(encrypted, { decryptionKey: route.key })).data;
   } catch {

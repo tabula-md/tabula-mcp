@@ -25,6 +25,7 @@ import {
   TabulaMcpError,
 } from "./protocol.js";
 import { createFirebaseWorkspaceRoomCheckpointStore } from "./room-checkpoints.js";
+import { markOperationCommitted } from "./server/operation-context.js";
 import type {
   WorkspaceChange,
   WorkspaceDocumentNode,
@@ -176,6 +177,9 @@ export class TabulaRoomClient {
   private lastStateReceivedAtValue = "";
   private initialWorkspacePublished = false;
   private readonly waiters = new Set<Waiter>();
+  private checkpointRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private checkpointRetryAttempt = 0;
+  private checkpointPendingValue = false;
 
   constructor({
     parsedRoom,
@@ -358,9 +362,11 @@ export class TabulaRoomClient {
   async publishWorkspaceSnapshot({
     workspace,
     documents,
+    persistCheckpoint = true,
   }: {
     workspace: WorkspaceRoomState;
     documents: readonly WorkspaceSnapshotDocument[];
+    persistCheckpoint?: boolean;
   }) {
     this.assertWritable("publish workspace state");
     if (workspace.roomId !== this.roomId) {
@@ -409,7 +415,7 @@ export class TabulaRoomClient {
     this.initialWorkspacePublished = true;
     const client = await this.ensureClient(initialWorkspace);
     if (this.activeDocumentId) client.setPresence({ activeDocumentId: this.activeDocumentId });
-    if (this.checkpointStore.enabled) await client.flushCheckpoint();
+    if (persistCheckpoint && this.checkpointStore.enabled) await client.flushCheckpoint();
     return {
       emittedWorkspace: true,
       emittedDocumentCount: documents.length,
@@ -504,18 +510,22 @@ export class TabulaRoomClient {
     }
 
     await client.applyChanges(coreChanges);
-    if (this.activeDocumentId && !client.getWorkspaceSnapshot().documents[this.activeDocumentId]) {
-      this.activeDocumentId = this.firstDocumentId();
+    markOperationCommitted("workspace_change");
+    try {
+      if (this.activeDocumentId && !client.getWorkspaceSnapshot().documents[this.activeDocumentId]) {
+        this.activeDocumentId = this.firstDocumentId();
+      }
+      client.setPresence({ activeDocumentId: this.activeDocumentId });
+    } catch {
+      // Presence and response projection are post-commit conveniences. Once
+      // applyChanges succeeds, callers must never receive a mutation failure.
     }
-    client.setPresence({ activeDocumentId: this.activeDocumentId });
     return {
       sessionId: this.sessionId,
       roomId: this.roomId,
       applied: true,
       changes: appliedChanges,
       changedDocumentIds: [...changedDocumentIds],
-      workspace: await this.projectWorkspaceState(),
-      documents: (await this.workspaceWaitSnapshot()).documents,
     };
   }
 
@@ -524,6 +534,43 @@ export class TabulaRoomClient {
     if (this.checkpointStore.enabled && this.requireClient().getState().checkpointStatus !== "saved") {
       throw new TabulaMcpError(this.lastError || "The encrypted live room could not be saved.");
     }
+  }
+
+  async persistCheckpointAfterMutation(): Promise<"disabled" | "pending" | "saved"> {
+    if (!this.checkpointStore.enabled) return "disabled";
+    try {
+      await this.flushCheckpoint();
+      this.checkpointRetryAttempt = 0;
+      this.checkpointPendingValue = false;
+      return "saved";
+    } catch {
+      this.checkpointPendingValue = true;
+      this.scheduleCheckpointRetry();
+      return "pending";
+    }
+  }
+
+  checkpointPersistenceStatus(): "disabled" | "pending" | "saved" {
+    if (!this.checkpointStore.enabled) return "disabled";
+    return this.checkpointPendingValue ? "pending" : "saved";
+  }
+
+  scheduleCheckpointRetry() {
+    if (!this.checkpointStore.enabled || this.closed || this.checkpointRetryTimer) return;
+    const delays = [1_000, 5_000, 15_000, 60_000] as const;
+    const delay = delays[Math.min(this.checkpointRetryAttempt, delays.length - 1)] ?? 60_000;
+    this.checkpointRetryTimer = setTimeout(() => {
+      this.checkpointRetryTimer = null;
+      void this.flushCheckpoint().then(() => {
+        this.checkpointRetryAttempt = 0;
+        this.checkpointPendingValue = false;
+      }).catch(() => {
+        this.checkpointPendingValue = true;
+        this.checkpointRetryAttempt += 1;
+        this.scheduleCheckpointRetry();
+      });
+    }, delay);
+    this.checkpointRetryTimer.unref?.();
   }
 
   async setPresence(selection?: LiveSelection, fileTitle?: string) {
@@ -568,6 +615,8 @@ export class TabulaRoomClient {
   disconnect() {
     if (this.closed) return;
     this.closed = true;
+    if (this.checkpointRetryTimer) clearTimeout(this.checkpointRetryTimer);
+    this.checkpointRetryTimer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
     for (const waiter of this.waiters) clearTimeout(waiter.timer);

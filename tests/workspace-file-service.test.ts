@@ -313,9 +313,9 @@ describe("workspace file service", () => {
   it("creates nested directories idempotently and rejects a file collision", async () => {
     const { checkpoint, registry } = await createHarness();
     await expect(createSessionDirectory({ registry, sessionId, path: "research/2026" }))
-      .resolves.toEqual({ sessionId, path: "research/2026", created: true });
+      .resolves.toMatchObject({ sessionId, path: "research/2026", created: true, applied: true, persisted: true });
     await expect(createSessionDirectory({ registry, sessionId, path: "research/2026" }))
-      .resolves.toEqual({ sessionId, path: "research/2026", created: false });
+      .resolves.toMatchObject({ sessionId, path: "research/2026", created: false, applied: true, persisted: true });
     await expect(createSessionDirectory({ registry, sessionId, path: "README.md" }))
       .rejects.toMatchObject({ code: "path_exists" });
     expect(checkpoint.flushes).toBe(1);
@@ -376,7 +376,13 @@ describe("workspace file service", () => {
     await expect(writeSessionFile({
       registry, sessionId, path: "README.md", content: current.content, expectedRevision: current.revision,
     })).resolves.toMatchObject({ changed: false });
-    expect(checkpoint.flushes).toBe(1);
+    await expect(writeSessionFile({
+      registry, sessionId, path: "README.md", content: current.content, expectedRevision: "0".repeat(64),
+    })).resolves.toMatchObject({ changed: false, checkpointPending: false });
+    await expect(writeSessionFile({
+      registry, sessionId, path: "README.md", content: current.content,
+    })).resolves.toMatchObject({ changed: false, checkpointPending: false });
+    expect(checkpoint.flushes).toBe(0);
     await expect(writeSessionFile({
       registry, sessionId, path: "README.md", content: "stale", expectedRevision: "0".repeat(64),
     })).rejects.toMatchObject({ code: "stale_revision" });
@@ -501,7 +507,7 @@ describe("workspace file service", () => {
     });
   });
 
-  it("returns write_failed when the durable checkpoint cannot be flushed", async () => {
+  it("reports a pending checkpoint without pretending the live write failed", async () => {
     const { registry, session } = await createHarness();
     const current = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
     session.flushCheckpoint = async () => {
@@ -514,9 +520,11 @@ describe("workspace file service", () => {
       path: "README.md",
       content: `${current.content}\nChanged\n`,
       expectedRevision: current.revision,
-    })).rejects.toMatchObject({
-      code: "write_failed",
-      details: { path: "README.md" },
+    })).resolves.toMatchObject({
+      path: "README.md",
+      changed: true,
+      checkpointPending: true,
     });
+    expect((await readSessionFile({ registry, sessionId, path: "README.md" })).content).toContain("Changed");
   });
 });

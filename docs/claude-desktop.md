@@ -40,6 +40,12 @@ Claude can also create directories, move or rename files and directories, and
 delete paths. File changes remain revision-guarded, and deleting a non-empty
 directory requires explicit recursive intent.
 
+Claude may connect to multiple Rooms in one connector process. Each Room file
+tool requires the `sessionId` returned by Join Room or Start Session, and there
+is no implicit active Room. Ask Claude to leave a Session when it is finished;
+this disconnects the agent but does not delete the Room or its files. Connected
+Room handles and file paths are not enumerated through MCP Resources.
+
 For a fixed handoff, Claude can call **Import Copy** with a private `#json`
 link. It receives relative Markdown paths and contents for host-native local
 file creation; it does not join a live Session or write files by itself.

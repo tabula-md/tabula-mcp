@@ -19,8 +19,10 @@ import {
   logOperationalError,
   logRequest,
   RequestTimeoutError,
+  shouldCleanupTimedOutSession,
   RequestTooLargeError,
   resolveOperationalPolicy,
+  timeoutErrorData,
   withTimeout,
   type OperationalPolicyOptions,
 } from "./operational-policy.js";
@@ -32,6 +34,8 @@ import {
 } from "./origin-policy.js";
 import { resolveWriteEnabled } from "./write-access.js";
 import { TABULA_MCP_PRODUCT_DESCRIPTION } from "../public-copy.js";
+import { runWithOperationSignal } from "./operation-context.js";
+import type { SessionRegistryLifecycle } from "../registry.js";
 
 export type WebEnvironment = RuntimeEnvironment;
 
@@ -48,6 +52,7 @@ export type TabulaMcpWebHandlerOptions = {
   rateLimitMax?: number;
   rateLimitWindowMs?: number;
   requestTimeoutMs?: number;
+  roomSessionLifecycle?: SessionRegistryLifecycle;
   sessionIdleTtlMs?: number;
   sessionIdGenerator?: () => string;
   statelessHttp?: boolean;
@@ -55,6 +60,7 @@ export type TabulaMcpWebHandlerOptions = {
 };
 
 export type TabulaMcpWebHandler = {
+  close(): Promise<void>;
   deploymentMode: DocumentStoreDeploymentMode;
   documentStoreKind: DocumentStoreKind;
   version: string;
@@ -120,10 +126,11 @@ const jsonRpcError = (
   code: number,
   message: string,
   headers?: HeadersInit,
+  data?: Record<string, unknown>,
 ) =>
   jsonResponse(request, originPolicy, status, {
     jsonrpc: "2.0",
-    error: { code, message },
+    error: { code, message, ...(data ? { data } : {}) },
     id: null,
   }, headers);
 
@@ -181,7 +188,7 @@ const requestWithLimitedBody = async (request: Request, maxBytes: number) => {
 };
 
 const closeActiveSession = async (active: ActiveWebSession) => {
-  active.instance.registry.clear();
+  await active.instance.registry.clear();
   await active.transport.close();
   await active.instance.server.close();
 };
@@ -259,6 +266,7 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
       forceDocumentAppTools: policy.statelessHttp,
       writeEnabled,
       env,
+      roomSessionLifecycle: options.roomSessionLifecycle,
     });
 
   const createStatefulSession = async () => {
@@ -304,7 +312,10 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
     });
     await instance.server.connect(transport);
     try {
-      const response = await withTimeout(transport.handleRequest(request), policy.requestTimeoutMs);
+      const response = await withTimeout(
+        (signal) => runWithOperationSignal(signal, () => transport.handleRequest(new Request(request, { signal }))),
+        policy.requestTimeoutMs,
+      );
       return withCors(response, request, originPolicy);
     } finally {
       await closeActiveSession({ createdAt: Date.now(), instance, lastSeenAt: Date.now(), transport });
@@ -352,11 +363,20 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
         }
 
         active.lastSeenAt = Date.now();
-        return withCors(
-          await withTimeout(active.transport.handleRequest(limitedRequest), policy.requestTimeoutMs),
-          limitedRequest,
-          originPolicy,
-        );
+        try {
+          return withCors(await withTimeout(
+            (signal) => runWithOperationSignal(
+              signal,
+              () => active.transport.handleRequest(new Request(limitedRequest, { signal })),
+            ),
+            policy.requestTimeoutMs,
+          ), limitedRequest, originPolicy);
+        } catch (error) {
+          if (error instanceof RequestTimeoutError && shouldCleanupTimedOutSession(error)) {
+            cleanupSession(sessions, sessionId);
+          }
+          throw error;
+        }
       }
 
       if (limitedRequest.method === "POST") {
@@ -364,7 +384,21 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
           return jsonRpcError(limitedRequest, originPolicy, 503, -32000, "Too many active MCP sessions.");
         }
         const active = await createStatefulSession();
-        const response = await withTimeout(active.transport.handleRequest(limitedRequest), policy.requestTimeoutMs);
+        let response: Response;
+        try {
+          response = await withTimeout(
+            (signal) => runWithOperationSignal(
+              signal,
+              () => active.transport.handleRequest(new Request(limitedRequest, { signal })),
+            ),
+            policy.requestTimeoutMs,
+          );
+        } catch (error) {
+          const initializedSessionId = active.transport.sessionId;
+          if (initializedSessionId) cleanupSession(sessions, initializedSessionId);
+          else await closeActiveSession({ ...active, createdAt: Date.now(), lastSeenAt: Date.now() });
+          throw error;
+        }
         if (!active.transport.sessionId) {
           await closeActiveSession({ ...active, createdAt: Date.now(), lastSeenAt: Date.now() });
         }
@@ -380,11 +414,18 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
         status,
         -32603,
         errorMessageForClient(error, policy.production),
+        undefined,
+        error instanceof RequestTimeoutError ? timeoutErrorData(error) : undefined,
       );
     }
   };
 
   return {
+    async close() {
+      const activeSessions = [...sessions.values()];
+      sessions.clear();
+      await Promise.allSettled(activeSessions.map((active) => closeActiveSession(active)));
+    },
     deploymentMode,
     documentStoreKind: documentStore.kind,
     version: TABULA_MCP_VERSION,

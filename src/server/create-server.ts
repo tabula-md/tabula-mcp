@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createDocumentAppResource, registerDocumentAppResource } from "../app/resource.js";
 import { DocumentRegistry } from "../documents/registry.js";
-import type { RuntimeEnvironment } from "../env.js";
+import { positiveIntegerFromEnv, type RuntimeEnvironment } from "../env.js";
 import { registerFileResources } from "../file-resources.js";
 import {
   createDefaultDocumentStore,
@@ -10,7 +10,7 @@ import {
   type DocumentStoreDeploymentMode,
   type DocumentStoreKind,
 } from "../documents/store.js";
-import { SessionRegistry } from "../registry.js";
+import { SessionRegistry, type SessionRegistryLifecycle } from "../registry.js";
 import { WorkspaceRegistry } from "../workspaces.js";
 import { TABULA_MCP_VERSION } from "../version.js";
 import { createCoreInstructions } from "./instructions.js";
@@ -25,6 +25,7 @@ export type TabulaMcpServerOptions = {
   documentStore?: DocumentStore;
   deploymentMode?: DocumentStoreDeploymentMode;
   env?: RuntimeEnvironment;
+  roomSessionLifecycle?: SessionRegistryLifecycle;
 };
 
 export type TabulaMcpServerInstance = {
@@ -45,7 +46,10 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const deploymentMode = resolveDocumentStoreDeploymentMode({ deploymentMode: options.deploymentMode });
   const allowTemporaryRooms = deploymentMode === "local";
   const documentStore = options.documentStore ?? createDefaultDocumentStore({ deploymentMode });
-  const registry = new SessionRegistry();
+  const registry = new SessionRegistry({
+    lifecycle: options.roomSessionLifecycle,
+    maxSessions: positiveIntegerFromEnv(env?.TABULA_MCP_MAX_ROOMS_PER_SESSION, 8),
+  });
   const workspaces = new WorkspaceRegistry();
   const documents = new DocumentRegistry(documentStore);
   const documentAppResource = createDocumentAppResource({ documentAppHtml: options.documentAppHtml });

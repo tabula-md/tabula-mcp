@@ -6,6 +6,7 @@ import { createFirebaseWorkspaceRoomCheckpointStore } from "./room-checkpoints.j
 import { TabulaRoomClient } from "./room-client.js";
 import { startWorkspaceRoom } from "./room-session.js";
 import type { StoredWorkspace } from "./workspaces.js";
+import { abortableOperation, markOperationCommitted, throwIfOperationAborted } from "./server/operation-context.js";
 
 const summarizeSession = async (client: TabulaRoomClient) => {
   const status = await client.getStatus();
@@ -46,27 +47,35 @@ export const joinRoomSession = async ({
     appOrigin: parsedRoom.appOrigin,
     ...(env ? { env } : {}),
   });
+  const existing = registry.findByShareUrl(parsedRoom.shareUrl);
+  if (existing) return { ...await summarizeSession(existing), reused: true };
   const client = new TabulaRoomClient({
     parsedRoom,
     roomServerUrl,
     writeAccess: writeEnabled,
     roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
   });
+  await registry.reserve(client.sessionId);
   try {
-    await client.connect({ waitForStateMs: 30_000 });
+    throwIfOperationAborted();
+    await abortableOperation(client.connect({ waitForStateMs: 30_000 }), () => client.disconnect());
+    throwIfOperationAborted();
   } catch (error) {
     client.disconnect();
+    await registry.cancelReservation(client.sessionId);
     throw error;
   }
-  registry.add(client);
   const session = await summarizeSession(client);
+  throwIfOperationAborted();
   if (!session.ready) {
+    client.disconnect();
     throw new TabulaCoreError("session_not_ready", "The Tabula session connected but its workspace state has not arrived.", {
-      details: { sessionId: session.sessionId },
-      retry: "Keep the Tabula room open and retry List Files with this session id.",
+      retry: "Keep the Tabula room open and join it again after its workspace state is available.",
     });
   }
-  return session;
+  registry.add(client);
+  markOperationCommitted("join_room");
+  return { ...session, reused: false };
 };
 
 export const startWorkspaceSession = async ({
@@ -90,9 +99,15 @@ export const startWorkspaceSession = async ({
     allowTemporary: allowTemporaryRooms,
     writeAccess: writeEnabled,
   });
-  const client = registry.get(started.sessionId);
   return {
-    ...(await summarizeSession(client)),
+    sessionId: started.sessionId,
+    ready: started.stateReceived,
+    canWrite: started.writeAccess,
+    fileCount: started.published.emittedDocumentCount,
+    otherCollaboratorCount: started.collaborators.length,
     sessionUrl: started.roomUrl,
+    applied: true as const,
+    persisted: !started.checkpointPending && started.recoveryMode !== "temporary",
+    checkpointPending: started.checkpointPending,
   };
 };

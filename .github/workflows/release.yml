@@ -16,7 +16,7 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout release tag
@@ -28,6 +28,12 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+
+      - name: Setup Java for Firebase emulators
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
 
       - name: Use current npm with trusted publishing support
         run: npm install --global npm@latest
@@ -46,6 +52,34 @@ jobs:
 
       - name: Run the release gate and build artifacts
         run: npm run release:verify
+
+      - name: Checkout Tabula browser dependencies
+        uses: actions/checkout@v6
+        with:
+          repository: tabula-md/tabula-md
+          path: deps/tabula-md
+
+      - name: Checkout Room service
+        uses: actions/checkout@v6
+        with:
+          repository: tabula-md/tabula-room
+          path: deps/tabula-room
+
+      - name: Checkout Copy service
+        uses: actions/checkout@v6
+        with:
+          repository: tabula-md/tabula-json
+          path: deps/tabula-json
+
+      - name: Install interoperability dependencies
+        run: npm ci --prefix deps/tabula-md && npm ci --prefix deps/tabula-room && npm ci --prefix deps/tabula-json
+
+      - name: Verify live collaboration and Copy browser round trips
+        env:
+          TABULA_MD_REPO_DIR: ${{ github.workspace }}/deps/tabula-md
+          TABULA_ROOM_REPO_DIR: ${{ github.workspace }}/deps/tabula-room
+          TABULA_JSON_REPO_DIR: ${{ github.workspace }}/deps/tabula-json
+        run: npm run test:e2e:local-collab
 
       - name: Publish npm package through OIDC
         run: npm publish --access public --ignore-scripts

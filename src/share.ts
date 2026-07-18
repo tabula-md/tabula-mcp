@@ -4,6 +4,7 @@ import {
   createShareSnapshotPayloadFromData,
   encodeEncryptedData,
   generateEncryptionKey,
+  parseShareSnapshot,
   serializeShareSnapshot,
 } from "@tabula-md/tabula";
 import type { ShareSnapshotPayload } from "@tabula-md/tabula/data/json";
@@ -15,6 +16,17 @@ import {
   sha256Text,
 } from "./crypto.js";
 import { encodeBase64Url, TabulaMcpError, trimTrailingSlash, type EncryptedEnvelope } from "./protocol.js";
+import {
+  maxCopyCharacters,
+  maxCopyFileBytes,
+  maxCopyFiles,
+  maxCopyFolders,
+  maxCopyPathBytes,
+  maxCopyPlaintextBytes,
+  maxEncryptedCopyBytes,
+} from "./copy-limits.js";
+import { currentOperationSignal, markOperationCommitted, throwIfOperationAborted } from "./server/operation-context.js";
+import { currentOperationId } from "./server/operation-ledger.js";
 
 const defaultTabulaAppOrigin = "https://tabula.md";
 const defaultTabulaJsonServerUrl = "https://json.tabula.md";
@@ -27,6 +39,17 @@ const jsonSharePostPath = "/api/v2/post/";
 const mainFileId = "main";
 const shareRootFolderIdBase = "tabula-mcp-root";
 const shareRootFolderTitle = "Tabula workspace";
+
+export type SharePathConflict = {
+  type: "path_collision" | "file_folder_collision";
+  paths: string[];
+};
+
+export class InvalidShareWorkspaceError extends TabulaMcpError {
+  constructor(message: string, readonly conflicts: SharePathConflict[] = []) {
+    super(message);
+  }
+}
 
 type FetchLike = typeof fetch;
 
@@ -230,18 +253,96 @@ export const createEncryptedMarkdownSnapshot = async ({
 };
 
 const normalizeShareFile = (file: ShareMarkdownWorkspaceFile) => {
-  const title = file.title.trim() || "Untitled Document";
+  const title = file.title.trim().normalize("NFC") || "Untitled Document";
   const rawPath = file.path?.replaceAll("\\", "/").trim();
   if (rawPath && (rawPath.startsWith("/") || /^[A-Za-z]:\//.test(rawPath))) {
-    throw new TabulaMcpError("Tabula snapshot file paths must be relative.");
+    throw new InvalidShareWorkspaceError("Tabula snapshot file paths must be relative.");
   }
-  const normalizedPath = rawPath
+  const normalizedPath = (rawPath
     ? path.posix.normalize(rawPath)
-    : title;
-  if (!normalizedPath || normalizedPath === "." || normalizedPath === ".." || normalizedPath.startsWith("../")) {
-    throw new TabulaMcpError("Tabula snapshot file paths must stay inside the workspace.");
+    : title).normalize("NFC");
+  if (
+    !normalizedPath ||
+    normalizedPath === "." ||
+    normalizedPath === ".." ||
+    normalizedPath.startsWith("../") ||
+    normalizedPath.endsWith("/")
+  ) {
+    throw new InvalidShareWorkspaceError("Tabula snapshot file paths must stay inside the workspace.");
   }
-  return { id: file.id.trim(), path: normalizedPath, title, text: file.text };
+  return {
+    id: file.id.trim(),
+    path: normalizedPath,
+    title: path.posix.basename(normalizedPath) || title,
+    text: file.text,
+  };
+};
+
+const normalizeAndValidateShareFiles = (files: readonly ShareMarkdownWorkspaceFile[]) => {
+  const normalized = files.map(normalizeShareFile).filter((file) => file.id);
+  if (normalized.length === 0) {
+    throw new InvalidShareWorkspaceError("At least one Markdown file is required for a Tabula snapshot link.");
+  }
+  if (normalized.length > maxCopyFiles) {
+    throw new InvalidShareWorkspaceError(`A Tabula copy can contain at most ${maxCopyFiles} Markdown files.`);
+  }
+  const totalCharacters = normalized.reduce((total, file) => total + file.text.length, 0);
+  if (totalCharacters > maxCopyCharacters) {
+    throw new InvalidShareWorkspaceError(`A Tabula copy can contain at most ${maxCopyCharacters} Markdown characters.`);
+  }
+  const encoder = new TextEncoder();
+  const totalBytes = normalized.reduce((total, file) => total + encoder.encode(file.text).byteLength, 0);
+  if (totalBytes > maxCopyPlaintextBytes) {
+    throw new InvalidShareWorkspaceError(
+      `A Tabula copy can contain at most ${maxCopyPlaintextBytes} plaintext bytes.`,
+    );
+  }
+
+  const ids = new Set<string>();
+  const paths = new Map<string, string>();
+  const folderPaths = new Set<string>();
+  for (const file of normalized) {
+    if (ids.has(file.id)) {
+      throw new InvalidShareWorkspaceError(`Tabula copy file id "${file.id}" is duplicated.`);
+    }
+    ids.add(file.id);
+    const foldedPath = file.path.toLowerCase();
+    const existingPath = paths.get(foldedPath);
+    if (existingPath) {
+      throw new InvalidShareWorkspaceError(
+        `Tabula copy paths "${existingPath}" and "${file.path}" conflict.`,
+        [{ type: "path_collision", paths: [existingPath, file.path] }],
+      );
+    }
+    if (encoder.encode(file.path).byteLength > maxCopyPathBytes) {
+      throw new InvalidShareWorkspaceError(`Tabula copy path "${file.path}" exceeds ${maxCopyPathBytes} bytes.`);
+    }
+    if (encoder.encode(file.text).byteLength > maxCopyFileBytes) {
+      throw new InvalidShareWorkspaceError(`Tabula copy file "${file.path}" exceeds ${maxCopyFileBytes} bytes.`);
+    }
+    paths.set(foldedPath, file.path);
+    const segments = file.path.split("/");
+    for (let index = 1; index < segments.length; index += 1) {
+      folderPaths.add(segments.slice(0, index).join("/").toLocaleLowerCase("en-US"));
+    }
+  }
+  if (folderPaths.size > maxCopyFolders) {
+    throw new InvalidShareWorkspaceError(`A Tabula copy can contain at most ${maxCopyFolders} folders.`);
+  }
+  for (const file of normalized) {
+    const segments = file.path.split("/");
+    for (let index = 1; index < segments.length; index += 1) {
+      const parentPath = segments.slice(0, index).join("/");
+      const blockingFile = paths.get(parentPath.toLowerCase());
+      if (blockingFile) {
+        throw new InvalidShareWorkspaceError(
+          `Tabula copy file "${blockingFile}" conflicts with folder path "${parentPath}".`,
+          [{ type: "file_folder_collision", paths: [blockingFile, parentPath] }],
+        );
+      }
+    }
+  }
+  return normalized;
 };
 
 const createShareRootFolderId = (files: readonly ShareMarkdownWorkspaceFile[]) => {
@@ -268,10 +369,7 @@ const createMcpShareSnapshotPayload = ({
   commentsByFileId?: ShareSnapshotPayload["commentsByFileId"];
   now?: () => Date;
 }) => {
-  const snapshotFiles = files.map(normalizeShareFile).filter((file) => file.id);
-  if (snapshotFiles.length === 0) {
-    throw new TabulaMcpError("At least one Markdown file is required for a Tabula snapshot link.");
-  }
+  const snapshotFiles = normalizeAndValidateShareFiles(files);
   const activeFile = snapshotFiles.find((file) => file.id === activeFileId) ?? snapshotFiles[0];
   const rootFolderId = createShareRootFolderId(snapshotFiles);
   const usedIds = new Set(snapshotFiles.map((file) => file.id));
@@ -310,7 +408,7 @@ const createMcpShareSnapshotPayload = ({
     }
   }
 
-  return createShareSnapshotPayloadFromData({
+  const payload = createShareSnapshotPayloadFromData({
     files: snapshotFiles.map((file, index) => ({
       id: file.id,
       title: file.title,
@@ -324,6 +422,8 @@ const createMcpShareSnapshotPayload = ({
     commentsByFileId,
     now,
   });
+  parseShareSnapshot(serializeShareSnapshot(payload));
+  return payload;
 };
 
 export const createEncryptedJsonShareSnapshot = async ({
@@ -434,12 +534,20 @@ export const shareMarkdownDocument = async ({
     snapshotKey,
     now,
   });
+  throwIfOperationAborted();
+  if (encrypted.byteLength > maxEncryptedCopyBytes) {
+    throw new InvalidShareWorkspaceError(
+      `The encrypted Tabula copy exceeds the ${maxEncryptedCopyBytes}-byte upload limit.`,
+    );
+  }
   const response = await fetchImpl(`${normalizedJsonServerUrl}${jsonSharePostPath}`, {
     method: "POST",
     headers: {
       "content-type": "application/octet-stream",
+      ...(currentOperationId() ? { "idempotency-key": currentOperationId()! } : {}),
     },
     body: toArrayBuffer(encrypted),
+    signal: currentOperationSignal(),
   });
 
   if (!response.ok) {
@@ -447,6 +555,7 @@ export const shareMarkdownDocument = async ({
   }
 
   const created = validateJsonShareCreateResponse((await response.json()) as unknown, normalizedJsonServerUrl);
+  markOperationCommitted("export_copy");
   const shareUrl = createJsonShareUrl({ appOrigin, snapshotId: created.id, snapshotKey });
 
   return {
@@ -478,7 +587,7 @@ export const shareMarkdownWorkspace = async ({
   now,
   env = process.env,
 }: ShareMarkdownWorkspaceOptions): Promise<SharedMarkdownWorkspace> => {
-  const normalizedFiles = files.map(normalizeShareFile).filter((file) => file.id);
+  const normalizedFiles = normalizeAndValidateShareFiles(files);
   const normalizedJsonServerUrl = resolveJsonShareServerUrl({
     appOrigin,
     jsonServerUrl,
@@ -492,12 +601,20 @@ export const shareMarkdownWorkspace = async ({
     snapshotKey,
     now,
   });
+  throwIfOperationAborted();
+  if (encrypted.byteLength > maxEncryptedCopyBytes) {
+    throw new InvalidShareWorkspaceError(
+      `The encrypted Tabula copy exceeds the ${maxEncryptedCopyBytes}-byte upload limit.`,
+    );
+  }
   const response = await fetchImpl(`${normalizedJsonServerUrl}${jsonSharePostPath}`, {
     method: "POST",
     headers: {
       "content-type": "application/octet-stream",
+      ...(currentOperationId() ? { "idempotency-key": currentOperationId()! } : {}),
     },
     body: toArrayBuffer(encrypted),
+    signal: currentOperationSignal(),
   });
 
   if (!response.ok) {
@@ -505,6 +622,7 @@ export const shareMarkdownWorkspace = async ({
   }
 
   const created = validateJsonShareCreateResponse((await response.json()) as unknown, normalizedJsonServerUrl);
+  markOperationCommitted("export_copy");
   const shareUrl = createJsonShareUrl({ appOrigin, snapshotId: created.id, snapshotKey });
   const textLength = normalizedFiles.reduce((total, file) => total + file.text.length, 0);
 

@@ -28,6 +28,11 @@ changes.
 the remaining familiar filesystem operations. Move File also renames files and
 directories when the destination changes only the name.
 
+All Room operations use the explicit `sessionId` returned by `join_room` or
+`start_session`, so several Rooms can remain connected without an active-Room
+fallback. `leave_session` disconnects one agent connection without deleting
+the Room or its files.
+
 Codex can read local Markdown files with its filesystem tools, then pass them to
 `export_copy` for a fixed encrypted `#json` copy, `start_session` for a new live
 workspace, or `write_file` / `write_files` for an existing session.
