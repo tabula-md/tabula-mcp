@@ -456,8 +456,8 @@ const run = async () => {
 
     await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, async (client) => {
       const expectedTools = [
-        "tabula_start_session", "tabula_join_room", "tabula_list_files", "tabula_read_files",
-        "tabula_search_files", "tabula_write_files", "tabula_edit_file", "tabula_create_directory",
+        "tabula_start_session", "tabula_join_room", "tabula_list_files", "tabula_read_file", "tabula_read_files",
+        "tabula_search_files", "tabula_write_file", "tabula_write_files", "tabula_edit_file", "tabula_create_directory",
         "tabula_move_file", "tabula_delete_path", "tabula_import_copy", "tabula_export_copy",
       ];
       assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), expectedTools);

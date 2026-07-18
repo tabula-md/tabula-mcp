@@ -11,8 +11,10 @@ const coreTools = [
   "tabula_start_session",
   "tabula_join_room",
   "tabula_list_files",
+  "tabula_read_file",
   "tabula_read_files",
   "tabula_search_files",
+  "tabula_write_file",
   "tabula_write_files",
   "tabula_edit_file",
   "tabula_create_directory",
@@ -98,7 +100,7 @@ describe("write access configuration", () => {
 });
 
 describe("core MCP contract", () => {
-  it.each([false, true])("exposes exactly twelve high-level tools (MCP Apps=%s)", async (mcpApps) => {
+  it.each([false, true])("exposes exactly fourteen high-level tools (MCP Apps=%s)", async (mcpApps) => {
     await withClient(async (client) => {
       const listed = await client.listTools();
       expect(listed.tools.map((tool) => tool.name)).toEqual(coreTools);
@@ -112,6 +114,7 @@ describe("core MCP contract", () => {
         expectInputPropertiesDescribed(tool.inputSchema, tool.name);
         const destructive = [
           "tabula_write_files",
+          "tabula_write_file",
           "tabula_edit_file",
           "tabula_move_file",
           "tabula_delete_path",
@@ -148,8 +151,8 @@ describe("core MCP contract", () => {
     await withClient(async (client) => {
       const instructions = client.getInstructions() ?? "";
       expect(instructions).toContain("keep the URL private");
-      expect(instructions).toContain("Read existing files with Read Files");
-      expect(instructions).toContain("pass their revisions to Write Files, Edit File, Move or Rename, or Delete Path");
+      expect(instructions).toContain("Use Read File for one file");
+      expect(instructions).toContain("pass their revisions to Write File, Write Files, Edit File, Move or Rename, or Delete Path");
       expect(instructions).toContain("Use Edit File for small exact replacements");
       expect(instructions).toContain("Move or Rename accepts files and directories");
       expect(instructions).toContain("Export Copy");
@@ -167,8 +170,10 @@ describe("core MCP contract", () => {
         tabula_start_session: "Start Session",
         tabula_join_room: "Join Session",
         tabula_list_files: "List Files",
+        tabula_read_file: "Read File",
         tabula_read_files: "Read Files",
         tabula_search_files: "Search Files",
+        tabula_write_file: "Write File",
         tabula_write_files: "Write Files",
         tabula_edit_file: "Edit File",
         tabula_create_directory: "Create Directory",
@@ -180,10 +185,12 @@ describe("core MCP contract", () => {
       expect(tools.tabula_start_session?.description).toContain("Markdown files");
       expect(tools.tabula_join_room?.description).toContain("private #room URL");
       expect(tools.tabula_list_files?.description).toContain("target path is unknown");
+      expect(tools.tabula_read_file?.description).toContain("bounded line range");
       expect(tools.tabula_read_files?.description).toContain("revisions");
       expect(tools.tabula_search_files?.description).toContain("line numbers");
+      expect(tools.tabula_write_file?.description).toContain("one Markdown file");
       expect(tools.tabula_write_files?.description).toContain("Atomically");
-      expect(tools.tabula_edit_file?.description).toContain("exact, unique text");
+      expect(tools.tabula_edit_file?.description).toContain("oldText still matches safely");
       expect(tools.tabula_create_directory?.description).toContain("missing parents");
       expect(tools.tabula_move_file?.description).toContain("Move or rename");
       expect(tools.tabula_delete_path?.description).toContain("recursive true");
@@ -202,8 +209,10 @@ describe("core MCP contract", () => {
       for (const name of [
         "tabula_join_room",
         "tabula_list_files",
+        "tabula_read_file",
         "tabula_read_files",
         "tabula_search_files",
+        "tabula_write_file",
         "tabula_write_files",
         "tabula_edit_file",
         "tabula_create_directory",
@@ -217,13 +226,18 @@ describe("core MCP contract", () => {
     }, { mcpApps: true });
   });
 
-  it("reads one or many files through one array-based tool contract", async () => {
+  it("provides focused single-file tools alongside atomic batch tools", async () => {
     await withClient(async (client) => {
       const tools = await client.listTools();
-      const read = tools.tools.find((tool) => tool.name === "tabula_read_files");
-      expect(JSON.stringify(read?.inputSchema)).toContain('"paths"');
-      expect(JSON.stringify(read?.inputSchema)).not.toContain('"path"');
-      expect(tools.tools.map((tool) => tool.name)).not.toContain("tabula_read_file");
+      const read = tools.tools.find((tool) => tool.name === "tabula_read_file");
+      const readMany = tools.tools.find((tool) => tool.name === "tabula_read_files");
+      const write = tools.tools.find((tool) => tool.name === "tabula_write_file");
+      const writeMany = tools.tools.find((tool) => tool.name === "tabula_write_files");
+      expect(JSON.stringify(read?.inputSchema)).toContain('"tailLines"');
+      expect(JSON.stringify(read?.inputSchema)).toContain('"startLine"');
+      expect(JSON.stringify(readMany?.inputSchema)).toContain('"paths"');
+      expect(JSON.stringify(write?.inputSchema)).toContain('"content"');
+      expect(JSON.stringify(writeMany?.inputSchema)).toContain('"files"');
     });
   });
 

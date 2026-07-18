@@ -6,6 +6,7 @@ export type TabulaCoreErrorCode =
   | "file_not_found"
   | "invalid_input"
   | "invalid_path"
+  | "invalid_range"
   | "parent_folder_not_found"
   | "path_exists"
   | "read_too_large"

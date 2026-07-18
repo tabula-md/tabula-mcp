@@ -21,14 +21,17 @@ The model must not echo a Room URL after joining. Exported Copy URLs should be p
 
 The MCP server is writable by default. Claude Desktop, Claude Code, Codex, or another MCP host controls approval for mutating calls.
 
-`tabula_write_files` and `tabula_edit_file` require revisions returned by
-`tabula_read_files` when they change existing files. Moving, renaming, or
+`tabula_write_file`, `tabula_write_files`, and `tabula_edit_file` require
+revisions returned by `tabula_read_file` or `tabula_read_files` when they
+change existing files. Moving, renaming, or
 deleting a file is revision-guarded as well. The server validates existing
 files before applying a collaboration transaction and rejects stale or
-ambiguous changes without partially applying them. Deleting a non-empty
+ambiguous changes without partially applying them. An exact edit may rebase
+onto a newer revision only when its text anchor remains uniquely safe; the
+result reports that rebase and a bounded diff. Deleting a non-empty
 directory requires explicit recursive intent. Batch reads are limited to 20
 files and 100,000 total characters; oversized reads fail without silently
-truncating Markdown.
+truncating Markdown. Single-file reads can request bounded line ranges.
 
 The model never supplies Yjs updates, document IDs, or text patch offsets.
 Text edits are applied as incremental Yjs operations so unaffected collaborative

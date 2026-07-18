@@ -72,8 +72,10 @@ try {
     "tabula_start_session",
     "tabula_join_room",
     "tabula_list_files",
+    "tabula_read_file",
     "tabula_read_files",
     "tabula_search_files",
+    "tabula_write_file",
     "tabula_write_files",
     "tabula_edit_file",
     "tabula_create_directory",
@@ -81,7 +83,7 @@ try {
     "tabula_delete_path",
     "tabula_import_copy",
     "tabula_export_copy",
-  ]), "Vercel MCP endpoint did not expose exactly the twelve core tools");
+  ]), "Vercel MCP endpoint did not expose exactly the fourteen core tools");
 } finally {
   await client.close();
 }

@@ -4,6 +4,7 @@ import { getTextPatchesForChange } from "@tabula-md/tabula";
 import { TabulaCoreError } from "./core-errors.js";
 import { assertMarkdownSize } from "./documents/snapshot.js";
 import type { SessionRegistry } from "./registry.js";
+import { renderExactTextDiff, type ExactTextChange } from "./text-diff.js";
 import type { WorkspaceChange } from "./workspace-contract.js";
 import { buildWorkspacePathIndex, normalizeWorkspaceFilePath } from "./workspace-paths.js";
 
@@ -57,6 +58,7 @@ export type SessionFileWrite = {
 export type SessionTextEdit = {
   oldText: string;
   newText: string;
+  replaceAll?: boolean;
 };
 
 type WorkspacePathIndex = ReturnType<typeof buildWorkspacePathIndex>;
@@ -140,6 +142,9 @@ const lineAtOffset = (content: string, offset: number) =>
 
 export const maxSessionReadFiles = 20;
 export const maxSessionReadCharacters = 100_000;
+export const defaultSessionReadLines = 400;
+export const maxSessionReadLines = 2_000;
+export const maxSearchContextLines = 5;
 
 export const listSessionFiles = async ({
   registry,
@@ -256,34 +261,170 @@ export const readSessionFiles = async ({
   };
 };
 
+const lineStartsOf = (content: string) => {
+  const starts = [0];
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === "\n") starts.push(index + 1);
+  }
+  return starts;
+};
+
+export const readSessionFile = async ({
+  registry,
+  sessionId,
+  path: requestedPath,
+  startLine,
+  lineCount,
+  tailLines,
+}: {
+  registry: SessionRegistry;
+  sessionId: string;
+  path: string;
+  startLine?: number;
+  lineCount?: number;
+  tailLines?: number;
+}) => {
+  if (tailLines !== undefined && (startLine !== undefined || lineCount !== undefined)) {
+    throw new TabulaCoreError("invalid_input", "tailLines cannot be combined with startLine or lineCount.", {
+      retry: "Use tailLines by itself, or use startLine with an optional lineCount.",
+    });
+  }
+  const requestedCount = tailLines ?? lineCount ?? defaultSessionReadLines;
+  if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > maxSessionReadLines) {
+    throw new TabulaCoreError("invalid_range", "The requested line count is outside the supported range.", {
+      details: { requestedLines: requestedCount, maxLines: maxSessionReadLines },
+      retry: `Read between 1 and ${maxSessionReadLines} lines at a time.`,
+    });
+  }
+  if (startLine !== undefined && (!Number.isInteger(startLine) || startLine < 1)) {
+    throw new TabulaCoreError("invalid_range", "startLine must be a positive line number.", {
+      retry: "Use a startLine of 1 or greater.",
+    });
+  }
+
+  const filePath = normalizeWorkspaceFilePath(requestedPath);
+  const { snapshot } = await readReadySnapshot(registry, sessionId);
+  const entry = buildWorkspacePathIndex(snapshot.workspace).byPath.get(filePath);
+  if (!entry || entry.node.type !== "document") {
+    throw new TabulaCoreError("file_not_found", "Markdown file was not found in the Tabula session.", {
+      details: { path: filePath },
+      retry: "List files to find the correct path.",
+    });
+  }
+  const fullContent = snapshot.documents[entry.node.id];
+  if (fullContent === undefined) {
+    throw new TabulaCoreError("session_not_ready", "The file content has not arrived yet.", {
+      details: { sessionId, path: filePath },
+      retry: "Wait for session state and retry.",
+    });
+  }
+
+  const lineStarts = lineStartsOf(fullContent);
+  const totalLines = lineStarts.length;
+  const firstLine = tailLines === undefined
+    ? (startLine ?? 1)
+    : Math.max(1, totalLines - requestedCount + 1);
+  if (firstLine > totalLines) {
+    throw new TabulaCoreError("invalid_range", "startLine is beyond the end of the file.", {
+      details: { path: filePath, startLine: firstLine, totalLines },
+      retry: `Use a startLine between 1 and ${totalLines}.`,
+    });
+  }
+  const endLine = Math.min(totalLines, firstLine + requestedCount - 1);
+  const startOffset = lineStarts[firstLine - 1]!;
+  const endOffset = endLine < totalLines ? lineStarts[endLine]! : fullContent.length;
+  const content = fullContent.slice(startOffset, endOffset);
+  if (content.length > maxSessionReadCharacters) {
+    throw new TabulaCoreError("read_too_large", "The selected Markdown lines are too large to return.", {
+      details: { path: filePath, startLine: firstLine, endLine, maxCharacters: maxSessionReadCharacters },
+      retry: "Read a smaller line range.",
+    });
+  }
+
+  return {
+    sessionId,
+    path: filePath,
+    content,
+    revision: entry.node.sha256,
+    textLength: fullContent.length,
+    totalLines,
+    startLine: firstLine,
+    endLine,
+    truncated: firstLine > 1 || endLine < totalLines,
+  };
+};
+
 export const searchSessionFiles = async ({
   registry,
   sessionId,
   query,
   path: requestedPath,
   maxResults = 20,
+  contextLines = 1,
 }: {
   registry: SessionRegistry;
   sessionId: string;
   query: string;
   path?: string;
   maxResults?: number;
+  contextLines?: number;
 }) => {
   const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) {
+    throw new TabulaCoreError("invalid_input", "Search query must not be empty.", {
+      retry: "Provide literal text to find in paths or Markdown content.",
+    });
+  }
+  if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 100) {
+    throw new TabulaCoreError("invalid_range", "Search maxResults is outside the supported range.", {
+      details: { maxResults, maximum: 100 },
+      retry: "Use maxResults between 1 and 100.",
+    });
+  }
+  if (!Number.isInteger(contextLines) || contextLines < 0 || contextLines > maxSearchContextLines) {
+    throw new TabulaCoreError("invalid_range", "Search contextLines is outside the supported range.", {
+      details: { contextLines, maxContextLines: maxSearchContextLines },
+      retry: `Use contextLines between 0 and ${maxSearchContextLines}.`,
+    });
+  }
   const { snapshot } = await readReadySnapshot(registry, sessionId);
   const index = buildWorkspacePathIndex(snapshot.workspace);
   const basePath = requestedPath ? normalizeWorkspaceFilePath(requestedPath) : "";
   const prefix = basePath ? `${basePath}/` : "";
-  const matches: Array<{ path: string; line: number; excerpt: string }> = [];
+  const matches: Array<{
+    path: string;
+    kind: "path" | "content";
+    line: number;
+    match: string;
+    before: string[];
+    after: string[];
+  }> = [];
+  const addMatch = (match: (typeof matches)[number]) => {
+    matches.push(match);
+    return matches.length > maxResults;
+  };
 
   for (const entry of index.entries) {
     if (entry.node.type !== "document" || (basePath && entry.path !== basePath && !entry.path.startsWith(prefix))) continue;
     const content = snapshot.documents[entry.node.id] ?? "";
-    const pathMatches = entry.path.toLocaleLowerCase().includes(normalizedQuery);
-    for (const [lineIndex, line] of content.split(/\r?\n/).entries()) {
-      if (!pathMatches && !line.toLocaleLowerCase().includes(normalizedQuery)) continue;
-      matches.push({ path: entry.path, line: lineIndex + 1, excerpt: line.slice(0, 240) });
-      if (matches.length >= maxResults) return { sessionId, matches, truncated: true };
+    if (entry.path.toLocaleLowerCase().includes(normalizedQuery)) {
+      if (addMatch({ path: entry.path, kind: "path", line: 1, match: entry.path, before: [], after: [] })) {
+        return { sessionId, matches: matches.slice(0, maxResults), truncated: true };
+      }
+    }
+    const lines = content.split(/\r?\n/);
+    for (const [lineIndex, line] of lines.entries()) {
+      if (!line.toLocaleLowerCase().includes(normalizedQuery)) continue;
+      if (addMatch({
+        path: entry.path,
+        kind: "content",
+        line: lineIndex + 1,
+        match: line.slice(0, 240),
+        before: lines.slice(Math.max(0, lineIndex - contextLines), lineIndex).map((value: string) => value.slice(0, 240)),
+        after: lines.slice(lineIndex + 1, lineIndex + contextLines + 1).map((value: string) => value.slice(0, 240)),
+      })) {
+        return { sessionId, matches: matches.slice(0, maxResults), truncated: true };
+      }
     }
   }
   return { sessionId, matches, truncated: false };
@@ -340,7 +481,7 @@ export const writeSessionFiles = async ({
       if (!file.expectedRevision) {
         throw new TabulaCoreError("stale_revision", "An expected revision is required when replacing an existing file.", {
           details: { path: file.path, currentRevision },
-          retry: "Read the file, then pass its revision to Write Files.",
+          retry: "Read the file, then pass its revision to the write.",
         });
       }
       if (file.expectedRevision !== currentRevision) {
@@ -471,84 +612,146 @@ export const editSessionFile = async ({
   }
   const { session, snapshot } = await readReadySnapshot(registry, sessionId);
   requireWriteAccess(session);
-  const entry = buildWorkspacePathIndex(snapshot.workspace).byPath.get(filePath);
-  if (!entry || entry.node.type !== "document") {
+  const planEdits = (candidateSnapshot: typeof snapshot, stale: boolean) => {
+    const entry = buildWorkspacePathIndex(candidateSnapshot.workspace).byPath.get(filePath);
+    if (!entry || entry.node.type !== "document") {
+      throw new TabulaCoreError("file_not_found", "Markdown file was not found in the Tabula session.", {
+        details: { path: filePath },
+        retry: "List files to find the correct path.",
+      });
+    }
+    const documentId = entry.node.id;
+    const currentRevision = entry.node.sha256;
+    const currentContent = candidateSnapshot.documents[entry.node.id];
+    if (currentContent === undefined) {
+      throw new TabulaCoreError("session_not_ready", "The file content has not arrived yet.", {
+        details: { sessionId, path: filePath },
+        retry: "Wait for session state and retry.",
+      });
+    }
+    let nextContent = currentContent;
+    let editsApplied = 0;
+    const diffChanges: ExactTextChange[] = [];
+    const staleFailure = (message: string, details: Record<string, unknown>) =>
+      new TabulaCoreError("stale_revision", message, {
+        details: { path: filePath, expectedRevision, currentRevision, ...details },
+        retry: "Read the latest file, update the exact edits, and retry.",
+      });
+
+    for (const [editIndex, edit] of edits.entries()) {
+      if (!edit.oldText) {
+        throw new TabulaCoreError("invalid_input", "oldText must not be empty.", {
+          details: { path: filePath, editIndex },
+          retry: "Use Write File to replace the whole file or provide exact non-empty oldText.",
+        });
+      }
+      const offsets = exactMatchOffsets(nextContent, edit.oldText);
+      if (offsets.length === 0) {
+        if (stale) throw staleFailure("The file changed and oldText no longer matches exactly.", { editIndex });
+        throw new TabulaCoreError("edit_not_found", "The exact oldText was not found in the file.", {
+          details: { path: filePath, editIndex },
+          retry: "Read the latest file and copy the exact text to replace.",
+        });
+      }
+      if (offsets.length > 1 && !edit.replaceAll) {
+        const details = {
+          editIndex,
+          matchCount: offsets.length,
+          matchingLines: offsets.slice(0, 10).map((offset) => lineAtOffset(nextContent, offset)),
+        };
+        if (stale) throw staleFailure("The file changed and oldText is no longer unique.", details);
+        throw new TabulaCoreError("edit_ambiguous", "The exact oldText occurs more than once in the file.", {
+          details: { path: filePath, ...details },
+          retry: "Use a longer unique oldText segment or set replaceAll true.",
+        });
+      }
+      const selectedOffsets = edit.replaceAll ? offsets : offsets.slice(0, 1);
+      for (const offset of [...selectedOffsets].reverse()) {
+        const before = nextContent;
+        nextContent = `${nextContent.slice(0, offset)}${edit.newText}${nextContent.slice(offset + edit.oldText.length)}`;
+        diffChanges.push({ before, after: nextContent, offset, oldText: edit.oldText, newText: edit.newText });
+        editsApplied += 1;
+      }
+    }
+    assertMarkdownSize(nextContent);
+    return { documentId, currentRevision, currentContent, nextContent, editsApplied, diffChanges };
+  };
+
+  const initialEntry = buildWorkspacePathIndex(snapshot.workspace).byPath.get(filePath);
+  if (!initialEntry || initialEntry.node.type !== "document") {
     throw new TabulaCoreError("file_not_found", "Markdown file was not found in the Tabula session.", {
       details: { path: filePath },
       retry: "List files to find the correct path.",
     });
   }
-  const currentContent = snapshot.documents[entry.node.id] ?? "";
-  if (expectedRevision !== entry.node.sha256) {
-    throw new TabulaCoreError("stale_revision", "The file changed before the edit could be applied.", {
-      details: { path: filePath, expectedRevision, currentRevision: entry.node.sha256 },
-      retry: "Read the file again, update the exact edits, and retry.",
-    });
-  }
-
-  let nextContent = currentContent;
-  for (const [editIndex, edit] of edits.entries()) {
-    if (!edit.oldText) {
-      throw new TabulaCoreError("invalid_input", "oldText must not be empty.", {
-        details: { path: filePath, editIndex },
-        retry: "Use Write Files to replace the whole file or provide exact non-empty oldText.",
-      });
-    }
-    const offsets = exactMatchOffsets(nextContent, edit.oldText);
-    if (offsets.length === 0) {
-      throw new TabulaCoreError("edit_not_found", "The exact oldText was not found in the file.", {
-        details: { path: filePath, editIndex },
-        retry: "Read the latest file and copy the exact text to replace.",
-      });
-    }
-    if (offsets.length > 1) {
-      throw new TabulaCoreError("edit_ambiguous", "The exact oldText occurs more than once in the file.", {
-        details: {
-          path: filePath,
-          editIndex,
-          matchCount: offsets.length,
-          matchingLines: offsets.slice(0, 10).map((offset) => lineAtOffset(nextContent, offset)),
-        },
-        retry: "Use a longer unique oldText segment and retry.",
-      });
-    }
-    const offset = offsets[0]!;
-    nextContent = `${nextContent.slice(0, offset)}${edit.newText}${nextContent.slice(offset + edit.oldText.length)}`;
-  }
-  assertMarkdownSize(nextContent);
-  const changed = nextContent !== currentContent;
+  let rebased = expectedRevision !== initialEntry.node.sha256;
+  let activeSnapshot = snapshot;
+  let plan = planEdits(activeSnapshot, rebased);
+  let changed = plan.nextContent !== plan.currentContent;
   if (changed) {
     try {
-      await session.applyWorkspaceChanges({
-        changes: [{
-          type: "document.patch",
-          documentId: entry.node.id,
-          baseSha256: entry.node.sha256,
-          patches: getTextPatchesForChange(currentContent, nextContent),
-        }],
-      });
+      await session.applyWorkspaceChanges({ changes: [{
+        type: "document.patch",
+        documentId: plan.documentId,
+        baseSha256: plan.currentRevision,
+        patches: getTextPatchesForChange(plan.currentContent, plan.nextContent),
+      }] });
+    } catch (error) {
+      if (!(error instanceof Error) || !/changed before/i.test(error.message)) {
+        if (error instanceof TabulaCoreError) throw error;
+        throw writeFailed(filePath);
+      }
+      activeSnapshot = await session.readWorkspaceSnapshot();
+      plan = planEdits(activeSnapshot, true);
+      rebased = true;
+      changed = plan.nextContent !== plan.currentContent;
+      if (changed) {
+        try {
+          await session.applyWorkspaceChanges({ changes: [{
+            type: "document.patch",
+            documentId: plan.documentId,
+            baseSha256: plan.currentRevision,
+            patches: getTextPatchesForChange(plan.currentContent, plan.nextContent),
+          }] });
+        } catch (retryError) {
+          if (retryError instanceof Error && /changed before/i.test(retryError.message)) {
+            throw new TabulaCoreError("stale_revision", "The file kept changing before the edit could be applied.", {
+              details: { path: filePath },
+              retry: "Read the latest file and retry the edit.",
+            });
+          }
+          if (retryError instanceof TabulaCoreError) throw retryError;
+          throw writeFailed(filePath);
+        }
+      }
+    }
+    try {
       await session.flushCheckpoint();
     } catch (error) {
-      if (error instanceof Error && /changed before/i.test(error.message)) {
-        throw new TabulaCoreError("stale_revision", "The file changed before the edit could be applied.", {
-          details: { path: filePath },
-          retry: "Read the file again, update the exact edits, and retry.",
-        });
-      }
       if (error instanceof TabulaCoreError) throw error;
       throw writeFailed(filePath);
     }
   }
-  const updated = changed ? await session.readWorkspaceSnapshot() : snapshot;
+  let updated = activeSnapshot;
+  if (changed) {
+    try {
+      updated = await session.readWorkspaceSnapshot();
+    } catch {
+      throw writeFailed(filePath);
+    }
+  }
   const node = buildWorkspacePathIndex(updated.workspace).byPath.get(filePath)?.node;
   if (!node || node.type !== "document") throw writeFailed(filePath);
+  const renderedDiff = renderExactTextDiff({ path: filePath, changes: plan.diffChanges });
   return {
     sessionId,
     path: filePath,
     changed,
-    editsApplied: edits.length,
+    editsApplied: plan.editsApplied,
+    rebased,
     revision: node.sha256,
     textLength: node.textLength,
+    ...renderedDiff,
   };
 };
 

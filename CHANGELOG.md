@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added focused `tabula_read_file` and `tabula_write_file` tools alongside the
+  existing batch contracts. Single reads support head, middle, and tail line
+  ranges without exposing collaboration offsets.
+- Added search context and bounded edit diffs. Exact edits can now rebase onto
+  a newer live revision only when their anchors still match safely, and
+  `replaceAll` makes intentional repeated replacements explicit.
+
 ## 0.4.1
 
 - Flattened `tabula_export_copy` inputs so agents pass either `files` or

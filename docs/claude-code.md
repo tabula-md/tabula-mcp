@@ -14,9 +14,11 @@ Keep the room URL private.
 https://tabula.md/#room=...
 ```
 
-Claude should call `tabula_join_room`, list and read relevant files, then call
-`tabula_edit_file` for exact replacements or `tabula_write_files` for complete
-file writes, using the latest revisions. It can
+Claude should call `tabula_join_room`, list relevant paths, and use
+`tabula_read_file` for one file or line range. It then calls
+`tabula_edit_file` for exact replacements or `tabula_write_file` for a complete
+single-file write, using the latest revision. `tabula_read_files` and
+`tabula_write_files` are the batch alternatives. It can
 pass Markdown read from the local filesystem directly to Start Session, Export
 Copy, or Write Files.
 
@@ -29,4 +31,4 @@ host file tools to materialize the returned relative Markdown paths. It must
 ask before overwriting existing files. Import Copy is not a live Session.
 
 There is no legacy tool adapter. Restart Claude Code after upgrading so it
-reloads the twelve core tool definitions.
+reloads the fourteen core tool definitions.

@@ -33,7 +33,7 @@ https://tabula.md/#room=...
 The expected write flow is:
 
 ```text
-Join Session → List Files → Read Files → Edit File / Write Files
+Join Session → List Files → Read File → Edit File / Write File
 ```
 
 Claude can also create directories, move or rename files and directories, and

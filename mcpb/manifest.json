@@ -48,12 +48,20 @@
       "description": "List Markdown files and folders in a live session."
     },
     {
+      "name": "tabula_read_file",
+      "description": "Read one Markdown file or a bounded line range with its current revision."
+    },
+    {
       "name": "tabula_read_files",
       "description": "Read one or more Markdown files and their current revisions."
     },
     {
       "name": "tabula_search_files",
-      "description": "Search Markdown paths and contents with line-numbered excerpts."
+      "description": "Search Markdown paths and contents with line-numbered context."
+    },
+    {
+      "name": "tabula_write_file",
+      "description": "Create or replace one Markdown file with revision protection."
     },
     {
       "name": "tabula_write_files",
@@ -61,7 +69,7 @@
     },
     {
       "name": "tabula_edit_file",
-      "description": "Apply exact, revision-guarded replacements to one Markdown file."
+      "description": "Apply exact, safely rebased replacements and return a bounded diff."
     },
     {
       "name": "tabula_create_directory",
