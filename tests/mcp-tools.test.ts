@@ -122,6 +122,24 @@ describe("write access configuration", () => {
 });
 
 describe("core MCP contract", () => {
+  it("publishes a selection-oriented server identity", async () => {
+    await withClient(async (client) => {
+      expect(client.getServerVersion()).toMatchObject({
+        name: "tabula-mcp",
+        title: "Tabula.md",
+        description: expect.stringContaining("explicitly wants to hand Markdown off"),
+        websiteUrl: "https://tabula.md",
+        icons: [
+          {
+            src: "https://tabula.md/favicon.svg",
+            mimeType: "image/svg+xml",
+          },
+        ],
+      });
+      expect(client.getServerVersion()?.description).toContain("Do not use it for private host-native drafts");
+    });
+  });
+
   it.each([false, true])("exposes exactly twenty high-level tools (MCP Apps=%s)", async (mcpApps) => {
     await withClient(async (client) => {
       const listed = await client.listTools();
@@ -188,8 +206,14 @@ describe("core MCP contract", () => {
   it("provides the workflow rules as server instructions", async () => {
     await withClient(async (client) => {
       const instructions = client.getInstructions() ?? "";
-      expect(instructions).toContain("keep the URL private");
+      const discoveryPrefix = instructions.slice(0, 512);
+      expect(discoveryPrefix).toContain("Use Tabula.md only when");
+      expect(discoveryPrefix).toContain("Do not use Tabula.md for private host-native drafts");
+      expect(discoveryPrefix).toContain("#room");
+      expect(discoveryPrefix).toContain("#json");
+      expect(instructions).toContain("Keep every room and copy URL private");
       expect(instructions).toContain("Use Read File for one file");
+      expect(instructions).toContain("Read Multiple Files for a small batch");
       expect(instructions).toContain("pass their revisions to Write File, Write Files, Edit File, Move or Rename, or Delete Path");
       expect(instructions).toContain("Use Edit File for small exact replacements");
       expect(instructions).toContain("Move or Rename accepts files and directories");

@@ -5,6 +5,12 @@ import { createDocumentAppResource, registerDocumentAppResource } from "../app/r
 import { resolveDeploymentMode, type DeploymentMode } from "../deployment.js";
 import { positiveIntegerFromEnv, type RuntimeEnvironment } from "../env.js";
 import { registerFileResources } from "../file-resources.js";
+import {
+  TABULA_MCP_PRODUCT_DESCRIPTION,
+  TABULA_MCP_PRODUCT_ICONS,
+  TABULA_MCP_PRODUCT_TITLE,
+  TABULA_MCP_PRODUCT_WEBSITE_URL,
+} from "../public-copy.js";
 import { SessionRegistry, type SessionRegistryLifecycle } from "../registry.js";
 import { TABULA_MCP_VERSION } from "../version.js";
 import { createCoreInstructions } from "./instructions.js";
@@ -43,7 +49,11 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const resolveAgentIdentity = createSessionAgentIdentity({ env });
   const server = new McpServer({
     name: "tabula-mcp",
+    title: TABULA_MCP_PRODUCT_TITLE,
     version: TABULA_MCP_VERSION,
+    description: TABULA_MCP_PRODUCT_DESCRIPTION,
+    websiteUrl: TABULA_MCP_PRODUCT_WEBSITE_URL,
+    icons: [...TABULA_MCP_PRODUCT_ICONS],
   }, {
     instructions: createCoreInstructions({ deploymentMode }),
   });

@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it } from "vitest";
+import { TABULA_MCP_PRODUCT_DESCRIPTION } from "../src/public-copy.js";
 import { createTabulaMcpWebHandler } from "../src/server/web.js";
 
 const uiCapabilities = {
@@ -19,7 +20,7 @@ describe("Tabula MCP Web handler", () => {
     const response = await handler.fetch(new Request("https://mcp.example.com/"));
 
     await expect(response.json()).resolves.toMatchObject({
-      description: "Connect Codex, Claude, and other MCP clients to shared Tabula workspaces.",
+      description: TABULA_MCP_PRODUCT_DESCRIPTION,
     });
   });
 
