@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planFolderSync, type SyncFile } from "../src/sync-model.js";
+import { planFolderSync, type SyncFile } from "../packages/sync/src/model.js";
 
 const file = (path: string, revision: string, content = revision): SyncFile => ({ path, revision, content });
 

@@ -7,7 +7,7 @@ import {
   readLocalMarkdownFiles,
   writeFolderSyncState,
   writeLocalSyncFile,
-} from "../src/sync-local.js";
+} from "../packages/sync/src/local.js";
 
 describe("local folder sync storage", () => {
   it("reads Markdown only and never follows symlinks", async () => {

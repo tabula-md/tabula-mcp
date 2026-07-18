@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-import "./node-runtime.js";
+import "../../../src/node-runtime.js";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { isDirectRun } from "./cli.js";
-import { redactOperationalText } from "./server/operational-policy.js";
-import { openFolderSyncSession, syncFolderOnce } from "./sync-service.js";
-import type { SyncPlan } from "./sync-model.js";
+import { isDirectRun } from "../../../src/cli.js";
+import { redactOperationalText } from "../../../src/server/operational-policy.js";
+import { openFolderSyncSession, syncFolderOnce } from "./service.js";
+import type { SyncPlan } from "./model.js";
 
 export const SYNC_CLI_HELP = `Tabula Sync
 

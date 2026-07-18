@@ -298,7 +298,6 @@ const run = async () => {
   let firebaseServer;
   let browser;
   const jsonDataDir = await mkdtemp(path.join(tmpdir(), "tabula-mcp-json-e2e-"));
-  const syncDataDir = await mkdtemp(path.join(tmpdir(), "tabula-mcp-sync-e2e-"));
   const firebaseConfig = JSON.stringify({
     apiKey: "tabula-local",
     authDomain: "tabula-local.firebaseapp.com",
@@ -484,45 +483,6 @@ const run = async () => {
       }
       assert(afterHumanEdit?.content.includes("Human browser edit."), "MCP should observe browser-originated text");
 
-      const { openFolderSyncSession, syncFolderOnce } = await import("../dist/sync-service.js");
-      await writeFile(path.join(syncDataDir, "local-sync.md"), "# Local Sync\n\nCreated on disk.\n");
-      const syncSession = await openFolderSyncSession({
-        roomUrl: session.sessionUrl,
-        env: {
-          TABULA_ROOM_URL: roomUrl,
-          TABULA_MCP_ALLOW_ANY_EGRESS: "1",
-          TABULA_MCP_FIREBASE_CONFIG: firebaseConfig,
-          TABULA_MCP_FIREBASE_EMULATOR_HOST: "127.0.0.1",
-          TABULA_MCP_FIRESTORE_EMULATOR_PORT: "8080",
-          TABULA_MCP_FIREBASE_STORAGE_EMULATOR_PORT: "9199",
-        },
-      });
-      try {
-        const firstSync = await syncFolderOnce({ session: syncSession, root: syncDataDir });
-        assert.equal(firstSync.applied, true);
-        const syncedFile = await callTool(client, "read_file", {
-          sessionId: session.sessionId,
-          path: "local-sync.md",
-        });
-        assert.equal(syncedFile.content, "# Local Sync\n\nCreated on disk.\n");
-        await callTool(client, "write_file", {
-          sessionId: session.sessionId,
-          path: "local-sync.md",
-          content: "# Local Sync\n\nUpdated in the Room.\n",
-          expectedRevision: syncedFile.revision,
-        });
-        const secondSync = await syncFolderOnce({ session: syncSession, root: syncDataDir });
-        assert.equal(secondSync.applied, true);
-        assert.equal(
-          await readFile(path.join(syncDataDir, "local-sync.md"), "utf8"),
-          "# Local Sync\n\nUpdated in the Room.\n",
-        );
-        const syncState = await readFile(path.join(syncDataDir, ".tabula-sync.json"), "utf8");
-        assert(!syncState.includes("#room="), "folder sync state must not persist the private Room URL");
-      } finally {
-        await syncSession.close();
-      }
-
       const addedComment = await callTool(client, "add_comment", {
         sessionId: session.sessionId,
         path: "README.md",
@@ -548,7 +508,7 @@ const run = async () => {
       const sessionCopy = await callTool(client, "export_copy", {
         sessionId: session.sessionId,
       });
-      assert.equal(sessionCopy.fileCount, 4);
+      assert.equal(sessionCopy.fileCount, 3);
       const importedSessionCopy = await callTool(client, "import_copy", { copyUrl: sessionCopy.copyUrl });
       assert.equal(importedSessionCopy.commentCount, 1, "Session Copy should preserve comment threads");
       const openedSessionCopy = await openJsonCopy({
@@ -649,7 +609,6 @@ const run = async () => {
     await stopProcess(jsonServer);
     await stopProcess(roomServer);
     await rm(jsonDataDir, { recursive: true, force: true });
-    await rm(syncDataDir, { recursive: true, force: true });
   }
 };
 

@@ -84,30 +84,11 @@ Importing a copy does not join a room or write to the filesystem. The agent
 uses its host-native file tools, so local path access and overwrite approval
 remain under the host's control.
 
-## Sync a local Markdown folder
-
-The npm package also installs `tabula-sync`, a separate human-invoked CLI for
-keeping one local Markdown folder and one live Room aligned:
-
-```sh
-read -s TABULA_ROOM_URL
-export TABULA_ROOM_URL
-tabula-sync status ./research
-tabula-sync sync ./research
-tabula-sync watch ./research
-```
-
-It writes revision fingerprints—not the Room URL or key—to
-`.tabula-sync.json`. A cycle stops before writing if both sides changed.
-Deletions propagate only with `--delete`; unique content-preserving renames are
-recognized as moves. See [Local folder sync](docs/local-sync.md).
-
 ## References
 
 - [Claude Desktop](docs/claude-desktop.md)
 - [Claude Code](docs/claude-code.md)
 - [Codex CLI](docs/codex-cli.md)
-- [Local folder sync](docs/local-sync.md)
 - [Self-hosting](docs/deployment.md)
 - [Security model](docs/security-model.md)
 - [Release process](docs/releasing.md)

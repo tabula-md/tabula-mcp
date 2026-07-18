@@ -1,8 +1,8 @@
 import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { sha256Text } from "./crypto.js";
-import { TabulaMcpError } from "./protocol.js";
-import type { SyncFile, SyncStateFile } from "./sync-model.js";
+import { sha256Text } from "../../../src/crypto.js";
+import { TabulaMcpError } from "../../../src/protocol.js";
+import type { SyncFile, SyncStateFile } from "./model.js";
 
 export const syncStateFileName = ".tabula-sync.json";
 const ignoredDirectories = new Set([".git", ".hg", ".svn", "node_modules"]);
