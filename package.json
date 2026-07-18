@@ -1,6 +1,6 @@
 {
   "name": "@tabula-md/mcp",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Connect Codex, Claude, and other MCP clients to shared Tabula workspaces.",
   "license": "MIT",
   "author": {
@@ -28,9 +28,6 @@
     "encrypted-rooms"
   ],
   "type": "module",
-  "workspaces": [
-    "packages/sync"
-  ],
   "bin": {
     "tabula-mcp": "dist/cli.js"
   },
@@ -57,8 +54,6 @@
     "!dist/mcpb/**",
     "!dist/*.mcpb",
     "!dist/*.mcpb.sha256",
-    "!dist/sync-*.d.ts",
-    "!dist/sync-*.js",
     "README.md",
     "PRIVACY.md",
     "LICENSE",
@@ -84,7 +79,6 @@
     "check:secret-boundaries": "node scripts/check-secret-boundaries.mjs",
     "check:mcpb": "node scripts/check-mcpb.mjs",
     "check:pack": "node scripts/check-npm-pack.mjs",
-    "sync:dev": "npm run dev --workspace @tabula-md/sync --",
     "build:mcpb": "npm run build && node scripts/build-mcpb.mjs",
     "deploy:cloudflare": "npx wrangler deploy",
     "deploy:vercel": "npx vercel deploy --prod",
@@ -107,7 +101,7 @@
     "release:verify:full": "npm run release:verify && npm run test:e2e:local-collab",
     "prepublishOnly": "npm run release:verify",
     "measure:mcp-context": "npm run build && node scripts/measure-mcp-context.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit && npm run typecheck --workspace @tabula-md/sync",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "typecheck:worker": "tsc -p tsconfig.worker-tests.json --noEmit"
   },
   "dependencies": {

@@ -80,6 +80,16 @@ const main = async () => {
   if (Object.keys(packageJson.bin ?? {}).length !== 1 || packageJson.bin?.["tabula-mcp"] !== "dist/cli.js") {
     throw new Error("public MCP package must expose only the tabula-mcp executable");
   }
+  const publicPackageMetadata = JSON.stringify({
+    bin: packageJson.bin,
+    exports: packageJson.exports,
+    files: packageJson.files,
+    scripts: packageJson.scripts,
+    workspaces: packageJson.workspaces,
+  });
+  if (/packages\/sync|@tabula-md\/sync|sync:dev|dist\/sync-/i.test(publicPackageMetadata)) {
+    throw new Error("public MCP package metadata exposes the private Sync prototype");
+  }
   if (!packageJson.repository?.url || !packageJson.bugs?.url || !packageJson.homepage) {
     throw new Error("npm package metadata is missing repository, bugs, or homepage URLs");
   }
