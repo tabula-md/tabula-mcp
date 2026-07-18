@@ -6,9 +6,7 @@ import {
   type EncryptedEnvelope,
   type WorkspaceRoomSyncAdapters,
   type WorkspaceRoomCheckpointStore,
-  type WorkspaceRoomCrdt,
 } from "@tabula-md/tabula/collaboration";
-import * as Y from "yjs";
 import { describe, expect, it } from "vitest";
 import { importRoomKey, sha256Text } from "../src/crypto.js";
 import { parseRoomShareUrl } from "../src/protocol.js";
@@ -217,16 +215,18 @@ describe("TabulaRoomClient protocol v2", () => {
   it("applies text patches incrementally so unaffected collaborative positions survive", async () => {
     const relay = createMemoryRelay();
     const client = createClient({ relay });
+    const observer = createClient({ relay, identityName: "Observer" });
     const markdown = "prefix TARGET suffix";
     try {
       await client.publishWorkspaceSnapshot({
         workspace: await createWorkspaceState(markdown),
         documents: [{ documentId: "doc_1", title: "Draft.md", markdown }],
       });
-      const room = (client as unknown as { room: WorkspaceRoomCrdt }).room;
-      const text = room.documents.get("doc_1")!;
+      await client.connect();
+      await observer.connect({ waitForStateMs: 500 });
       const suffixOffset = markdown.indexOf("suffix");
-      const relative = Y.createRelativePositionFromTypeIndex(text, suffixOffset);
+      await observer.setPresence({ documentId: "doc_1", from: suffixOffset, to: suffixOffset });
+      await waitFor(() => client.collaboratorList[0]?.selection?.from === suffixOffset);
       const before = await client.readWorkspaceDocument({ documentId: "doc_1" });
 
       await client.applyWorkspaceChanges({
@@ -242,12 +242,15 @@ describe("TabulaRoomClient protocol v2", () => {
         }],
       });
 
-      const absolute = Y.createAbsolutePositionFromRelativePosition(relative, room.doc);
-      expect(absolute?.index).toBe("prefix UPDATED CONTENT ".length);
+      await waitFor(() =>
+        client.collaboratorList[0]?.selection?.from === "prefix UPDATED CONTENT ".length
+      );
+      expect(client.collaboratorList[0]?.selection?.from).toBe("prefix UPDATED CONTENT ".length);
       await expect(client.readWorkspaceDocument({ documentId: "doc_1" }))
         .resolves.toMatchObject({ markdown: "prefix UPDATED CONTENT suffix" });
     } finally {
       client.disconnect();
+      observer.disconnect();
     }
   });
 
