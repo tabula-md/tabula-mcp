@@ -671,11 +671,11 @@ export const registerCoreTools = (
     "move_file",
     {
       title: "Move or Rename",
-      description: "Move or rename a path; files need revisions.",
+      description: "Move or rename one file or directory. The destination parent must already exist; use Create Directory first. Files require their current revision.",
       inputSchema: {
         sessionId: sessionIdInputSchema,
         source: filePathSchema.describe("Current relative path."),
-        destination: filePathSchema.describe("New relative path."),
+        destination: filePathSchema.describe("New relative path whose parent directory already exists."),
         expectedRevision: requiredRevisionSchema.optional()
           .describe("Required for a file; omit for a directory."),
       },
