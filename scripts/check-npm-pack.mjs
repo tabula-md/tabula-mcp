@@ -128,7 +128,11 @@ const main = async () => {
       ["exec", "--yes", `--package=${tarball}`, "--", "tabula-mcp", "--help"],
       { maxBuffer: 1024 * 1024 * 20, timeout: 30_000 },
     );
-    if (!helpOutput.includes("Tabula MCP") || helpError.trim()) {
+    // npm may write informational `npm notice run ...` messages to stderr even
+    // when the packed CLI exits successfully. execFileAsync already rejects a
+    // non-zero exit code, so validate the CLI's stdout instead of treating npm's
+    // own diagnostics as an application failure.
+    if (!helpOutput.includes("Tabula MCP")) {
       throw new Error(`packed package did not run through the documented npx command${helpError.trim() ? `: ${helpError.trim()}` : ""}`);
     }
   } finally {
