@@ -23,6 +23,7 @@ import { sha256Text } from "./crypto.js";
 import {
   type ParsedRoomShareUrl,
   TabulaMcpError,
+  WorkspaceConflictError,
 } from "./protocol.js";
 import { createFirebaseWorkspaceRoomCheckpointStore } from "./room-checkpoints.js";
 import { markOperationCommitted } from "./server/operation-context.js";
@@ -449,7 +450,7 @@ export class TabulaRoomClient {
         const markdown = documents.get(input.documentId);
         if (markdown === undefined) throw new TabulaMcpError(`Workspace document ${input.documentId} was not found.`);
         if (await sha256Text(markdown) !== input.baseSha256) {
-          throw new TabulaMcpError(`Workspace document ${input.documentId} changed before the edit could be applied.`);
+          throw new WorkspaceConflictError();
         }
         const patches = normalizeTextPatches(input.patches);
         const next = applyTextPatchesToString(markdown, patches);
@@ -509,7 +510,32 @@ export class TabulaRoomClient {
       appliedChanges.push(input);
     }
 
-    await client.applyChanges(coreChanges);
+    try {
+      await client.applyChanges(coreChanges);
+    } catch (error) {
+      const latest = client.getWorkspaceSnapshot();
+      const nodes = new Map(latest.nodes.map((node) => [node.id, node]));
+      let conflict = false;
+      for (const input of changes) {
+        if (input.type === "document.patch") {
+          const markdown = latest.documents[input.documentId];
+          if (markdown === undefined || await sha256Text(markdown) !== input.baseSha256) conflict = true;
+          continue;
+        }
+        if (input.type !== "node.move" && input.type !== "node.delete") continue;
+        const node = nodes.get(input.nodeId);
+        if (!node || node.title !== input.baseTitle || node.parentId !== input.baseParentId) {
+          conflict = true;
+          continue;
+        }
+        if (input.baseSha256 !== undefined) {
+          const markdown = latest.documents[input.nodeId];
+          if (markdown === undefined || await sha256Text(markdown) !== input.baseSha256) conflict = true;
+        }
+      }
+      if (conflict) throw new WorkspaceConflictError();
+      throw error;
+    }
     markOperationCommitted("workspace_change");
     try {
       if (this.activeDocumentId && !client.getWorkspaceSnapshot().documents[this.activeDocumentId]) {

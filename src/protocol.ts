@@ -26,6 +26,13 @@ export class TabulaMcpError extends Error {
   }
 }
 
+export class WorkspaceConflictError extends TabulaMcpError {
+  constructor(message = "The Tabula workspace changed before the operation could be applied.") {
+    super(message);
+    this.name = "WorkspaceConflictError";
+  }
+}
+
 const ROOM_ID_PATTERN = /^[A-Za-z0-9_-]{1,160}$/;
 const ROOM_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 const ROOM_KEY_BYTES = 32;

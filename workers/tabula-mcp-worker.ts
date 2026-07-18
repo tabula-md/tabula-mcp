@@ -140,7 +140,7 @@ const quotaUsageForRequest = async (request: Request, maxRequestBytes: number) =
   return { operation: "request" as const, units: 1 };
 };
 
-const routeMcpRequestToSession = async (request: Request, env: WorkerEnv) => {
+export const routeMcpRequestToSession = async (request: Request, env: WorkerEnv) => {
   const sessions = env.TABULA_MCP_SESSIONS;
   if (!sessions) {
     throw new Error("TABULA_MCP_SESSIONS Durable Object binding is required.");

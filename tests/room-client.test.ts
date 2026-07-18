@@ -9,7 +9,7 @@ import {
 } from "@tabula-md/tabula/collaboration";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { importRoomKey, sha256Text } from "../src/crypto.js";
-import { parseRoomShareUrl } from "../src/protocol.js";
+import { parseRoomShareUrl, WorkspaceConflictError } from "../src/protocol.js";
 import { TabulaRoomClient } from "../src/room-client.js";
 import { createMemoryWorkspaceRoomCheckpointStore } from "../src/room-checkpoints.js";
 import { abortableOperation, runWithOperationSignal } from "../src/server/operation-context.js";
@@ -302,6 +302,38 @@ describe("TabulaRoomClient protocol v2", () => {
     } finally {
       client.disconnect();
       observer.disconnect();
+    }
+  });
+
+  it("reports revision races with a typed workspace conflict", async () => {
+    const relay = createMemoryRelay();
+    const client = createClient({ relay });
+    try {
+      await client.publishWorkspaceSnapshot({
+        workspace: await createWorkspaceState(),
+        documents: [{ documentId: "doc_1", title: "Draft.md", markdown: "# Draft\n" }],
+      });
+      await client.connect();
+      const stale = await client.readWorkspaceDocument({ documentId: "doc_1" });
+      await client.applyWorkspaceChanges({
+        changes: [{
+          type: "document.patch",
+          documentId: "doc_1",
+          baseSha256: stale.sha256,
+          patches: [{ from: stale.markdown.length, to: stale.markdown.length, insert: "updated\n" }],
+        }],
+      });
+
+      await expect(client.applyWorkspaceChanges({
+        changes: [{
+          type: "document.patch",
+          documentId: "doc_1",
+          baseSha256: stale.sha256,
+          patches: [{ from: 0, to: 0, insert: "stale\n" }],
+        }],
+      })).rejects.toBeInstanceOf(WorkspaceConflictError);
+    } finally {
+      client.disconnect();
     }
   });
 

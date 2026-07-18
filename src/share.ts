@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
 import path from "node:path";
+import { encodeEncryptedData } from "@tabula-md/tabula/data/encode";
+import { generateEncryptionKey } from "@tabula-md/tabula/data/encryption";
 import {
-  createShareSnapshotPayloadFromData,
-  encodeEncryptedData,
-  generateEncryptionKey,
+  createShareSnapshotPayload as createShareSnapshotPayloadFromData,
   parseShareSnapshot,
   serializeShareSnapshot,
-} from "@tabula-md/tabula";
-import type { ShareSnapshotPayload } from "@tabula-md/tabula/data/json";
+  type ShareSnapshotPayload,
+} from "@tabula-md/tabula/data/json";
 import * as Y from "yjs";
 import { assertProductionEgressAllowed, normalizeServiceUrl } from "./egress-policy.js";
 import {

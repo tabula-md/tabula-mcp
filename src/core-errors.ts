@@ -7,12 +7,14 @@ export type TabulaCoreErrorCode =
   | "invalid_input"
   | "invalid_path"
   | "invalid_range"
+  | "internal_error"
   | "parent_folder_not_found"
   | "path_exists"
   | "read_too_large"
   | "session_not_found"
   | "session_limit"
   | "session_not_ready"
+  | "stale_cursor"
   | "stale_revision"
   | "write_failed"
   | "write_disabled";
@@ -49,9 +51,13 @@ export const coreErrorContent = (error: unknown) => {
     };
   }
 
-  const message = error instanceof Error ? error.message : "Unknown Tabula MCP error.";
+  const structuredContent = {
+    code: "internal_error" as const,
+    message: "Tabula could not complete the operation because of an unexpected internal error.",
+    retry: "Retry once. If the problem continues, reconnect the session and report the failure.",
+  };
   return {
     isError: true,
-    content: [{ type: "text" as const, text: message }],
+    content: [{ type: "text" as const, text: JSON.stringify(structuredContent) }],
   };
 };

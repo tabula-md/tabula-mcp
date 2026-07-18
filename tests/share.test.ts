@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import { describe, expect, it } from "vitest";
-import { decodeEncryptedData, parseShareSnapshot } from "@tabula-md/tabula";
+import { decodeEncryptedData } from "@tabula-md/tabula/data/encode";
+import { parseShareSnapshot } from "@tabula-md/tabula/data/json";
 import { decryptEnvelopeForRoom, importRoomKey } from "../src/crypto.js";
 import { decodeBase64Url, encodeBase64Url, type EncryptedEnvelope } from "../src/protocol.js";
 import {

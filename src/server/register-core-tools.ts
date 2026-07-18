@@ -14,6 +14,8 @@ import {
   deleteSessionPath,
   editSessionFile,
   listSessionFiles,
+  defaultSessionListEntries,
+  maxSessionListEntries,
   maxSearchContextLines,
   maxSessionReadFiles,
   maxSessionReadLines,
@@ -212,6 +214,10 @@ export const registerCoreTools = (
           .describe("Folder path; omit for the root."),
         recursive: z.boolean().default(true)
           .describe("Include descendants; false lists children."),
+        limit: z.number().int().min(1).max(maxSessionListEntries).default(defaultSessionListEntries)
+          .describe(`Paths per page; default ${defaultSessionListEntries}, max ${maxSessionListEntries}.`),
+        cursor: z.string().min(1).max(4_096).optional()
+          .describe("Opaque nextCursor from the previous page; omit for the first page."),
       },
       outputSchema: {
         files: z.array(z.union([
@@ -219,11 +225,12 @@ export const registerCoreTools = (
           z.object({ path: z.string(), type: z.literal("file"), revision: sha256Schema, textLength: z.number().int().nonnegative() }),
         ])),
         truncated: z.boolean(),
+        nextCursor: z.string().optional(),
       },
       annotations: annotations(true, true),
     },
-    async ({ sessionId, path, recursive }) => run(async () => ({
-      value: withoutSessionId(await listSessionFiles({ registry, sessionId, path, recursive })),
+    async ({ sessionId, path, recursive, limit, cursor }) => run(async () => ({
+      value: withoutSessionId(await listSessionFiles({ registry, sessionId, path, recursive, limit, cursor })),
       text: "Listed files in the Tabula session.",
     })),
   );
@@ -298,7 +305,7 @@ export const registerCoreTools = (
         query: z.string().trim().min(1).max(200)
           .describe("Literal text in paths or content."),
         path: z.string().min(1).optional()
-          .describe("Folder scope; omit for all."),
+          .describe("File or folder scope; omit for all."),
         maxResults: z.number().int().min(1).max(100).default(20)
           .describe("Maximum matches; default 20."),
         contextLines: z.number().int().min(0).max(maxSearchContextLines).default(1)

@@ -56,26 +56,31 @@ export const joinRoomSession = async ({
     roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
   });
   await registry.reserve(client.sessionId);
+  let registered = false;
   try {
     throwIfOperationAborted();
     await abortableOperation(client.connect({ waitForStateMs: 30_000 }), () => client.disconnect());
     throwIfOperationAborted();
+    const session = await summarizeSession(client);
+    throwIfOperationAborted();
+    if (!session.ready) {
+      throw new TabulaCoreError("session_not_ready", "The Tabula session connected but its workspace state has not arrived.", {
+        retry: "Keep the Tabula room open and join it again after its workspace state is available.",
+      });
+    }
+    registry.add(client);
+    registered = true;
+    markOperationCommitted("join_room");
+    return { ...session, reused: false };
   } catch (error) {
-    client.disconnect();
-    await registry.cancelReservation(client.sessionId);
+    if (registered) {
+      await registry.leave(client.sessionId);
+    } else {
+      client.disconnect();
+      await registry.cancelReservation(client.sessionId);
+    }
     throw error;
   }
-  const session = await summarizeSession(client);
-  throwIfOperationAborted();
-  if (!session.ready) {
-    client.disconnect();
-    throw new TabulaCoreError("session_not_ready", "The Tabula session connected but its workspace state has not arrived.", {
-      retry: "Keep the Tabula room open and join it again after its workspace state is available.",
-    });
-  }
-  registry.add(client);
-  markOperationCommitted("join_room");
-  return { ...session, reused: false };
 };
 
 export const startWorkspaceSession = async ({
