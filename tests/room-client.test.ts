@@ -6,7 +6,9 @@ import {
   type EncryptedEnvelope,
   type WorkspaceRoomSyncAdapters,
   type WorkspaceRoomCheckpointStore,
+  type WorkspaceRoomCrdt,
 } from "@tabula-md/tabula/collaboration";
+import * as Y from "yjs";
 import { describe, expect, it } from "vitest";
 import { importRoomKey, sha256Text } from "../src/crypto.js";
 import { parseRoomShareUrl } from "../src/protocol.js";
@@ -209,6 +211,43 @@ describe("TabulaRoomClient protocol v2", () => {
     } finally {
       first.disconnect();
       second.disconnect();
+    }
+  });
+
+  it("applies text patches incrementally so unaffected collaborative positions survive", async () => {
+    const relay = createMemoryRelay();
+    const client = createClient({ relay });
+    const markdown = "prefix TARGET suffix";
+    try {
+      await client.publishWorkspaceSnapshot({
+        workspace: await createWorkspaceState(markdown),
+        documents: [{ documentId: "doc_1", title: "Draft.md", markdown }],
+      });
+      const room = (client as unknown as { room: WorkspaceRoomCrdt }).room;
+      const text = room.documents.get("doc_1")!;
+      const suffixOffset = markdown.indexOf("suffix");
+      const relative = Y.createRelativePositionFromTypeIndex(text, suffixOffset);
+      const before = await client.readWorkspaceDocument({ documentId: "doc_1" });
+
+      await client.applyWorkspaceChanges({
+        changes: [{
+          type: "document.patch",
+          documentId: "doc_1",
+          baseSha256: before.sha256,
+          patches: [{
+            from: markdown.indexOf("TARGET"),
+            to: markdown.indexOf("TARGET") + "TARGET".length,
+            insert: "UPDATED CONTENT",
+          }],
+        }],
+      });
+
+      const absolute = Y.createAbsolutePositionFromRelativePosition(relative, room.doc);
+      expect(absolute?.index).toBe("prefix UPDATED CONTENT ".length);
+      await expect(client.readWorkspaceDocument({ documentId: "doc_1" }))
+        .resolves.toMatchObject({ markdown: "prefix UPDATED CONTENT suffix" });
+    } finally {
+      client.disconnect();
     }
   });
 

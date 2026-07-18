@@ -625,8 +625,11 @@ export class TabulaRoomClient {
           }
           const patches = normalizeTextPatches(input.patches);
           const next = applyTextPatchesToString(markdown, patches);
-          text.delete(0, text.length);
-          if (next) text.insert(0, next);
+          if (next === null) throw new TabulaMcpError("Workspace document patches are invalid or overlap.");
+          for (const patch of [...patches].sort((left, right) => right.from - left.from)) {
+            if (patch.to > patch.from) text.delete(patch.from, patch.to - patch.from);
+            if (patch.insert) text.insert(patch.from, patch.insert);
+          }
           changedDocumentIds.add(input.documentId);
           appliedChanges.push({ ...input, patches });
           continue;
