@@ -30,6 +30,7 @@ type DurableObjectStateLike = {
 export type WorkerEnv = Record<string, unknown> & {
   TABULA_MCP_QUOTA?: DurableObjectNamespaceLike;
   TABULA_MCP_QUOTA_HASH_SECRET?: string;
+  TABULA_MCP_SESSION_IDLE_TTL_MS?: string;
   TABULA_MCP_SESSIONS?: DurableObjectNamespaceLike;
 };
 
@@ -136,7 +137,7 @@ export const createTabulaMcpSessionDurableObject = (documentAppHtml: string) =>
         ...(forcedSessionId ? { sessionIdGenerator: () => forcedSessionId } : {}),
       });
       const response = await this.handler.fetch(request);
-      if (request.method === "DELETE") await this.#close(metadata);
+      if (request.method === "DELETE" || response.status === 404) await this.#close(metadata);
       return response;
     }
 
