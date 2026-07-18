@@ -359,4 +359,48 @@ describe("TabulaRoomClient protocol v2", () => {
       client.disconnect();
     }
   });
+
+  it("moves, renames, and recursively deletes workspace nodes", async () => {
+    const relay = createMemoryRelay();
+    const client = createClient({ relay });
+    try {
+      await client.publishWorkspaceSnapshot({
+        workspace: await createWorkspaceState(),
+        documents: [{ documentId: "doc_1", title: "Draft.md", markdown: "# Draft\n" }],
+      });
+      await client.applyWorkspaceChanges({
+        changes: [{ type: "folder.create", folderId: "archive", parentId: null, title: "archive" }],
+      });
+      const before = await client.readWorkspaceSnapshot();
+      const document = before.workspace.nodes.find((node) => node.id === "doc_1")!;
+      await client.applyWorkspaceChanges({
+        changes: [{
+          type: "node.move",
+          nodeId: document.id,
+          baseParentId: document.parentId,
+          baseTitle: document.title,
+          baseSha256: document.type === "document" ? document.sha256 : undefined,
+          parentId: "archive",
+          title: "Final.md",
+        }],
+      });
+      await expect(client.readWorkspace()).resolves.toMatchObject({
+        documents: [expect.objectContaining({ parentId: "archive", title: "Final.md" })],
+      });
+
+      const moved = await client.readWorkspaceSnapshot();
+      const archive = moved.workspace.nodes.find((node) => node.id === "archive")!;
+      await client.applyWorkspaceChanges({
+        changes: [{
+          type: "node.delete",
+          nodeId: archive.id,
+          baseParentId: archive.parentId,
+          baseTitle: archive.title,
+        }],
+      });
+      await expect(client.readWorkspace()).resolves.toMatchObject({ documents: [] });
+    } finally {
+      client.disconnect();
+    }
+  });
 });

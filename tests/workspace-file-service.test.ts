@@ -2,9 +2,13 @@ import { sha256Text } from "../src/crypto.js";
 import type { SessionRegistry } from "../src/registry.js";
 import type { WorkspaceChange, WorkspaceRoomState } from "../src/workspace-contract.js";
 import {
+  createSessionDirectory,
+  deleteSessionPath,
+  editSessionFile,
   listSessionFiles,
   maxSessionReadCharacters,
   maxSessionReadFiles,
+  moveSessionFile,
   readSessionFiles,
   searchSessionFiles,
   writeSessionFile,
@@ -82,6 +86,24 @@ const createHarness = async () => {
             createdAt: now, updatedAt: now, sha256: await sha256Text(change.markdown), textLength: change.markdown.length,
           });
           changedDocumentIds.push(id);
+        } else if (change.type === "node.move") {
+          workspace.nodes = workspace.nodes.map((node) => node.id === change.nodeId
+            ? { ...node, parentId: change.parentId ?? workspace.rootId, title: change.title }
+            : node);
+        } else if (change.type === "node.delete") {
+          const deletedIds = new Set([change.nodeId]);
+          let added = true;
+          while (added) {
+            added = false;
+            for (const node of workspace.nodes) {
+              if (node.parentId && deletedIds.has(node.parentId) && !deletedIds.has(node.id)) {
+                deletedIds.add(node.id);
+                added = true;
+              }
+            }
+          }
+          workspace.nodes = workspace.nodes.filter((node) => !deletedIds.has(node.id));
+          for (const id of deletedIds) delete docs[id];
         }
       }
       await refresh();
@@ -160,6 +182,103 @@ describe("workspace file service", () => {
     expect(written).toMatchObject({ created: false, changed: true, textLength: content.length });
     expect(docs.readme).toBe(content);
     expect(checkpoint.flushes).toBe(1);
+  });
+
+  it("edits one exact unique occurrence and rejects missing or ambiguous text", async () => {
+    const { checkpoint, registry, docs } = await createHarness();
+    const current = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
+    const edited = await editSessionFile({
+      registry,
+      sessionId,
+      path: "README.md",
+      expectedRevision: current.revision,
+      edits: [{ oldText: "Authentication overview.", newText: "Authentication details." }],
+    });
+    expect(edited).toMatchObject({ changed: true, editsApplied: 1 });
+    expect(docs.readme).toContain("Authentication details.");
+    expect(checkpoint.flushes).toBe(1);
+
+    await expect(editSessionFile({
+      registry,
+      sessionId,
+      path: "README.md",
+      expectedRevision: edited.revision,
+      edits: [{ oldText: "not present", newText: "replacement" }],
+    })).rejects.toMatchObject({ code: "edit_not_found" });
+
+    docs.readme = "same\nsame\n";
+    const ambiguous = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
+    await expect(editSessionFile({
+      registry,
+      sessionId,
+      path: "README.md",
+      expectedRevision: ambiguous.revision,
+      edits: [{ oldText: "same", newText: "different" }],
+    })).rejects.toMatchObject({
+      code: "edit_ambiguous",
+      details: { matchCount: 2, matchingLines: [1, 2] },
+    });
+    expect(docs.readme).toBe("same\nsame\n");
+  });
+
+  it("creates nested directories idempotently and rejects a file collision", async () => {
+    const { checkpoint, registry } = await createHarness();
+    await expect(createSessionDirectory({ registry, sessionId, path: "research/2026" }))
+      .resolves.toEqual({ sessionId, path: "research/2026", created: true });
+    await expect(createSessionDirectory({ registry, sessionId, path: "research/2026" }))
+      .resolves.toEqual({ sessionId, path: "research/2026", created: false });
+    await expect(createSessionDirectory({ registry, sessionId, path: "README.md" }))
+      .rejects.toMatchObject({ code: "path_exists" });
+    expect(checkpoint.flushes).toBe(1);
+  });
+
+  it("moves or renames files and folders using filesystem paths", async () => {
+    const { checkpoint, registry } = await createHarness();
+    const readme = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
+    await createSessionDirectory({ registry, sessionId, path: "archive" });
+    await expect(moveSessionFile({
+      registry,
+      sessionId,
+      source: "README.md",
+      destination: "archive/overview.md",
+      expectedRevision: readme.revision,
+    })).resolves.toMatchObject({
+      source: "README.md",
+      destination: "archive/overview.md",
+      type: "file",
+      changed: true,
+    });
+    await expect(moveSessionFile({
+      registry,
+      sessionId,
+      source: "docs",
+      destination: "reference",
+    })).resolves.toMatchObject({ type: "folder", changed: true });
+    const listed = await listSessionFiles({ registry, sessionId });
+    expect(listed.files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "archive/overview.md" }),
+      expect.objectContaining({ path: "reference/security.md" }),
+    ]));
+    expect(checkpoint.flushes).toBe(3);
+  });
+
+  it("guards deletion with file revisions and explicit recursive intent", async () => {
+    const { checkpoint, registry } = await createHarness();
+    const readme = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
+    await expect(deleteSessionPath({ registry, sessionId, path: "README.md" }))
+      .rejects.toMatchObject({ code: "stale_revision" });
+    await expect(deleteSessionPath({
+      registry,
+      sessionId,
+      path: "README.md",
+      expectedRevision: readme.revision,
+    })).resolves.toMatchObject({ path: "README.md", type: "file", deleted: true });
+    await expect(deleteSessionPath({ registry, sessionId, path: "docs" }))
+      .rejects.toMatchObject({ code: "directory_not_empty" });
+    await expect(deleteSessionPath({ registry, sessionId, path: "docs", recursive: true }))
+      .resolves.toMatchObject({ path: "docs", type: "folder", deleted: true });
+    expect((await listSessionFiles({ registry, sessionId })).files).toEqual([]);
+    expect(checkpoint.flushes).toBe(2);
   });
 
   it("returns no-op and stale outcomes and creates missing parent folders", async () => {

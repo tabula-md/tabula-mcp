@@ -648,24 +648,30 @@ export class TabulaRoomClient {
           appliedChanges.push(input);
           continue;
         }
-        const node = draftRoom.nodes.get(input.documentId);
-        if (!node) throw new TabulaMcpError(`Workspace node ${input.documentId} was not found.`);
-        if (input.type === "document.rename") {
-          if (!renameWorkspaceRoomNode(draftRoom, input.documentId, input.title)) {
-            throw new TabulaMcpError("Workspace document could not be renamed.");
+        const node = draftRoom.nodes.get(input.nodeId);
+        if (!node) throw new TabulaMcpError(`Workspace node ${input.nodeId} was not found.`);
+        if (node.get("title") !== input.baseTitle || node.get("parentId") !== input.baseParentId) {
+          throw new TabulaMcpError(`Workspace path changed before the operation could be applied.`);
+        }
+        const text = draftRoom.documents.get(input.nodeId)?.toString();
+        if (input.baseSha256 && text !== undefined && await sha256Text(text) !== input.baseSha256) {
+          throw new TabulaMcpError(`Workspace document ${input.nodeId} changed before the operation.`);
+        }
+        if (input.type === "node.move") {
+          if (input.title !== input.baseTitle && !renameWorkspaceRoomNode(draftRoom, input.nodeId, input.title)) {
+            throw new TabulaMcpError("Workspace path could not be renamed.");
           }
-        } else if (input.type === "document.move") {
-          if (!moveWorkspaceRoomNode(draftRoom, input.documentId, input.parentId ?? WORKSPACE_ROOM_ROOT_ID)) {
-            throw new TabulaMcpError("Workspace document could not be moved.");
+          if (input.parentId !== input.baseParentId && !moveWorkspaceRoomNode(
+            draftRoom,
+            input.nodeId,
+            input.parentId ?? WORKSPACE_ROOM_ROOT_ID,
+          )) {
+            throw new TabulaMcpError("Workspace path could not be moved.");
           }
         } else {
-          const text = draftRoom.documents.get(input.documentId)?.toString();
-          if (input.baseSha256 && text !== undefined && await sha256Text(text) !== input.baseSha256) {
-            throw new TabulaMcpError(`Workspace document ${input.documentId} changed before deletion.`);
-          }
-          deleteWorkspaceRoomNode(draftRoom, input.documentId);
+          deleteWorkspaceRoomNode(draftRoom, input.nodeId);
         }
-        changedDocumentIds.add(input.documentId);
+        if (text !== undefined) changedDocumentIds.add(input.nodeId);
         appliedChanges.push(input);
       }
 

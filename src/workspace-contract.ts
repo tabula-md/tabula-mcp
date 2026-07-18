@@ -38,18 +38,19 @@ export type WorkspaceChange =
       markdown: string;
     }
   | {
-      type: "document.rename";
-      documentId: string;
+      type: "node.move";
+      nodeId: string;
+      baseParentId: string | null;
+      baseTitle: string;
+      baseSha256?: string;
+      parentId: string | null;
       title: string;
     }
   | {
-      type: "document.move";
-      documentId: string;
-      parentId: string | null;
-    }
-  | {
-      type: "document.delete";
-      documentId: string;
+      type: "node.delete";
+      nodeId: string;
+      baseParentId: string | null;
+      baseTitle: string;
       baseSha256?: string;
     };
 
@@ -84,14 +85,17 @@ export const isWorkspaceChange = (value: unknown): value is WorkspaceChange => {
       typeof value.title === "string" &&
       typeof value.markdown === "string";
   }
-  if (value.type === "document.rename") {
-    return typeof value.documentId === "string" && typeof value.title === "string";
+  if (value.type === "node.move") {
+    return typeof value.nodeId === "string" &&
+      (value.baseParentId === null || typeof value.baseParentId === "string") &&
+      typeof value.baseTitle === "string" &&
+      (value.baseSha256 === undefined || typeof value.baseSha256 === "string") &&
+      (value.parentId === null || typeof value.parentId === "string") &&
+      typeof value.title === "string";
   }
-  if (value.type === "document.move") {
-    return typeof value.documentId === "string" &&
-      (value.parentId === null || typeof value.parentId === "string");
-  }
-  return value.type === "document.delete" &&
-    typeof value.documentId === "string" &&
+  return value.type === "node.delete" &&
+    typeof value.nodeId === "string" &&
+    (value.baseParentId === null || typeof value.baseParentId === "string") &&
+    typeof value.baseTitle === "string" &&
     (value.baseSha256 === undefined || typeof value.baseSha256 === "string");
 };

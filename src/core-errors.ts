@@ -1,9 +1,13 @@
 export type TabulaCoreErrorCode =
   | "copy_import_failed"
+  | "directory_not_empty"
+  | "edit_ambiguous"
+  | "edit_not_found"
   | "file_not_found"
   | "invalid_input"
   | "invalid_path"
   | "parent_folder_not_found"
+  | "path_exists"
   | "read_too_large"
   | "session_not_found"
   | "session_not_ready"
