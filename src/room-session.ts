@@ -1,5 +1,6 @@
 import type { RuntimeEnvironment } from "./env.js";
-import { TabulaMcpError, parseRoomShareUrl, resolveRoomServerUrl } from "./protocol.js";
+import { TabulaCoreError } from "./core-errors.js";
+import { parseRoomShareUrl, resolveRoomServerUrl } from "./protocol.js";
 import type { SessionRegistry } from "./registry.js";
 import { createFirebaseWorkspaceRoomCheckpointStore } from "./room-checkpoints.js";
 import { TabulaRoomClient } from "./room-client.js";
@@ -31,7 +32,11 @@ export const startWorkspaceRoom = async ({
   writeAccess?: boolean;
 }) => {
   if (!writeAccess) {
-    throw new TabulaMcpError("This Tabula MCP server was started with --read-only and cannot create a live session. Restart without --read-only to publish a shared workspace.");
+    throw new TabulaCoreError(
+      "write_disabled",
+      "This Tabula MCP server is read-only and cannot start a live session.",
+      { retry: "Restart Tabula MCP without --read-only, then start the session again." },
+    );
   }
   const roomId = generateRoomId();
   const roomKey = generateRoomKey();
@@ -45,8 +50,13 @@ export const startWorkspaceRoom = async ({
   const roomWorkspace = withWorkspaceRoomId(workspace, roomId);
   const roomCheckpointStore = createFirebaseWorkspaceRoomCheckpointStore(env);
   if (!roomCheckpointStore.enabled && !allowTemporary) {
-    throw new TabulaMcpError(
+    throw new TabulaCoreError(
+      "write_failed",
       "Hosted Tabula MCP can start a live session only when encrypted room persistence is configured. Use a local MCP client for a temporary session, or configure TABULA_MCP_FIREBASE_CONFIG.",
+      {
+        details: { reason: "room_persistence_unavailable" },
+        retry: "Use local Tabula MCP for a temporary session, or configure encrypted Room persistence.",
+      },
     );
   }
   const client = new TabulaRoomClient({

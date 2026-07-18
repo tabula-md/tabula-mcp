@@ -27,6 +27,10 @@ const hostColorMappings = {
 const formatCount = (value) => new Intl.NumberFormat("en-US").format(Number(value) || 0);
 
 const getErrorText = (result) => {
+  const structuredMessage = result?.structuredContent?.message;
+  if (typeof structuredMessage === "string") {
+    return structuredMessage;
+  }
   const textBlock = result?.content?.find((item) => item.type === "text");
   const text = textBlock?.text;
   if (!text) {

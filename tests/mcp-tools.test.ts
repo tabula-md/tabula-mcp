@@ -88,6 +88,25 @@ const expectInputPropertiesDescribed = (schema: unknown, path = "inputSchema") =
   }
 };
 
+const expectTypedToolError = (
+  result: {
+    isError?: boolean;
+    structuredContent?: Record<string, unknown>;
+    content?: Array<{ type: string; text?: string }>;
+  },
+  code: string,
+) => {
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({
+    code,
+    message: expect.any(String),
+    details: expect.any(Object),
+  });
+  const text = result.content?.find((item) => item.type === "text")?.text;
+  expect(JSON.parse(text ?? "{}")).toEqual(result.structuredContent);
+  return result.structuredContent!;
+};
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
@@ -175,7 +194,75 @@ describe("core MCP contract", () => {
       expect(instructions).toContain("Import Copy");
       expect(instructions).toContain("does not join a live session");
       expect(instructions).toContain("Start Session");
+      expect(instructions).toContain("structured code, message, details, and optional retry fields");
+      expect(instructions).toContain("input schema failures remain standard MCP validation errors");
       expect(instructions).not.toContain("tabula_read_me");
+    });
+  });
+
+  it.each([
+    ["list_files", { sessionId: "00000000-0000-4000-8000-000000000099" }],
+    ["read_file", { sessionId: "00000000-0000-4000-8000-000000000099", path: "missing.md" }],
+    ["read_multiple_files", { sessionId: "00000000-0000-4000-8000-000000000099", paths: ["missing.md"] }],
+    ["search_files", { sessionId: "00000000-0000-4000-8000-000000000099", query: "missing" }],
+    ["write_file", { sessionId: "00000000-0000-4000-8000-000000000099", path: "new.md", content: "# New\n" }],
+    ["write_files", { sessionId: "00000000-0000-4000-8000-000000000099", files: [{ path: "new.md", content: "# New\n" }] }],
+    ["edit_file", {
+      sessionId: "00000000-0000-4000-8000-000000000099",
+      path: "missing.md",
+      expectedRevision: "0".repeat(64),
+      edits: [{ oldText: "old", newText: "new" }],
+    }],
+    ["create_directory", { sessionId: "00000000-0000-4000-8000-000000000099", path: "docs" }],
+    ["move_file", {
+      sessionId: "00000000-0000-4000-8000-000000000099",
+      source: "a.md",
+      destination: "b.md",
+      expectedRevision: "0".repeat(64),
+    }],
+    ["delete_path", {
+      sessionId: "00000000-0000-4000-8000-000000000099",
+      path: "a.md",
+      expectedRevision: "0".repeat(64),
+    }],
+    ["export_copy", { sessionId: "00000000-0000-4000-8000-000000000099" }],
+  ])("returns the typed execution-error envelope from %s", async (name, argumentsValue) => {
+    await withClient(async (client) => {
+      const result = await client.callTool({ name, arguments: argumentsValue });
+      const error = expectTypedToolError(result, "session_not_found");
+      expect(error.details).toEqual({ sessionId: "00000000-0000-4000-8000-000000000099" });
+      expect(error.retry).toEqual(expect.any(String));
+    });
+  });
+
+  it("returns typed errors from the three session and handoff entry points", async () => {
+    await withClient(async (client) => {
+      const started = await client.callTool({
+        name: "start_session",
+        arguments: { files: [{ path: "a.md", content: "# A\n" }] },
+      });
+      expectTypedToolError(started, "write_disabled");
+
+      const joined = await client.callTool({
+        name: "join_room",
+        arguments: { roomUrl: "https://tabula.md/" },
+      });
+      expectTypedToolError(joined, "invalid_input");
+
+      const imported = await client.callTool({
+        name: "import_copy",
+        arguments: { copyUrl: "https://tabula.md/" },
+      });
+      expectTypedToolError(imported, "invalid_input");
+    }, { writeEnabled: false });
+  });
+
+  it("keeps Leave Session idempotent instead of reporting an error for an unknown session", async () => {
+    await withClient(async (client) => {
+      const sessionId = "00000000-0000-4000-8000-000000000099";
+      const result = await client.callTool({ name: "leave_session", arguments: { sessionId } });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual({ sessionId, left: false, reason: "already_left" });
     });
   });
 
@@ -304,13 +391,16 @@ describe("core MCP contract", () => {
       expect(error).toMatchObject({
         code: "invalid_input",
         message: expect.stringContaining(message),
-        expected: expect.stringContaining("files"),
-        examples: [
-          { files: [{ path: "sample.md", content: "# Sample\n" }] },
-          { sessionId: "00000000-0000-4000-8000-000000000000", paths: ["sample.md"] },
-        ],
+        details: {
+          expected: expect.stringContaining("files"),
+          examples: [
+            { files: [{ path: "sample.md", content: "# Sample\n" }] },
+            { sessionId: "00000000-0000-4000-8000-000000000000", paths: ["sample.md"] },
+          ],
+        },
         retry: expect.stringContaining("exactly one of files or sessionId"),
       });
+      expect(exported.structuredContent).toEqual(error);
     });
   });
 
@@ -437,9 +527,11 @@ describe("core MCP contract", () => {
       const error = JSON.parse(imported.content?.find((item) => item.type === "text")?.text ?? "{}");
       expect(error).toMatchObject({
         code: "copy_import_failed",
+        details: expect.any(Object),
         message: expect.stringContaining("could not be decrypted"),
         retry: expect.stringContaining("complete #json URL"),
       });
+      expect(imported.structuredContent).toEqual(error);
     });
   });
 

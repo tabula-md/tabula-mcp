@@ -22,6 +22,7 @@ export const createCoreInstructions = ({
   "When the user wants multiple new Markdown files without a live session, call Export Copy once with files so they open as one Tabula workspace.",
   "Use Export Copy for a fixed #json handoff. Keep every returned copy URL private unless the user explicitly asks to share it.",
   "Use Start Session with files when people or agents should continue editing together.",
+  "Tool execution errors return structured code, message, details, and optional retry fields; input schema failures remain standard MCP validation errors.",
   "Tool execution approval is controlled by the MCP host.",
   deploymentMode === "local"
     ? "This MCP server runs locally; Markdown remains in the host until a Copy or Session tool is called."
