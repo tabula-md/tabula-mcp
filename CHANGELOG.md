@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0
+
 - Removed the redundant `tabula_` prefix from all model-facing tools. MCP hosts
   already namespace tools by server, so agents now use concise names such as
   `read_file`, `read_multiple_files`, `edit_file`, and `export_copy`.
@@ -14,6 +16,9 @@
 - Added search context and bounded edit diffs. Exact edits can now rebase onto
   a newer live revision only when their anchors still match safely, and
   `replaceAll` makes intentional repeated replacements explicit.
+- Replaced the MCP-specific Room implementation with the official
+  `@tabula-md/tabula` headless client while preserving encrypted live-session,
+  checkpoint, presence, and revision behavior.
 
 ## 0.4.1
 
