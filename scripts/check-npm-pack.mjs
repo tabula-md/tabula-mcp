@@ -10,6 +10,8 @@ const requiredFiles = [
   "dist/index.d.ts",
   "dist/cli.js",
   "dist/cli.d.ts",
+  "dist/sync-cli.js",
+  "dist/sync-cli.d.ts",
   "dist/env.js",
   "dist/env.d.ts",
   "dist/server/index.js",

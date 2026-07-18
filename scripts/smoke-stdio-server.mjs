@@ -89,7 +89,7 @@ const withClient = async ({ options, env, mcpApps }, callback) => {
     return await callback(client);
   } finally {
     await client.close();
-    assert(stderr.every((line) => line.includes("ExperimentalWarning: localStorage is not available")), stderr.join(""));
+    assert.equal(stderr.join("").trim(), "", `MCP stdio server wrote to stderr: ${stderr.join("")}`);
   }
 };
 
