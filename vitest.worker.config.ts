@@ -7,7 +7,7 @@ export default defineConfig({
   assetsInclude: ["**/*.html"],
   plugins: [
     cloudflareTest({
-      main: "./workers/tabula-mcp-worker.ts",
+      main: "./dist/worker-test-bundle/tabula-mcp-worker.js",
       miniflare: {
         bindings: {
           TABULA_MCP_ALLOW_MEMORY_STORE: "1",

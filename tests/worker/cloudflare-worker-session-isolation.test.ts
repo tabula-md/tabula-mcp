@@ -4,11 +4,10 @@ import {
   reset,
   runDurableObjectAlarm,
   runInDurableObject,
+  SELF,
 } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 import { quotaClientKey } from "../../src/server/cloudflare-quota.js";
-import type { WorkerEnv } from "../../workers/tabula-mcp-session-do.js";
-import worker from "../../workers/tabula-mcp-worker.js";
 
 const clientIp = "203.0.113.42";
 const quotaHashSecret = "workerd-session-isolation-secret";
@@ -34,7 +33,7 @@ const mcpRequest = async ({
   body?: Record<string, unknown>;
   method?: "DELETE" | "POST";
   sessionId?: string;
-}) => worker.fetch(new Request("https://mcp.tabula.md/mcp", {
+}) => SELF.fetch(new Request("https://mcp.tabula.md/mcp", {
   method,
   headers: {
     accept: "application/json, text/event-stream",
@@ -43,7 +42,7 @@ const mcpRequest = async ({
     ...(sessionId ? { "mcp-session-id": sessionId } : {}),
   },
   ...(body ? { body: JSON.stringify(body) } : {}),
-}), testEnv as unknown as WorkerEnv);
+}));
 
 const initialize = async (id: number) => {
   const response = await mcpRequest({
