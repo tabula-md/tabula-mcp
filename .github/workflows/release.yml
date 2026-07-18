@@ -97,32 +97,45 @@ jobs:
           TABULA_JSON_REPO_DIR: ${{ github.workspace }}/deps/tabula-json
         run: npm run test:e2e:local-collab
 
+      - name: Rebuild release artifacts after interoperability test
+        run: npm run release:pack
+
       - name: Resolve release provenance
         run: npm run build:release-manifest -- --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA"
 
       - name: Publish npm package through OIDC
-        run: npm publish --access public --ignore-scripts
+        run: node scripts/publish-npm-release.mjs
 
       - name: Create GitHub Release and upload MCPB artifacts
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "dist/tabula-mcp-${VERSION}.mcpb#Claude Desktop extension ${VERSION}" \
-            "dist/tabula-mcp-${VERSION}.mcpb.sha256#SHA-256 checksum ${VERSION}" \
-            "dist/tabula-mcp.mcpb#Latest Claude Desktop extension" \
-            "dist/tabula-mcp.mcpb.sha256#Latest SHA-256 checksum" \
-            "dist/release-manifest.json#Resolved release manifest" \
-            --title "Tabula MCP ${VERSION}" \
-            --generate-notes \
-            --verify-tag
+          assets=(
+            "dist/tabula-mcp-${VERSION}.mcpb#Claude Desktop extension ${VERSION}"
+            "dist/tabula-mcp-${VERSION}.mcpb.sha256#SHA-256 checksum ${VERSION}"
+            "dist/tabula-mcp.mcpb#Latest Claude Desktop extension"
+            "dist/tabula-mcp.mcpb.sha256#Latest SHA-256 checksum"
+            "dist/release-manifest.json#Resolved release manifest"
+          )
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "Tabula MCP ${VERSION}"
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+              --title "Tabula MCP ${VERSION}" \
+              --generate-notes \
+              --verify-tag
+          fi
 
       - name: Deploy the production Cloudflare Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run deploy:cloudflare
+
+      - name: Restore resolved manifest after Worker build
+        run: npm run build:release-manifest -- --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA"
 
       - name: Verify npm, GitHub, and production surfaces
         env:
