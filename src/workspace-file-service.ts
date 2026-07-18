@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { getTextPatchesForChange } from "@tabula-md/tabula";
+import { getTextPatchesForChange } from "@tabula-md/tabula/text-patches";
 import { TabulaCoreError } from "./core-errors.js";
 import { sha256Text } from "./crypto.js";
 import { assertMarkdownSize } from "./documents/snapshot.js";
 import type { SessionRegistry } from "./registry.js";
+import { WorkspaceConflictError } from "./protocol.js";
 import { renderExactTextDiff, type ExactTextChange } from "./text-diff.js";
 import type { WorkspaceChange } from "./workspace-contract.js";
 import { buildWorkspacePathIndex, normalizeWorkspaceFilePath } from "./workspace-paths.js";
@@ -176,18 +177,68 @@ export const maxSessionReadCharacters = 100_000;
 export const defaultSessionReadLines = 400;
 export const maxSessionReadLines = 2_000;
 export const maxSearchContextLines = 5;
+export const defaultSessionListEntries = 100;
+export const maxSessionListEntries = 200;
+
+type SessionListCursor = {
+  v: 1;
+  workspaceVersion: number;
+  basePath: string;
+  recursive: boolean;
+  afterPath: string;
+};
+
+const encodeSessionListCursor = (value: SessionListCursor) => {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+};
+
+const decodeSessionListCursor = (cursor: string): SessionListCursor => {
+  try {
+    const base64 = cursor.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as Partial<SessionListCursor>;
+    if (
+      parsed.v !== 1 ||
+      !Number.isInteger(parsed.workspaceVersion) ||
+      typeof parsed.basePath !== "string" ||
+      typeof parsed.recursive !== "boolean" ||
+      typeof parsed.afterPath !== "string" ||
+      !parsed.afterPath
+    ) throw new Error("Invalid cursor payload.");
+    return parsed as SessionListCursor;
+  } catch {
+    throw new TabulaCoreError("stale_cursor", "The file-list cursor is invalid or no longer usable.", {
+      retry: "List files again without a cursor.",
+    });
+  }
+};
 
 export const listSessionFiles = async ({
   registry,
   sessionId,
   path: requestedPath,
   recursive = true,
+  limit = defaultSessionListEntries,
+  cursor,
 }: {
   registry: SessionRegistry;
   sessionId: string;
   path?: string;
   recursive?: boolean;
+  limit?: number;
+  cursor?: string;
 }) => {
+  if (!Number.isInteger(limit) || limit < 1 || limit > maxSessionListEntries) {
+    throw new TabulaCoreError("invalid_range", "File-list limit is outside the supported range.", {
+      details: { limit, maximum: maxSessionListEntries },
+      retry: `Use a limit between 1 and ${maxSessionListEntries}.`,
+    });
+  }
   const { snapshot } = await readReadySnapshot(registry, sessionId);
   const index = buildWorkspacePathIndex(snapshot.workspace);
   const basePath = requestedPath ? normalizeWorkspaceFilePath(requestedPath) : "";
@@ -202,12 +253,27 @@ export const listSessionFiles = async ({
   }
 
   const prefix = basePath ? `${basePath}/` : "";
-  const files = index.entries
+  const entries = index.entries
     .filter((entry) => {
       if (!entry.path.startsWith(prefix) || entry.path === basePath) return false;
       return recursive || !entry.path.slice(prefix.length).includes("/");
-    })
-    .map(({ node, path: entryPath }) => node.type === "folder"
+    });
+  let startIndex = 0;
+  if (cursor) {
+    const decoded = decodeSessionListCursor(cursor);
+    const cursorMatchesRequest = decoded.workspaceVersion === snapshot.workspace.version &&
+      decoded.basePath === basePath && decoded.recursive === recursive;
+    const afterIndex = entries.findIndex((entry) => entry.path === decoded.afterPath);
+    if (!cursorMatchesRequest || afterIndex < 0) {
+      throw new TabulaCoreError("stale_cursor", "The file-list cursor does not match the current session view.", {
+        details: { path: basePath || undefined },
+        retry: "List files again without a cursor.",
+      });
+    }
+    startIndex = afterIndex + 1;
+  }
+  const page = entries.slice(startIndex, startIndex + limit);
+  const files = page.map(({ node, path: entryPath }) => node.type === "folder"
       ? { path: entryPath, type: "folder" as const }
       : {
           path: entryPath,
@@ -215,8 +281,25 @@ export const listSessionFiles = async ({
           revision: node.sha256,
           textLength: node.textLength,
         });
+  const truncated = startIndex + page.length < entries.length;
+  const lastPath = page.at(-1)?.path;
 
-  return { sessionId, files, truncated: false };
+  return {
+    sessionId,
+    files,
+    truncated,
+    ...(truncated && lastPath
+      ? {
+          nextCursor: encodeSessionListCursor({
+            v: 1,
+            workspaceVersion: snapshot.workspace.version,
+            basePath,
+            recursive,
+            afterPath: lastPath,
+          }),
+        }
+      : {}),
+  };
 };
 
 export const readSessionFiles = async ({
@@ -421,6 +504,12 @@ export const searchSessionFiles = async ({
   const { snapshot } = await readReadySnapshot(registry, sessionId);
   const index = buildWorkspacePathIndex(snapshot.workspace);
   const basePath = requestedPath ? normalizeWorkspaceFilePath(requestedPath) : "";
+  if (basePath && !index.byPath.has(basePath)) {
+    throw new TabulaCoreError("file_not_found", "Search scope was not found in the Tabula session.", {
+      details: { path: basePath },
+      retry: "List files to find the correct file or folder path.",
+    });
+  }
   const prefix = basePath ? `${basePath}/` : "";
   const matches: Array<{
     path: string;
@@ -578,7 +667,7 @@ export const writeSessionFiles = async ({
     throwIfOperationAborted();
     if (changes.length > 0) await session.applyWorkspaceChanges({ changes });
   } catch (error) {
-    if (error instanceof Error && /changed before/i.test(error.message)) {
+    if (error instanceof WorkspaceConflictError) {
       throw new TabulaCoreError("stale_revision", "A file changed before the batch write could be applied.", {
         details: { paths: normalizedFiles.map((file) => file.path) },
         retry: "Read the existing files again, merge the changes, and retry the whole batch.",
@@ -764,7 +853,7 @@ export const editSessionFile = async ({
         patches: getTextPatchesForChange(plan.currentContent, plan.nextContent),
       }] });
     } catch (error) {
-      if (!(error instanceof Error) || !/changed before/i.test(error.message)) {
+      if (!(error instanceof WorkspaceConflictError)) {
         if (error instanceof TabulaCoreError) throw error;
         throw writeFailed(filePath);
       }
@@ -782,7 +871,7 @@ export const editSessionFile = async ({
             patches: getTextPatchesForChange(plan.currentContent, plan.nextContent),
           }] });
         } catch (retryError) {
-          if (retryError instanceof Error && /changed before/i.test(retryError.message)) {
+          if (retryError instanceof WorkspaceConflictError) {
             throw new TabulaCoreError("stale_revision", "The file kept changing before the edit could be applied.", {
               details: { path: filePath },
               retry: "Read the latest file and retry the edit.",
@@ -956,7 +1045,7 @@ export const moveSessionFile = async ({
       title: path.posix.basename(destination),
     }] });
   } catch (error) {
-    if (error instanceof Error && /changed before|path changed/i.test(error.message)) {
+    if (error instanceof WorkspaceConflictError) {
       throw new TabulaCoreError("stale_revision", "The source changed before it could be moved or renamed.", {
         details: { path: source },
         retry: "List files again and retry from the current path.",
@@ -1032,7 +1121,7 @@ export const deleteSessionPath = async ({
       ...(entry.node.type === "document" ? { baseSha256: entry.node.sha256 } : {}),
     }] });
   } catch (error) {
-    if (error instanceof Error && /changed before|path changed/i.test(error.message)) {
+    if (error instanceof WorkspaceConflictError) {
       throw new TabulaCoreError("stale_revision", "The path changed before it could be deleted.", {
         details: { path: targetPath },
         retry: "List files again and retry from the current path.",

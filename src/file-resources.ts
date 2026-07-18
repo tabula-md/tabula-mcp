@@ -42,12 +42,12 @@ export const registerFileResources = (
     },
     async (uri, variables) => {
       const sessionId = decodeVariable(variables.sessionId, "sessionId");
-      const { files, truncated } = await listSessionFiles({ registry, sessionId });
+      const { files, truncated, nextCursor } = await listSessionFiles({ registry, sessionId });
       return {
         contents: [{
           uri: uri.toString(),
           mimeType: jsonMimeType,
-          text: JSON.stringify({ sessionId, files, truncated }, null, 2),
+          text: JSON.stringify({ sessionId, files, truncated, ...(nextCursor ? { nextCursor } : {}) }, null, 2),
         }],
       };
     },

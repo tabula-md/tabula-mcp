@@ -1,9 +1,6 @@
-import {
-  decodeEncryptedData,
-  getJsonShareImportRoute,
-  JSON_SHARE_API_PREFIX,
-  parseShareSnapshot,
-} from "@tabula-md/tabula";
+import { decodeEncryptedData } from "@tabula-md/tabula/data/encode";
+import { parseShareSnapshot } from "@tabula-md/tabula/data/json";
+import { getJsonShareImportRoute, JSON_SHARE_API_PREFIX } from "@tabula-md/tabula/share-link";
 import { sha256Text } from "./crypto.js";
 import { maxCopyCharacters, maxCopyFiles, maxEncryptedCopyBytes } from "./copy-limits.js";
 import { TabulaCoreError } from "./core-errors.js";

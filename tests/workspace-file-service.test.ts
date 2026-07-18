@@ -131,6 +131,28 @@ describe("workspace file service", () => {
     expect(scoped.files).toEqual([expect.objectContaining({ path: "docs/security.md", type: "file" })]);
   });
 
+  it("paginates stable file listings and rejects stale or mismatched cursors", async () => {
+    const { registry, workspace } = await createHarness();
+    const first = await listSessionFiles({ registry, sessionId, limit: 2 });
+    expect(first).toMatchObject({ truncated: true, files: [{ path: "docs" }, { path: "docs/security.md" }] });
+    expect(first.nextCursor).toEqual(expect.any(String));
+
+    const second = await listSessionFiles({ registry, sessionId, limit: 2, cursor: first.nextCursor });
+    expect(second).toMatchObject({ truncated: false, files: [{ path: "README.md" }] });
+    expect(second).not.toHaveProperty("nextCursor");
+    await expect(listSessionFiles({
+      registry,
+      sessionId,
+      path: "docs",
+      limit: 2,
+      cursor: first.nextCursor,
+    })).rejects.toMatchObject({ code: "stale_cursor" });
+
+    workspace.version += 1;
+    await expect(listSessionFiles({ registry, sessionId, limit: 2, cursor: first.nextCursor }))
+      .rejects.toMatchObject({ code: "stale_cursor" });
+  });
+
   it("reads and searches Markdown without exposing document ids", async () => {
     const { registry } = await createHarness();
     const read = await readSessionFiles({ registry, sessionId, paths: ["docs/security.md", "README.md"] });
@@ -186,6 +208,8 @@ describe("workspace file service", () => {
     expect(pathMatch.matches.filter((match) => match.kind === "path")).toEqual([
       expect.objectContaining({ path: "docs/security.md", match: "docs/security.md" }),
     ]);
+    await expect(searchSessionFiles({ registry, sessionId, query: "anything", path: "missing" }))
+      .rejects.toMatchObject({ code: "file_not_found", details: { path: "missing" } });
   });
 
   it("rejects duplicate, oversized, and over-broad batch reads without truncating content", async () => {

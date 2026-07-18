@@ -501,6 +501,11 @@ describe("core MCP workflows", () => {
         code: "session_not_ready",
         retry: expect.stringContaining("join it again"),
       });
-    });
+
+      roomMock.setStateReceived(true);
+      const retried = await client.callTool({ name: "join_room", arguments: { roomUrl } });
+      expect(retried.isError).not.toBe(true);
+      expect(retried.structuredContent).toMatchObject({ ready: true, canWrite: true });
+    }, { TABULA_MCP_MAX_ROOMS_PER_SESSION: "1" });
   });
 });
