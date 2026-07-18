@@ -1,21 +1,23 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { publishNpmRelease, verifyExistingPublication } from "../scripts/publish-npm-release.mjs";
 
 const sourceCommit = "28913436f9261e3ae82cf1894dea50e60e845464";
+const packageVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version as string;
 
 describe("resumable npm release publishing", () => {
   it("accepts an existing version from the same release commit", () => {
     expect(() => verifyExistingPublication({
-      publishedPackage: { version: "0.6.0", gitHead: sourceCommit },
-      version: "0.6.0",
+      publishedPackage: { version: packageVersion, gitHead: sourceCommit },
+      version: packageVersion,
       sourceCommit,
     })).not.toThrow();
   });
 
   it("rejects an existing version from another commit", () => {
     expect(() => verifyExistingPublication({
-      publishedPackage: { version: "0.6.0", gitHead: "0".repeat(40) },
-      version: "0.6.0",
+      publishedPackage: { version: packageVersion, gitHead: "0".repeat(40) },
+      version: packageVersion,
       sourceCommit,
     })).toThrow(/already exists on npm/);
   });
@@ -27,7 +29,7 @@ describe("resumable npm release publishing", () => {
     try {
       const result = await publishNpmRelease({
         fetchImpl: async () => new Response(JSON.stringify({
-          version: "0.6.0",
+          version: packageVersion,
           gitHead: sourceCommit,
         }), {
           status: 200,
