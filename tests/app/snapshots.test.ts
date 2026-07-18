@@ -4,11 +4,12 @@ import type { SessionRegistry } from "../../src/registry.js";
 
 describe("readRoomSnapshot", () => {
   it("returns a waiting room snapshot without reading an unhydrated workspace", async () => {
+    const sessionId = "00000000-0000-4000-8000-000000000001";
     const readMarkdown = vi.fn();
     const getOutline = vi.fn();
     const session = {
       getStatus: vi.fn(async () => ({
-        sessionId: "00000000-0000-4000-8000-000000000001",
+        sessionId,
         roomId: "room_123",
         shareUrl: "https://tabula.md/#room=room_123,secret",
         status: "connected",
@@ -27,7 +28,7 @@ describe("readRoomSnapshot", () => {
       get: vi.fn(() => session),
     } as unknown as SessionRegistry;
 
-    await expect(readRoomSnapshot(registry)).resolves.toMatchObject({
+    await expect(readRoomSnapshot(registry, sessionId)).resolves.toMatchObject({
       mode: "room",
       markdown: "",
       outline: [],
@@ -37,7 +38,7 @@ describe("readRoomSnapshot", () => {
         stateReceived: false,
       },
     });
-    const snapshot = await readRoomSnapshot(registry);
+    const snapshot = await readRoomSnapshot(registry, sessionId);
     expect(snapshot.room).not.toHaveProperty("peerCount");
     expect(snapshot.room).not.toHaveProperty("title");
     expect(snapshot.room.collaboratorCount).toBe(0);

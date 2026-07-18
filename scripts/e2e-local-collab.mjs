@@ -3,12 +3,12 @@ import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { chromium } from "playwright";
+import { spawnLogged, stopProcess } from "./managed-child-process.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultRoomRepoDir = path.resolve(rootDir, "../tabula-room");
@@ -83,64 +83,6 @@ const getFreePort = async () => {
   const port = address.port;
   await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   return port;
-};
-
-const spawnLogged = ({ command, args, cwd, env, label }) => {
-  let stopping = false;
-  const child = spawn(command, args, {
-    cwd,
-    env: {
-      ...process.env,
-      ...env,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const stdout = [];
-  const stderr = [];
-  child.stdout.on("data", (chunk) => {
-    stdout.push(String(chunk));
-  });
-  child.stderr.on("data", (chunk) => {
-    stderr.push(String(chunk));
-  });
-  child.once("exit", (code, signal) => {
-    if (stopping) {
-      return;
-    }
-    if (code !== 0 && code !== null) {
-      process.stderr.write(`[${label}] exited with code ${code}\n${stdout.join("")}${stderr.join("")}\n`);
-    } else if (signal) {
-      process.stderr.write(`[${label}] exited with signal ${signal}\n`);
-    }
-  });
-  child.once("error", (error) => {
-    process.stderr.write(`[${label}] failed to start: ${error.message}\n`);
-  });
-  return {
-    child,
-    stdout,
-    stderr,
-    label,
-    markStopping() {
-      stopping = true;
-    },
-  };
-};
-
-const stopProcess = async (processInfo) => {
-  if (!processInfo?.child || processInfo.child.killed || processInfo.child.exitCode !== null) {
-    return;
-  }
-  processInfo.markStopping?.();
-  processInfo.child.kill("SIGTERM");
-  await Promise.race([
-    once(processInfo.child, "exit"),
-    wait(5_000).then(() => {
-      if (!processInfo.child.killed && processInfo.child.exitCode === null) {
-        processInfo.child.kill("SIGKILL");
-      }
-    }),
-  ]);
 };
 
 const waitForHttp = async (url, { timeoutMs = 30_000, label = url } = {}) => {
@@ -456,7 +398,7 @@ const run = async () => {
 
     await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, async (client) => {
       const expectedTools = [
-        "start_session", "join_room", "list_files", "read_file", "read_multiple_files",
+        "start_session", "join_room", "leave_session", "list_files", "read_file", "read_multiple_files",
         "search_files", "write_file", "write_files", "edit_file", "create_directory",
         "move_file", "delete_path", "import_copy", "export_copy",
       ];
@@ -586,6 +528,14 @@ const run = async () => {
         title: "README.md",
         files: [{ path: "README.md", content: "# Peer-only recovery\n\nLoaded from the live MCP participant.\n" }],
       });
+      const originalAfterSecondSession = await callTool(client, "read_file", {
+        sessionId: session.sessionId,
+        path: "README.md",
+      });
+      assert(
+        !originalAfterSecondSession.content.includes("Peer-only recovery"),
+        "Starting a second Room must not redirect reads from the first sessionId",
+      );
       const peerOnlyPage = await context.newPage();
       await peerOnlyPage.goto(peerSession.sessionUrl.replace(appOrigin, peerOnlyAppOrigin));
       const peerOnlyBrowserText = await waitForEditorText(peerOnlyPage, "Loaded from the live MCP participant.");
@@ -605,6 +555,19 @@ const run = async () => {
         });
         const peerRead = peerReadBatch.files[0];
         assert.equal(peerRead.content, "# Peer-only recovery\n\nLoaded from the live MCP participant.\n");
+
+        const left = await callTool(client, "leave_session", { sessionId: peerSession.sessionId });
+        assert.equal(left.left, true);
+        const stillConnectedPeer = await callTool(peerClient, "read_file", {
+          sessionId: joined.sessionId,
+          path: "README.md",
+        });
+        assert.equal(stillConnectedPeer.content, peerRead.content);
+        const originalAfterLeave = await callTool(client, "read_file", {
+          sessionId: session.sessionId,
+          path: "README.md",
+        });
+        assert.equal(originalAfterLeave.content, originalAfterSecondSession.content);
       });
       await peerOnlyPage.close();
 

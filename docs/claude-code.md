@@ -25,9 +25,14 @@ Claude can create directories and move, rename, or delete Session paths with
 the dedicated filesystem-shaped tools. Non-empty directory deletion requires
 `recursive: true`.
 
+Every Room file call uses the `sessionId` returned by `join_room` or
+`start_session`. Claude can stay connected to several Rooms without an active
+Room fallback. Ask it to call `leave_session` when it should disconnect from
+one Session; leaving does not delete Room files.
+
 For a received `#json` link, Claude calls `import_copy` and then uses its
 host file tools to materialize the returned relative Markdown paths. It must
 ask before overwriting existing files. Import Copy is not a live Session.
 
 There is no legacy tool adapter. Restart Claude Code after upgrading so it
-reloads the fourteen core tool definitions.
+reloads the fifteen core tool definitions.

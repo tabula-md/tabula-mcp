@@ -10,6 +10,7 @@ const originalFetch = globalThis.fetch;
 const coreTools = [
   "start_session",
   "join_room",
+  "leave_session",
   "list_files",
   "read_file",
   "read_multiple_files",
@@ -57,7 +58,7 @@ const withClient = async <T>(
     return await callback(client);
   } finally {
     await Promise.allSettled([client.close(), instance.server.close()]);
-    instance.registry.clear();
+    await instance.registry.clear();
     instance.workspaces.clear();
     await instance.documents.clear();
   }
@@ -100,13 +101,14 @@ describe("write access configuration", () => {
 });
 
 describe("core MCP contract", () => {
-  it.each([false, true])("exposes exactly fourteen high-level tools (MCP Apps=%s)", async (mcpApps) => {
+  it.each([false, true])("exposes exactly fifteen high-level tools (MCP Apps=%s)", async (mcpApps) => {
     await withClient(async (client) => {
       const listed = await client.listTools();
       expect(listed.tools.map((tool) => tool.name)).toEqual(coreTools);
-      expect(Buffer.byteLength(JSON.stringify(listed), "utf8")).toBeLessThan(22_000);
+      expect(Buffer.byteLength(JSON.stringify(listed), "utf8")).toBeLessThan(32_000);
 
       for (const tool of listed.tools) {
+        expect(Buffer.byteLength(JSON.stringify(tool), "utf8")).toBeLessThan(4_000);
         expect(tool.title).toBeTruthy();
         expect(tool.description).toBeTruthy();
         expect(tool.inputSchema).toBeTruthy();
@@ -183,6 +185,7 @@ describe("core MCP contract", () => {
       expect(Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, tool.title]))).toEqual({
         start_session: "Start Session",
         join_room: "Join Room",
+        leave_session: "Leave Session",
         list_files: "List Files",
         read_file: "Read File",
         read_multiple_files: "Read Multiple Files",
@@ -198,17 +201,18 @@ describe("core MCP contract", () => {
       });
       expect(tools.start_session?.description).toContain("Markdown files");
       expect(tools.join_room?.description).toContain("private #room URL");
-      expect(tools.list_files?.description).toContain("target path is unknown");
+      expect(tools.leave_session?.description).toContain("without deleting");
+      expect(tools.list_files?.description).toContain("target is unknown");
       expect(tools.read_file?.description).toContain("bounded line range");
       expect(tools.read_multiple_files?.description).toContain("revisions");
-      expect(tools.search_files?.description).toContain("line numbers");
-      expect(tools.write_file?.description).toContain("one Markdown file");
+      expect(tools.search_files?.description).toContain("line context");
+      expect(tools.write_file?.description).toContain("one file");
       expect(tools.write_files?.description).toContain("Atomically");
-      expect(tools.edit_file?.description).toContain("oldText still matches safely");
+      expect(tools.edit_file?.description).toContain("safe match");
       expect(tools.create_directory?.description).toContain("missing parents");
       expect(tools.move_file?.description).toContain("Move or rename");
       expect(tools.delete_path?.description).toContain("recursive true");
-      expect(tools.import_copy?.description).toContain("does not join a live session");
+      expect(tools.import_copy?.description).toContain("does not join");
       expect(tools.export_copy?.description).toContain("exactly one of files or sessionId");
     });
   });
@@ -222,6 +226,7 @@ describe("core MCP contract", () => {
       }
       for (const name of [
         "join_room",
+        "leave_session",
         "list_files",
         "read_file",
         "read_multiple_files",
@@ -473,7 +478,7 @@ describe("core MCP contract", () => {
     });
   });
 
-  it("keeps the same nine-tool contract in read-only mode", async () => {
+  it("keeps the same fifteen-tool contract in read-only mode", async () => {
     await withClient(async (client) => {
       expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(coreTools);
     }, { writeEnabled: false });

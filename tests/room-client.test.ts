@@ -7,11 +7,12 @@ import {
   type WorkspaceRoomSyncAdapters,
   type WorkspaceRoomCheckpointStore,
 } from "@tabula-md/tabula/collaboration";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { importRoomKey, sha256Text } from "../src/crypto.js";
 import { parseRoomShareUrl } from "../src/protocol.js";
 import { TabulaRoomClient } from "../src/room-client.js";
 import { createMemoryWorkspaceRoomCheckpointStore } from "../src/room-checkpoints.js";
+import { abortableOperation, runWithOperationSignal } from "../src/server/operation-context.js";
 import type { WorkspaceRoomState } from "../src/workspace-contract.js";
 
 const roomKey = Buffer.from(new Uint8Array(32).fill(7)).toString("base64url");
@@ -77,7 +78,7 @@ const createMemoryRelay = () => {
     };
   };
 
-  return { createRoomTransport, envelopes };
+  return { createRoomTransport, envelopes, peerCount: () => peers.size };
 };
 
 const createWorkspaceState = async (markdown = "# Draft\n"): Promise<WorkspaceRoomState> => {
@@ -142,7 +143,57 @@ const createClient = ({
   createRoomTransport: relay.createRoomTransport,
 });
 
+afterEach(() => vi.useRealTimers());
+
 describe("TabulaRoomClient protocol v2", () => {
+  it("disconnects a Room transport when readiness is aborted before commit", async () => {
+    const relay = createMemoryRelay();
+    const client = createClient({ relay, checkpointStore: createDisabledCheckpointStore() });
+    const controller = new AbortController();
+    const connected = runWithOperationSignal(controller.signal, () =>
+      abortableOperation(client.connect({ waitForStateMs: 30_000 }), () => client.disconnect())
+    );
+    await waitFor(() => relay.peerCount() === 1);
+    controller.abort();
+    await expect(connected).rejects.toThrow("cancelled before it committed");
+    expect(relay.peerCount()).toBe(0);
+    await expect(client.getStatus()).resolves.toMatchObject({ status: "closed", socketConnected: false });
+  });
+
+  it("retries a failed recovery checkpoint and exposes the durable state transition", async () => {
+    const relay = createMemoryRelay();
+    let saves = 0;
+    const checkpointStore: WorkspaceRoomCheckpointStore = {
+      enabled: true,
+      async loadEncryptedCheckpoint() { return null; },
+      async saveEncryptedCheckpoint() {
+        saves += 1;
+        if (saves === 1) throw new Error("checkpoint unavailable");
+        return { ok: true, generation: 1 };
+      },
+    };
+    const client = createClient({ relay, checkpointStore });
+    try {
+      await client.publishWorkspaceSnapshot({
+        workspace: await createWorkspaceState(),
+        documents: [{ documentId: "doc_1", title: "Draft.md", markdown: "# Draft\n" }],
+        persistCheckpoint: false,
+      });
+      await client.connect();
+      vi.useFakeTimers();
+      await expect(client.persistCheckpointAfterMutation()).resolves.toBe("pending");
+      expect(client.checkpointPersistenceStatus()).toBe("pending");
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      vi.useRealTimers();
+      await waitFor(() => client.checkpointPersistenceStatus() === "saved");
+      expect(saves).toBe(2);
+      expect(client.checkpointPersistenceStatus()).toBe("saved");
+    } finally {
+      client.disconnect();
+    }
+  });
+
   it("uses the shared agent actor and stable capability contract", async () => {
     const relay = createMemoryRelay();
     const client = createClient({ relay, writeAccess: false });

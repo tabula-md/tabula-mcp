@@ -31,7 +31,7 @@ export const documentSnapshotContent = (document: TabulaDocumentSnapshot) => ({
 export const readDocumentSnapshot = async (documents: DocumentRegistry, documentId?: string) =>
   documentSnapshotContent(await documents.get(documentId));
 
-export const readRoomSnapshot = async (registry: SessionRegistry, sessionId?: string) => {
+export const readRoomSnapshot = async (registry: SessionRegistry, sessionId: string) => {
   const session = registry.get(sessionId);
   const status = await session.getStatus();
 

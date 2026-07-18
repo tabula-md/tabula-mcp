@@ -16,6 +16,10 @@
       {
         "name": "TABULA_MCP_SESSIONS",
         "class_name": "TabulaMcpSessionDurableObject"
+      },
+      {
+        "name": "TABULA_MCP_QUOTA",
+        "class_name": "TabulaMcpQuotaDurableObject"
       }
     ]
   },
@@ -23,6 +27,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["TabulaMcpSessionDurableObject"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["TabulaMcpQuotaDurableObject"]
     }
   ],
   "vars": {

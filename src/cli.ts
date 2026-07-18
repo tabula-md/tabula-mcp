@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { TabulaMcpServerInstance } from "./server/create-server.js";
 import type { TabulaMcpHttpServer } from "./server/http.js";
 import { TABULA_MCP_PRODUCT_DESCRIPTION } from "./public-copy.js";
+import { redactOperationalText } from "./server/operational-policy.js";
 
 export type CliTransportMode = "stdio" | "http";
 
@@ -154,6 +155,10 @@ export const runStdioServer = async () => {
   ]);
   const instance = createTabulaMcpServer();
   const transport = new StdioServerTransport();
+  transport.onclose = () => {
+    void instance.registry.clear();
+    void instance.documents.clear();
+  };
   await instance.server.connect(transport);
   return instance;
 };
@@ -213,8 +218,8 @@ export const runCli = (
       }
     })
     .catch((error) => {
-      console.error(error instanceof Error ? error.message : "Fatal Tabula MCP error.");
-      instance?.registry.clear();
+      console.error(redactOperationalText(error instanceof Error ? error.message : "Fatal Tabula MCP error."));
+      void instance?.registry.clear();
       void instance?.documents.clear();
       void httpServer?.close();
       process.exit(1);

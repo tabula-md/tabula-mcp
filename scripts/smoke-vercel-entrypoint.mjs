@@ -71,6 +71,7 @@ try {
   assert(JSON.stringify(tools.tools.map((tool) => tool.name)) === JSON.stringify([
     "start_session",
     "join_room",
+    "leave_session",
     "list_files",
     "read_file",
     "read_multiple_files",
@@ -83,7 +84,7 @@ try {
     "delete_path",
     "import_copy",
     "export_copy",
-  ]), "Vercel MCP endpoint did not expose exactly the fourteen core tools");
+  ]), "Vercel MCP endpoint did not expose exactly the fifteen core tools");
 } finally {
   await client.close();
 }

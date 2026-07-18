@@ -11,6 +11,7 @@ export type TabulaCoreErrorCode =
   | "path_exists"
   | "read_too_large"
   | "session_not_found"
+  | "session_limit"
   | "session_not_ready"
   | "stale_revision"
   | "write_failed"

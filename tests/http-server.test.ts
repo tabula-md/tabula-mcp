@@ -114,6 +114,7 @@ describe("Tabula MCP HTTP server", () => {
       expect(tools.tools.map((tool) => tool.name)).toEqual([
         "start_session",
         "join_room",
+        "leave_session",
         "list_files",
         "read_file",
         "read_multiple_files",

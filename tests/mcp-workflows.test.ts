@@ -125,6 +125,7 @@ const roomMock = vi.hoisted(() => {
       return { changedDocumentIds };
     }
     async flushCheckpoint() {}
+    async persistCheckpointAfterMutation() { return "disabled" as const; }
     disconnect() {}
   }
   return {
@@ -138,13 +139,18 @@ const roomMock = vi.hoisted(() => {
 vi.mock("../src/room-client.js", () => ({ TabulaRoomClient: roomMock.MockRoomClient }));
 
 import { MemoryDocumentStore } from "../src/documents/store.js";
+import type { RuntimeEnvironment } from "../src/env.js";
 import { createTabulaMcpServer } from "../src/index.js";
 
 const originalFetch = globalThis.fetch;
 const roomUrl = "https://tabula.md/#room=Vh93A9rDpVdhy-QpdN1i-w,giUChQup7ia5k7kk0D00jxU3tDivDALDpjgN2Xv0Sf0";
+const secondRoomUrl = "https://tabula.md/#room=2w_Sx-x0GrAOawFgHqvgMA,YMZdnTRmorvDRDW-TYJG362ehdoN4Hqhi4zidGr2uVE";
 
-const withClient = async (callback: (client: Client) => Promise<void>) => {
-  const instance = createTabulaMcpServer({ documentStore: new MemoryDocumentStore(), env: {}, writeEnabled: true });
+const withClient = async (
+  callback: (client: Client) => Promise<void>,
+  env: RuntimeEnvironment = {},
+) => {
+  const instance = createTabulaMcpServer({ documentStore: new MemoryDocumentStore(), env, writeEnabled: true });
   const client = new Client({ name: "workflow-test", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   try {
@@ -152,7 +158,7 @@ const withClient = async (callback: (client: Client) => Promise<void>) => {
     await callback(client);
   } finally {
     await Promise.allSettled([client.close(), instance.server.close()]);
-    instance.registry.clear();
+    await instance.registry.clear();
     await instance.documents.clear();
   }
 };
@@ -181,12 +187,16 @@ describe("core MCP workflows", () => {
       const manifestUri = `tabula://session/${session.sessionId}`;
       const fileUri = `tabula://session/${session.sessionId}/file/shared.md`;
       const nestedFileUri = `tabula://session/${session.sessionId}/file/docs%2Fguide.md`;
-      expect(resources.resources).toEqual(expect.arrayContaining([
-        expect.objectContaining({ uri: manifestUri, mimeType: "application/json" }),
-        expect.objectContaining({ uri: fileUri, mimeType: "text/markdown" }),
-        expect.objectContaining({ uri: nestedFileUri, mimeType: "text/markdown" }),
+      expect(resources.resources).toEqual([
+        expect.objectContaining({ uri: expect.stringMatching(/^ui:\/\/tabula\/document-/) }),
+      ]);
+      expect(JSON.stringify(resources)).not.toContain(session.sessionId);
+      expect(JSON.stringify(resources)).not.toContain("shared.md");
+      const templates = await client.listResourceTemplates();
+      expect(templates.resourceTemplates).toEqual(expect.arrayContaining([
+        expect.objectContaining({ uriTemplate: "tabula://session/{sessionId}" }),
+        expect.objectContaining({ uriTemplate: "tabula://session/{sessionId}/file/{path}" }),
       ]));
-      expect(JSON.stringify(resources)).not.toContain("documentId");
       const manifest = await client.readResource({ uri: manifestUri });
       const manifestValue = JSON.parse(manifest.contents[0]?.text ?? "{}");
       expect(manifestValue.sessionId).toBe(session.sessionId);
@@ -320,6 +330,103 @@ describe("core MCP workflows", () => {
     });
   });
 
+  it("keeps multiple live sessions isolated by explicit sessionId and leaves only the requested one", async () => {
+    await withClient(async (client) => {
+      const first = (await client.callTool({ name: "join_room", arguments: { roomUrl } })).structuredContent as {
+        sessionId: string;
+      };
+      const second = (await client.callTool({ name: "join_room", arguments: { roomUrl: secondRoomUrl } })).structuredContent as {
+        sessionId: string;
+      };
+      expect(first.sessionId).not.toBe(second.sessionId);
+
+      const firstRead = (await client.callTool({
+        name: "read_file",
+        arguments: { sessionId: first.sessionId, path: "shared.md" },
+      })).structuredContent as { content: string; revision: string };
+      const secondRead = (await client.callTool({
+        name: "read_file",
+        arguments: { sessionId: second.sessionId, path: "shared.md" },
+      })).structuredContent as { content: string; revision: string };
+
+      await client.callTool({
+        name: "write_file",
+        arguments: {
+          sessionId: first.sessionId,
+          path: "shared.md",
+          content: `${firstRead.content}\nfirst room only\n`,
+          expectedRevision: firstRead.revision,
+        },
+      });
+      const unchangedSecond = await client.callTool({
+        name: "read_file",
+        arguments: { sessionId: second.sessionId, path: "shared.md" },
+      });
+      expect(unchangedSecond.structuredContent).toMatchObject({ content: secondRead.content });
+
+      const left = await client.callTool({ name: "leave_session", arguments: { sessionId: first.sessionId } });
+      expect(left.structuredContent).toEqual({ sessionId: first.sessionId, left: true });
+      const leftAgain = await client.callTool({ name: "leave_session", arguments: { sessionId: first.sessionId } });
+      expect(leftAgain.structuredContent).toEqual({ sessionId: first.sessionId, left: false, reason: "already_left" });
+
+      const missing = await client.callTool({
+        name: "read_file",
+        arguments: { sessionId: first.sessionId, path: "shared.md" },
+      });
+      expect(missing.isError).toBe(true);
+      expect(JSON.parse(missing.content?.find((item) => item.type === "text")?.text ?? "{}")).toMatchObject({
+        code: "session_not_found",
+        sessionId: first.sessionId,
+      });
+      const remaining = await client.callTool({
+        name: "read_file",
+        arguments: { sessionId: second.sessionId, path: "shared.md" },
+      });
+      expect(remaining.isError).not.toBe(true);
+    });
+  });
+
+  it("rejects another Room before connecting when the per-MCP-session limit is reached", async () => {
+    await withClient(async (client) => {
+      const first = await client.callTool({ name: "join_room", arguments: { roomUrl } });
+      expect(first.isError).not.toBe(true);
+      const limited = await client.callTool({ name: "join_room", arguments: { roomUrl: secondRoomUrl } });
+      expect(limited.isError).toBe(true);
+      expect(JSON.parse(limited.content?.find((item) => item.type === "text")?.text ?? "{}")).toMatchObject({
+        code: "session_limit",
+        limit: 1,
+        retry: expect.stringContaining("Leave an inactive"),
+      });
+    }, { TABULA_MCP_MAX_ROOMS_PER_SESSION: "1" });
+  });
+
+  it("does not expose or accept a Room handle from another MCP connection", async () => {
+    await withClient(async (firstClient) => {
+      const first = (await firstClient.callTool({ name: "join_room", arguments: { roomUrl } })).structuredContent as {
+        sessionId: string;
+      };
+      await withClient(async (secondClient) => {
+        const second = (await secondClient.callTool({
+          name: "join_room",
+          arguments: { roomUrl: secondRoomUrl },
+        })).structuredContent as { sessionId: string };
+        expect(second.sessionId).not.toBe(first.sessionId);
+
+        const resources = await secondClient.listResources();
+        expect(JSON.stringify(resources)).not.toContain(first.sessionId);
+        const foreignRead = await secondClient.callTool({
+          name: "read_file",
+          arguments: { sessionId: first.sessionId, path: "shared.md" },
+        });
+        expect(foreignRead.isError).toBe(true);
+        expect(JSON.parse(foreignRead.content?.find((item) => item.type === "text")?.text ?? "{}")).toMatchObject({
+          code: "session_not_found",
+          sessionId: first.sessionId,
+        });
+      });
+    });
+  });
+
   it("starts a writable live session directly from host-native files", async () => {
     await withClient(async (client) => {
       const started = await client.callTool({
@@ -383,7 +490,7 @@ describe("core MCP workflows", () => {
     });
   });
 
-  it("returns session_not_ready without discarding the connected session", async () => {
+  it("rolls back a connection whose workspace state never became ready", async () => {
     roomMock.setStateReceived(false);
     await withClient(async (client) => {
       const joined = await client.callTool({ name: "join_room", arguments: { roomUrl } });
@@ -392,19 +499,8 @@ describe("core MCP workflows", () => {
       const error = JSON.parse(joined.content?.find((item) => item.type === "text")?.text ?? "{}");
       expect(error).toMatchObject({
         code: "session_not_ready",
-        sessionId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
-        retry: expect.stringContaining("List Files"),
+        retry: expect.stringContaining("join it again"),
       });
-
-      roomMock.setStateReceived(true);
-      const listed = await client.callTool({
-        name: "list_files",
-        arguments: { sessionId: error.sessionId },
-      });
-      expect(listed.isError).not.toBe(true);
-      expect((listed.structuredContent as { files: unknown[] }).files).toEqual(expect.arrayContaining([
-        expect.objectContaining({ path: "shared.md" }),
-      ]));
     });
   });
 });

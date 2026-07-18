@@ -44,6 +44,10 @@
       "description": "Join an encrypted live Tabula session from a private #room URL."
     },
     {
+      "name": "leave_session",
+      "description": "Disconnect this Tabula agent from one live session without deleting its files."
+    },
+    {
       "name": "list_files",
       "description": "List Markdown files and folders in a live session."
     },

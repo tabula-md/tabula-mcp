@@ -21,8 +21,10 @@ import {
   logOperationalError,
   logRequest,
   RequestTimeoutError,
+  shouldCleanupTimedOutSession,
   RequestTooLargeError,
   resolveOperationalPolicy,
+  timeoutErrorData,
   withTimeout,
   type OperationalPolicyOptions,
 } from "./operational-policy.js";
@@ -34,6 +36,7 @@ import {
 } from "./origin-policy.js";
 import { resolveWriteEnabled } from "./write-access.js";
 import { TABULA_MCP_PRODUCT_DESCRIPTION } from "../public-copy.js";
+import { runWithOperationSignal } from "./operation-context.js";
 
 export type TabulaMcpHttpServerOptions = {
   allowedOrigins?: string[] | null;
@@ -94,12 +97,14 @@ const jsonRpcError = (
   code: number,
   message: string,
   headers?: Record<string, string>,
+  data?: Record<string, unknown>,
 ) =>
   httpJson(response, statusCode, {
     jsonrpc: "2.0",
     error: {
       code,
       message,
+      ...(data ? { data } : {}),
     },
     id: null,
   }, headers);
@@ -142,7 +147,7 @@ const readJsonBody = async (request: IncomingMessage, maxBytes: number) => {
 };
 
 const closeActiveSession = async (active: ActiveSession) => {
-  active.instance.registry.clear();
+  await active.instance.registry.clear();
   await active.transport.close();
   await active.instance.server.close();
 };
@@ -237,6 +242,11 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
     maxRequests: policy.rateLimitMax,
     windowMs: policy.rateLimitWindowMs,
   });
+  const idleSweep = setInterval(
+    () => pruneIdleSessions(sessions, policy.sessionIdleTtlMs),
+    Math.min(policy.sessionIdleTtlMs, 60_000),
+  );
+  idleSweep.unref();
 
   const createServerInstance = () =>
     createTabulaMcpServer({
@@ -292,7 +302,10 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
     });
     await instance.server.connect(transport);
     try {
-      await withTimeout(transport.handleRequest(request, response, body), policy.requestTimeoutMs);
+      await withTimeout(
+        (signal) => runWithOperationSignal(signal, () => transport.handleRequest(request, response, body)),
+        policy.requestTimeoutMs,
+      );
     } finally {
       await closeActiveSession({ createdAt: Date.now(), instance, lastSeenAt: Date.now(), transport });
     }
@@ -340,7 +353,20 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
         const activeSession = resolvedSessionId ? sessions.get(resolvedSessionId) : undefined;
         if (activeSession) {
           activeSession.lastSeenAt = Date.now();
-          await withTimeout(activeSession.transport.handleRequest(request, response, body), policy.requestTimeoutMs);
+          try {
+            await withTimeout(
+              (signal) => runWithOperationSignal(
+                signal,
+                () => activeSession.transport.handleRequest(request, response, body),
+              ),
+              policy.requestTimeoutMs,
+            );
+          } catch (error) {
+            if (error instanceof RequestTimeoutError && shouldCleanupTimedOutSession(error) && resolvedSessionId) {
+              cleanupSession(sessions, resolvedSessionId);
+            }
+            throw error;
+          }
           return;
         }
 
@@ -354,8 +380,21 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
             jsonRpcError(response, 503, -32000, "Too many active MCP sessions.");
             return;
           }
-          const { transport } = await createStatefulTransport();
-          await withTimeout(transport.handleRequest(request, response, body), policy.requestTimeoutMs);
+          const active = await createStatefulTransport();
+          try {
+            await withTimeout(
+              (signal) => runWithOperationSignal(
+                signal,
+                () => active.transport.handleRequest(request, response, body),
+              ),
+              policy.requestTimeoutMs,
+            );
+          } catch (error) {
+            const initializedSessionId = active.transport.sessionId;
+            if (initializedSessionId) cleanupSession(sessions, initializedSessionId);
+            else await closeActiveSession({ ...active, createdAt: Date.now(), lastSeenAt: Date.now() });
+            throw error;
+          }
           return;
         }
 
@@ -375,7 +414,20 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
         const activeSession = sessions.get(resolvedSessionId);
         if (activeSession) {
           activeSession.lastSeenAt = Date.now();
-          await withTimeout(activeSession.transport.handleRequest(request, response), policy.requestTimeoutMs);
+          try {
+            await withTimeout(
+              (signal) => runWithOperationSignal(
+                signal,
+                () => activeSession.transport.handleRequest(request, response),
+              ),
+              policy.requestTimeoutMs,
+            );
+          } catch (error) {
+            if (error instanceof RequestTimeoutError && shouldCleanupTimedOutSession(error)) {
+              cleanupSession(sessions, resolvedSessionId);
+            }
+            throw error;
+          }
         }
         return;
       }
@@ -391,6 +443,8 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
           status,
           error instanceof SyntaxError ? -32700 : -32603,
           errorMessageForClient(error, policy.production),
+          undefined,
+          error instanceof RequestTimeoutError ? timeoutErrorData(error) : undefined,
         );
       }
     }
@@ -500,6 +554,7 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
         });
       }),
     close: async () => {
+      clearInterval(idleSweep);
       const activeSessions = [...sessions.values()];
       sessions.clear();
       await Promise.all(activeSessions.map((active) => closeActiveSession(active)));

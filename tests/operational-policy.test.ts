@@ -4,8 +4,10 @@ import {
   logOperationalError,
   redactOperationalText,
   sanitizeOperationalLogEntry,
+  withTimeout,
   type OperationalPolicy,
 } from "../src/server/operational-policy.js";
+import { markOperationCommitted, runWithOperationSignal } from "../src/server/operation-context.js";
 
 const policy: OperationalPolicy = {
   allowRemoteRoomConnections: true,
@@ -54,5 +56,28 @@ describe("operational log redaction", () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+});
+
+describe("request timeout cancellation", () => {
+  it("aborts the operation signal before returning a timeout", async () => {
+    let signal: AbortSignal | undefined;
+    await expect(withTimeout((operationSignal) => {
+      signal = operationSignal;
+      return new Promise(() => undefined);
+    }, 5)).rejects.toThrow("Request timed out");
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("reports whether timeout happened after the commit point", async () => {
+    const result = withTimeout((signal) => runWithOperationSignal(signal, async () => {
+      markOperationCommitted("workspace_change");
+      await new Promise(() => undefined);
+    }), 5);
+    await expect(result).rejects.toMatchObject({
+      committed: true,
+      retryable: true,
+      operationKind: "workspace_change",
+    });
   });
 });

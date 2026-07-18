@@ -2,7 +2,7 @@ import { assertMarkdownSize } from "./documents/snapshot.js";
 import { TabulaCoreError } from "./core-errors.js";
 import type { RuntimeEnvironment } from "./env.js";
 import type { SessionRegistry } from "./registry.js";
-import { shareMarkdownWorkspace } from "./share.js";
+import { InvalidShareWorkspaceError, shareMarkdownWorkspace } from "./share.js";
 import { readSessionExportSnapshot } from "./workspace-file-service.js";
 
 export type ExportCopyFile = {
@@ -97,11 +97,24 @@ export const exportCopy = async ({
   env?: RuntimeEnvironment;
 }) => {
   const createdAt = new Date();
+  const share = async (input: Parameters<typeof shareMarkdownWorkspace>[0]) => {
+    try {
+      return await shareMarkdownWorkspace(input);
+    } catch (error) {
+      if (error instanceof InvalidShareWorkspaceError) {
+        throw new TabulaCoreError("invalid_input", "The Markdown files cannot form a valid Tabula copy.", {
+          details: { reason: error.message, ...(error.conflicts.length ? { conflicts: error.conflicts } : {}) },
+          retry: "Rename conflicting paths or export fewer or smaller Markdown files, then retry.",
+        });
+      }
+      throw error;
+    }
+  };
   if (source.kind === "files") {
     for (const file of source.files) {
       assertMarkdownSize(file.content);
     }
-    const shared = await shareMarkdownWorkspace({
+    const shared = await share({
       title: source.title,
       files: source.files.map((file, index) => ({
         id: `inline-${index + 1}`,
@@ -128,7 +141,7 @@ export const exportCopy = async ({
     paths: source.paths,
   });
   const rootTitle = snapshot.workspace.nodes.find((node) => node.id === snapshot.workspace.rootId)?.title;
-  const shared = await shareMarkdownWorkspace({
+  const shared = await share({
     title: rootTitle ?? "Tabula session",
     files: snapshot.files,
     activeFileId: snapshot.activeDocumentId,

@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getTextPatchesForChange } from "@tabula-md/tabula";
 import { TabulaCoreError } from "./core-errors.js";
+import { sha256Text } from "./crypto.js";
 import { assertMarkdownSize } from "./documents/snapshot.js";
 import type { SessionRegistry } from "./registry.js";
 import { renderExactTextDiff, type ExactTextChange } from "./text-diff.js";
 import type { WorkspaceChange } from "./workspace-contract.js";
 import { buildWorkspacePathIndex, normalizeWorkspaceFilePath } from "./workspace-paths.js";
+import { throwIfOperationAborted } from "./server/operation-context.js";
 
 const requireSession = (registry: SessionRegistry, sessionId: string) => {
   try {
@@ -68,6 +70,35 @@ const requireWriteAccess = (session: { writeAccess: boolean }) => {
     throw new TabulaCoreError("write_disabled", "This Tabula MCP connection is read-only.", {
       retry: "Reconnect using a writable Tabula MCP configuration.",
     });
+  }
+};
+
+type CheckpointPersistence = "disabled" | "not_needed" | "pending" | "saved";
+
+const checkpointWithoutMutation = (session?: {
+  checkpointPersistenceStatus?: () => "disabled" | "pending" | "saved";
+}): CheckpointPersistence => session?.checkpointPersistenceStatus?.() ?? "not_needed";
+
+const mutationReceipt = (checkpoint: CheckpointPersistence) => ({
+  applied: true as const,
+  persisted: checkpoint === "saved" || checkpoint === "not_needed",
+  checkpointPending: checkpoint === "pending",
+});
+
+const persistAppliedMutation = async (session: {
+  flushCheckpoint(): Promise<void>;
+  persistCheckpointAfterMutation?: () => Promise<"disabled" | "pending" | "saved">;
+  recoveryMode?: "durable" | "temporary";
+  scheduleCheckpointRetry?: () => void;
+}): Promise<CheckpointPersistence> => {
+  if (session.persistCheckpointAfterMutation) return session.persistCheckpointAfterMutation();
+  if (session.recoveryMode === "temporary") return "disabled";
+  try {
+    await session.flushCheckpoint();
+    return "saved";
+  } catch {
+    session.scheduleCheckpointRetry?.();
+    return "pending";
   }
 };
 
@@ -465,7 +496,12 @@ export const writeSessionFiles = async ({
   const index = buildWorkspacePathIndex(snapshot.workspace);
   const changes: WorkspaceChange[] = [];
   const plannedFolderIds = new Map<string, string>();
-  const outcomes = new Map<string, { created: boolean; changed: boolean; textLength: number }>();
+  const outcomes = new Map<string, {
+    created: boolean;
+    changed: boolean;
+    revision: string;
+    textLength: number;
+  }>();
 
   for (const file of normalizedFiles) {
     const existing = index.byPath.get(file.path);
@@ -478,6 +514,15 @@ export const writeSessionFiles = async ({
       }
       const currentContent = snapshot.documents[existing.node.id] ?? "";
       const currentRevision = existing.node.sha256;
+      if (currentContent === file.content) {
+        outcomes.set(file.path, {
+          created: false,
+          changed: false,
+          revision: currentRevision,
+          textLength: file.content.length,
+        });
+        continue;
+      }
       if (!file.expectedRevision) {
         throw new TabulaCoreError("stale_revision", "An expected revision is required when replacing an existing file.", {
           details: { path: file.path, currentRevision },
@@ -499,7 +544,12 @@ export const writeSessionFiles = async ({
           patches: getTextPatchesForChange(currentContent, file.content),
         });
       }
-      outcomes.set(file.path, { created: false, changed, textLength: file.content.length });
+      outcomes.set(file.path, {
+        created: false,
+        changed,
+        revision: await sha256Text(file.content),
+        textLength: file.content.length,
+      });
       continue;
     }
 
@@ -516,14 +566,17 @@ export const writeSessionFiles = async ({
       title: path.posix.basename(file.path),
       markdown: file.content,
     });
-    outcomes.set(file.path, { created: true, changed: true, textLength: file.content.length });
+    outcomes.set(file.path, {
+      created: true,
+      changed: true,
+      revision: await sha256Text(file.content),
+      textLength: file.content.length,
+    });
   }
 
   try {
-    if (changes.length > 0) {
-      await session.applyWorkspaceChanges({ changes });
-    }
-    await session.flushCheckpoint();
+    throwIfOperationAborted();
+    if (changes.length > 0) await session.applyWorkspaceChanges({ changes });
   } catch (error) {
     if (error instanceof Error && /changed before/i.test(error.message)) {
       throw new TabulaCoreError("stale_revision", "A file changed before the batch write could be applied.", {
@@ -534,22 +587,28 @@ export const writeSessionFiles = async ({
     if (error instanceof TabulaCoreError) throw error;
     throw writeFilesFailed(normalizedFiles.map((file) => file.path));
   }
+  const checkpoint = changes.length > 0
+    ? await persistAppliedMutation(session)
+    : checkpointWithoutMutation(session);
 
-  let updated;
   try {
-    updated = await session.readWorkspaceSnapshot();
+    const updatedIndex = buildWorkspacePathIndex((await session.readWorkspaceSnapshot()).workspace);
+    for (const file of normalizedFiles) {
+      const node = updatedIndex.byPath.get(file.path)?.node;
+      const outcome = outcomes.get(file.path);
+      if (node?.type === "document" && outcome) outcome.revision = node.sha256;
+    }
   } catch {
-    throw writeFilesFailed(normalizedFiles.map((file) => file.path));
+    // The apply receipt is authoritative. Locally computed revisions remain
+    // usable if post-commit projection is temporarily unavailable.
   }
-  const updatedIndex = buildWorkspacePathIndex(updated.workspace);
+
   const results = normalizedFiles.map((file) => {
-    const node = updatedIndex.byPath.get(file.path)?.node;
     const outcome = outcomes.get(file.path);
-    if (!node || node.type !== "document" || !outcome) throw writeFilesFailed([file.path]);
+    if (!outcome) throw writeFilesFailed([file.path]);
     return {
       path: file.path,
       ...outcome,
-      revision: node.sha256,
     };
   });
   return {
@@ -557,6 +616,7 @@ export const writeSessionFiles = async ({
     files: results,
     createdCount: results.filter((file) => file.created).length,
     changedCount: results.filter((file) => file.changed).length,
+    ...mutationReceipt(checkpoint),
   };
 };
 
@@ -588,7 +648,13 @@ export const writeSessionFile = async ({
   }
   const written = result.files[0];
   if (!written) throw writeFailed(filePath);
-  return { sessionId, ...written };
+  return {
+    sessionId,
+    ...written,
+    applied: result.applied,
+    persisted: result.persisted,
+    checkpointPending: result.checkpointPending,
+  };
 };
 
 export const editSessionFile = async ({
@@ -690,6 +756,7 @@ export const editSessionFile = async ({
   let changed = plan.nextContent !== plan.currentContent;
   if (changed) {
     try {
+      throwIfOperationAborted();
       await session.applyWorkspaceChanges({ changes: [{
         type: "document.patch",
         documentId: plan.documentId,
@@ -707,6 +774,7 @@ export const editSessionFile = async ({
       changed = plan.nextContent !== plan.currentContent;
       if (changed) {
         try {
+          throwIfOperationAborted();
           await session.applyWorkspaceChanges({ changes: [{
             type: "document.patch",
             documentId: plan.documentId,
@@ -725,23 +793,21 @@ export const editSessionFile = async ({
         }
       }
     }
-    try {
-      await session.flushCheckpoint();
-    } catch (error) {
-      if (error instanceof TabulaCoreError) throw error;
-      throw writeFailed(filePath);
-    }
   }
-  let updated = activeSnapshot;
-  if (changed) {
-    try {
-      updated = await session.readWorkspaceSnapshot();
-    } catch {
-      throw writeFailed(filePath);
+  const checkpoint = changed
+    ? await persistAppliedMutation(session)
+    : checkpointWithoutMutation(session);
+  let revision = await sha256Text(plan.nextContent);
+  let textLength = plan.nextContent.length;
+  try {
+    const node = buildWorkspacePathIndex((await session.readWorkspaceSnapshot()).workspace).byPath.get(filePath)?.node;
+    if (node?.type === "document") {
+      revision = node.sha256;
+      textLength = node.textLength;
     }
+  } catch {
+    // Do not turn an applied edit into a failure because projection is unavailable.
   }
-  const node = buildWorkspacePathIndex(updated.workspace).byPath.get(filePath)?.node;
-  if (!node || node.type !== "document") throw writeFailed(filePath);
   const renderedDiff = renderExactTextDiff({ path: filePath, changes: plan.diffChanges });
   return {
     sessionId,
@@ -749,8 +815,9 @@ export const editSessionFile = async ({
     changed,
     editsApplied: plan.editsApplied,
     rebased,
-    revision: node.sha256,
-    textLength: node.textLength,
+    revision,
+    textLength,
+    ...mutationReceipt(checkpoint),
     ...renderedDiff,
   };
 };
@@ -776,7 +843,12 @@ export const createSessionDirectory = async ({
         retry: "Choose another directory path or move the existing file first.",
       });
     }
-    return { sessionId, path: directoryPath, created: false };
+    return {
+      sessionId,
+      path: directoryPath,
+      created: false,
+      ...mutationReceipt(checkpointWithoutMutation(session)),
+    };
   }
   const changes: WorkspaceChange[] = [];
   planFolderPath({
@@ -786,15 +858,14 @@ export const createSessionDirectory = async ({
     plannedFolderIds: new Map(),
   });
   try {
+    throwIfOperationAborted();
     await session.applyWorkspaceChanges({ changes });
-    await session.flushCheckpoint();
   } catch (error) {
     if (error instanceof TabulaCoreError) throw error;
     throw writeFilesFailed([directoryPath]);
   }
-  const updated = buildWorkspacePathIndex((await session.readWorkspaceSnapshot()).workspace).byPath.get(directoryPath);
-  if (!updated || updated.node.type !== "folder") throw writeFilesFailed([directoryPath]);
-  return { sessionId, path: directoryPath, created: true };
+  const checkpoint = await persistAppliedMutation(session);
+  return { sessionId, path: directoryPath, created: true, ...mutationReceipt(checkpoint) };
 };
 
 export const moveSessionFile = async ({
@@ -823,7 +894,14 @@ export const moveSessionFile = async ({
     });
   }
   if (source === destination) {
-    return { sessionId, source, destination, type: sourceEntry.node.type === "document" ? "file" as const : "folder" as const, changed: false };
+    return {
+      sessionId,
+      source,
+      destination,
+      type: sourceEntry.node.type === "document" ? "file" as const : "folder" as const,
+      changed: false,
+      ...mutationReceipt(checkpointWithoutMutation(session)),
+    };
   }
   const destinationCollision = index.entries.find((entry) =>
     entry.node.id !== sourceEntry.node.id && entry.path.toLocaleLowerCase() === destination.toLocaleLowerCase()
@@ -867,6 +945,7 @@ export const moveSessionFile = async ({
   }
   const parentId = parent?.node.id ?? null;
   try {
+    throwIfOperationAborted();
     await session.applyWorkspaceChanges({ changes: [{
       type: "node.move",
       nodeId: sourceEntry.node.id,
@@ -876,7 +955,6 @@ export const moveSessionFile = async ({
       parentId,
       title: path.posix.basename(destination),
     }] });
-    await session.flushCheckpoint();
   } catch (error) {
     if (error instanceof Error && /changed before|path changed/i.test(error.message)) {
       throw new TabulaCoreError("stale_revision", "The source changed before it could be moved or renamed.", {
@@ -887,14 +965,14 @@ export const moveSessionFile = async ({
     if (error instanceof TabulaCoreError) throw error;
     throw writeFilesFailed([source, destination]);
   }
-  const updated = buildWorkspacePathIndex((await session.readWorkspaceSnapshot()).workspace).byPath.get(destination);
-  if (!updated || updated.node.id !== sourceEntry.node.id) throw writeFilesFailed([source, destination]);
+  const checkpoint = await persistAppliedMutation(session);
   return {
     sessionId,
     source,
     destination,
-    type: updated.node.type === "document" ? "file" as const : "folder" as const,
+    type: sourceEntry.node.type === "document" ? "file" as const : "folder" as const,
     changed: true,
+    ...mutationReceipt(checkpoint),
   };
 };
 
@@ -945,6 +1023,7 @@ export const deleteSessionPath = async ({
     }
   }
   try {
+    throwIfOperationAborted();
     await session.applyWorkspaceChanges({ changes: [{
       type: "node.delete",
       nodeId: entry.node.id,
@@ -952,7 +1031,6 @@ export const deleteSessionPath = async ({
       baseTitle: entry.node.title,
       ...(entry.node.type === "document" ? { baseSha256: entry.node.sha256 } : {}),
     }] });
-    await session.flushCheckpoint();
   } catch (error) {
     if (error instanceof Error && /changed before|path changed/i.test(error.message)) {
       throw new TabulaCoreError("stale_revision", "The path changed before it could be deleted.", {
@@ -963,13 +1041,13 @@ export const deleteSessionPath = async ({
     if (error instanceof TabulaCoreError) throw error;
     throw writeFilesFailed([targetPath]);
   }
-  const updatedIndex = buildWorkspacePathIndex((await session.readWorkspaceSnapshot()).workspace);
-  if (updatedIndex.byPath.has(targetPath)) throw writeFilesFailed([targetPath]);
+  const checkpoint = await persistAppliedMutation(session);
   return {
     sessionId,
     path: targetPath,
     type: entry.node.type === "document" ? "file" as const : "folder" as const,
     deleted: true,
+    ...mutationReceipt(checkpoint),
   };
 };
 

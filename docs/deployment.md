@@ -96,10 +96,31 @@ Production mode is enabled by `TABULA_MCP_PRODUCTION=1`,
   routing, a single instance, or an external session coordinator.
 - MCP request bodies are capped by `TABULA_MCP_HTTP_MAX_REQUEST_BYTES`.
 - per-client request rate is capped by `TABULA_MCP_RATE_LIMIT_MAX` per
-  `TABULA_MCP_RATE_LIMIT_WINDOW_MS`.
-- active in-memory MCP sessions are capped by `TABULA_MCP_MAX_ACTIVE_SESSIONS`
-  and pruned after `TABULA_MCP_SESSION_IDLE_TTL_MS`.
-- request handling is bounded by `TABULA_MCP_REQUEST_TIMEOUT_MS`.
+  `TABULA_MCP_RATE_LIMIT_WINDOW_MS`. Mutation calls have a separate
+  `TABULA_MCP_MUTATION_RATE_LIMIT_MAX`, and Export Copy request bytes are
+  bounded by `TABULA_MCP_EXPORT_BYTES_LIMIT` per
+  `TABULA_MCP_EXPORT_LIMIT_WINDOW_MS`. Cloudflare routes every session from the
+  same normalized client network prefix to the same quota shard, so opening a
+  new MCP session does not reset these counters.
+- active MCP sessions are capped per client by
+  `TABULA_MCP_MAX_SESSIONS_PER_CLIENT` (default 10). Expiring leases are cleaned
+  by Durable Object alarms after abnormal disconnects. Configure a coarse
+  account-wide Cloudflare WAF/rate-limiting rule separately; the application
+  deliberately avoids one global Durable Object that would serialize all users.
+- one MCP connection may hold at most `TABULA_MCP_MAX_ROOMS_PER_SESSION`
+  Room connections (default 8), and Cloudflare caps Room leases across a client
+  quota shard with `TABULA_MCP_MAX_ROOMS_PER_CLIENT` (default 32). Room quota
+  records contain only random connection IDs and expiry times, never Room URLs,
+  keys, or Markdown. Leave Session releases one lease; MCP DELETE and Session
+  Durable Object alarms release all remaining leases and WebSockets.
+- Room file tools require the explicit `sessionId` returned by Join Room or
+  Start Session. MCP Resources advertise parameterized URI templates but do not
+  enumerate connected Room handles or file paths.
+- request handling is bounded by `TABULA_MCP_REQUEST_TIMEOUT_MS`. A timeout
+  aborts pre-commit Room work and closes its affected MCP session. A committed
+  mutation keeps the session and its short-lived operation receipt so an exact
+  retry returns the original result. Export uploads also keep the MCP session
+  long enough to retry against the Copy service's idempotency key.
 - structured JSON request logs are controlled by `TABULA_MCP_LOG_LEVEL`.
 
 Hosted production exposes the same agent workspace surface as local stdio:
@@ -162,17 +183,26 @@ The Cloudflare target uses:
 - `wrangler.jsonc`
 - `workers/tabula-mcp-worker.ts`
 - `TabulaMcpSessionDurableObject` for `/mcp` session affinity
+- `TabulaMcpQuotaDurableObject` shards request and active-session limits by a
+  secret HMAC of the normalized client network prefix
 
 `wrangler.jsonc` enables `nodejs_compat`, runs `npm run build` before bundling,
 imports the generated `dist/document-app.html` as a text module, and declares
-the `TABULA_MCP_SESSIONS` Durable Object binding/migration.
+the session and quota Durable Object bindings and migrations. The quota class
+is introduced by the `v2` migration and must be deployed before production
+traffic uses the updated Worker.
 
-Set Redis REST credentials as secrets:
+Set Redis REST credentials and the quota identity HMAC key as secrets:
 
 ```sh
 npx wrangler secret put UPSTASH_REDIS_REST_URL
 npx wrangler secret put UPSTASH_REDIS_REST_TOKEN
+npx wrangler secret put TABULA_MCP_QUOTA_HASH_SECRET
 ```
+
+Use a new random value for `TABULA_MCP_QUOTA_HASH_SECRET`; do not reuse the MCP
+authorization token. The Worker never stores the source IP or Room/Copy URLs in
+quota state. Rotating this secret resets quota shard identities.
 
 Set non-secret environment values in `wrangler.jsonc` or through your deployment
 environment:

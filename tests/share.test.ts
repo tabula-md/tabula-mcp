@@ -16,6 +16,8 @@ import {
   shareMarkdownDocument,
   shareMarkdownWorkspace,
 } from "../src/share.js";
+import { importCopy } from "../src/import-copy-service.js";
+import { OperationLedger } from "../src/server/operation-ledger.js";
 
 const roomId = "room_123";
 const roomKey = encodeBase64Url(new Uint8Array(32).fill(7));
@@ -195,6 +197,54 @@ describe("Tabula document sharing", () => {
     expect(plan?.text).toBe("# Plan\n");
   });
 
+  it("uses the exported path basename as the file title", async () => {
+    const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({
+      files: [{ id: "plan", path: "docs/Plan.md", title: "stale-name.md", text: "# Plan\n" }],
+      snapshotKey,
+    });
+    const { payload } = await restoreJsonSnapshot(encrypted);
+    expect(payload.files[0]?.title).toBe("Plan.md");
+  });
+
+  it.each([
+    {
+      name: "duplicate paths",
+      files: [
+        { id: "one", path: "dup.md", title: "dup.md", text: "one" },
+        { id: "two", path: "dup.md", title: "dup.md", text: "two" },
+      ],
+    },
+    {
+      name: "case-folded path collisions",
+      files: [
+        { id: "upper", path: "A.md", title: "A.md", text: "upper" },
+        { id: "lower", path: "a.md", title: "a.md", text: "lower" },
+      ],
+    },
+    {
+      name: "file and folder collisions",
+      files: [
+        { id: "blocking", path: "docs", title: "docs", text: "file" },
+        { id: "nested", path: "docs/readme.md", title: "readme.md", text: "nested" },
+      ],
+    },
+  ])("rejects $name before creating an encrypted copy", async ({ files }) => {
+    await expect(createEncryptedJsonShareWorkspaceSnapshot({ files, snapshotKey }))
+      .rejects.toThrow(/conflict/i);
+  });
+
+  it("rejects a copy that the MCP import surface cannot safely return", async () => {
+    await expect(createEncryptedJsonShareWorkspaceSnapshot({
+      files: [{
+        id: "large",
+        path: "large.md",
+        title: "large.md",
+        text: "x".repeat(200_001),
+      }],
+      snapshotKey,
+    })).rejects.toThrow(/200000 Markdown characters/i);
+  });
+
   it("uploads only an encrypted JSON snapshot and returns a bearer share URL", async () => {
     const fetchCalls: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
@@ -284,6 +334,84 @@ describe("Tabula document sharing", () => {
     const body = Buffer.from(fetchCalls[0]?.init.body as ArrayBuffer).toString("utf8");
     expect(body).not.toContain("Do not upload plaintext");
     expect(body).not.toContain(snapshotKey);
+  });
+
+  it("sends an opaque stable idempotency key for Export Copy tool retries", async () => {
+    const ledger = new OperationLedger();
+    const headers: Array<Record<string, string>> = [];
+    let attempts = 0;
+    const input = { files: [{ path: "private.md", content: "secret text" }] };
+    const runExport = () => ledger.run("export_copy", input, () => shareMarkdownWorkspace({
+      files: [{ id: "private", path: "private.md", title: "private.md", text: "secret text" }],
+      snapshotKey,
+      fetchImpl: async (_url, init) => {
+        headers.push(init?.headers as Record<string, string>);
+        attempts += 1;
+        if (attempts === 1) throw new Error("upload response lost");
+        return Response.json({ id: snapshotId, data: `https://json.tabula.md/api/v2/${snapshotId}` });
+      },
+    }));
+
+    await expect(runExport()).rejects.toThrow("upload response lost");
+    await expect(runExport()).resolves.toMatchObject({ snapshotId });
+    expect(headers).toHaveLength(2);
+    expect(headers[0]?.["idempotency-key"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(headers[0]?.["idempotency-key"]).not.toContain("secret");
+    expect(headers[1]?.["idempotency-key"]).toBe(headers[0]?.["idempotency-key"]);
+  });
+
+  it("round-trips every successfully exported workspace through the MCP importer", async () => {
+    let encryptedCopy = new Uint8Array();
+    const shared = await shareMarkdownWorkspace({
+      title: "Round trip",
+      files: [
+        { id: "readme", path: "README.md", title: "README.md", text: "# Readme\n" },
+        { id: "plan", path: "docs/Plan.md", title: "Plan.md", text: "# Plan\n" },
+      ],
+      activeFileId: "plan",
+      appOrigin: "https://tabula.md",
+      snapshotKey,
+      fetchImpl: async (_url, init) => {
+        encryptedCopy = new Uint8Array(init?.body as ArrayBuffer);
+        return Response.json({ id: snapshotId, data: `https://json.tabula.md/api/v2/${snapshotId}` });
+      },
+    });
+
+    const imported = await importCopy({
+      copyUrl: shared.shareUrl,
+      fetchImpl: async () => new Response(encryptedCopy, {
+        headers: { "content-length": String(encryptedCopy.byteLength) },
+      }),
+    });
+    expect(imported).toMatchObject({
+      title: "Round trip",
+      activePath: "docs/Plan.md",
+      files: expect.arrayContaining([
+        { path: "README.md", content: "# Readme\n" },
+        { path: "docs/Plan.md", content: "# Plan\n" },
+      ]),
+    });
+  });
+
+  it("round-trips varied generated workspace trees through the shared parser and MCP importer", async () => {
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const files = Array.from({ length: (seed % 5) + 1 }, (_, index) => ({
+        id: `s${seed}-f${index}`,
+        path: index % 2 === 0 ? `topic-${seed}/note-${index}.md` : `note-${seed}-${index}.md`,
+        title: `note-${index}.md`,
+        text: `# Seed ${seed}\n\nGenerated file ${index}. ${"한글 ".repeat(index)}\n`,
+      }));
+      const encrypted = await createEncryptedJsonShareWorkspaceSnapshot({ files, snapshotKey });
+      const imported = await importCopy({
+        copyUrl: `https://tabula.md/#json=${snapshotId},${snapshotKey}`,
+        fetchImpl: async () => new Response(encrypted, {
+          headers: { "content-length": String(encrypted.byteLength) },
+        }),
+      });
+      expect(imported.files).toEqual(files
+        .map((file) => ({ path: file.path, content: file.text }))
+        .sort((left, right) => left.path.localeCompare(right.path)));
+    }
   });
 
   it("uses local JSON snapshot service defaults for localhost app origins", async () => {
