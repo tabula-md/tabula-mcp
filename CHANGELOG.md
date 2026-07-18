@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0
+
 - Added first-class live comment tools for listing, adding line-anchored or
   file-level comments, replying, resolving or reopening, and deleting threads.
 - Kept one agent identity across every Room joined by the same MCP connection,
@@ -17,6 +19,9 @@
   between a local Markdown folder and one live Room, including dry-run status,
   long-lived watch mode, explicit deletion propagation, symlink protection,
   secret-free state, and content-preserving rename detection.
+- Added a manifest-backed release pipeline that pins browser, Room, and Copy
+  interoperability revisions and publishes npm, MCPB, plugin, GitHub Release,
+  and the production Cloudflare Worker from one verified tag.
 
 ## 0.5.0
 
