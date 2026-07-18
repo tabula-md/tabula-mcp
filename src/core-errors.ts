@@ -17,6 +17,8 @@ export const tabulaCoreErrorCodes = [
   "session_not_ready",
   "stale_cursor",
   "stale_revision",
+  "sync_incomplete",
+  "sync_room_mismatch",
   "write_failed",
   "write_disabled",
 ] as const;

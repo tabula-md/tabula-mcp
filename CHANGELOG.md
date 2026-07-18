@@ -13,6 +13,10 @@
   deployment contracts to match that state model. Cloudflare Durable Objects
   are the official production session boundary; Vercel requires operator-
   supplied affinity and remains a preview/self-host compatibility target.
+- Added the separate `tabula-sync` CLI for conflict-safe two-way synchronization
+  between a local Markdown folder and one live Room, including dry-run status,
+  long-lived watch mode, explicit deletion propagation, symlink protection,
+  secret-free state, and content-preserving rename detection.
 
 ## 0.5.0
 

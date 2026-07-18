@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -184,16 +184,7 @@ const withMcpClient = async ({ serverEntrypoint, roomUrl, appOrigin, jsonUrl, fi
     return await callback(client);
   } finally {
     await client.close();
-    const unexpectedStderr = stderr
-      .join("")
-      .split("\n")
-      .filter(
-        (line) =>
-          line.trim() &&
-          !line.includes("ExperimentalWarning: localStorage is not available") &&
-          !line.includes("Use `node --trace-warnings ...` to show where the warning was created"),
-      );
-    assert.equal(unexpectedStderr.join("\n"), "", `MCP stdio server wrote unexpected stderr: ${unexpectedStderr.join("\n")}`);
+    assert.equal(stderr.join("").trim(), "", `MCP stdio server wrote unexpected stderr: ${stderr.join("")}`);
   }
 };
 
@@ -307,6 +298,7 @@ const run = async () => {
   let firebaseServer;
   let browser;
   const jsonDataDir = await mkdtemp(path.join(tmpdir(), "tabula-mcp-json-e2e-"));
+  const syncDataDir = await mkdtemp(path.join(tmpdir(), "tabula-mcp-sync-e2e-"));
   const firebaseConfig = JSON.stringify({
     apiKey: "tabula-local",
     authDomain: "tabula-local.firebaseapp.com",
@@ -492,6 +484,45 @@ const run = async () => {
       }
       assert(afterHumanEdit?.content.includes("Human browser edit."), "MCP should observe browser-originated text");
 
+      const { openFolderSyncSession, syncFolderOnce } = await import("../dist/sync-service.js");
+      await writeFile(path.join(syncDataDir, "local-sync.md"), "# Local Sync\n\nCreated on disk.\n");
+      const syncSession = await openFolderSyncSession({
+        roomUrl: session.sessionUrl,
+        env: {
+          TABULA_ROOM_URL: roomUrl,
+          TABULA_MCP_ALLOW_ANY_EGRESS: "1",
+          TABULA_MCP_FIREBASE_CONFIG: firebaseConfig,
+          TABULA_MCP_FIREBASE_EMULATOR_HOST: "127.0.0.1",
+          TABULA_MCP_FIRESTORE_EMULATOR_PORT: "8080",
+          TABULA_MCP_FIREBASE_STORAGE_EMULATOR_PORT: "9199",
+        },
+      });
+      try {
+        const firstSync = await syncFolderOnce({ session: syncSession, root: syncDataDir });
+        assert.equal(firstSync.applied, true);
+        const syncedFile = await callTool(client, "read_file", {
+          sessionId: session.sessionId,
+          path: "local-sync.md",
+        });
+        assert.equal(syncedFile.content, "# Local Sync\n\nCreated on disk.\n");
+        await callTool(client, "write_file", {
+          sessionId: session.sessionId,
+          path: "local-sync.md",
+          content: "# Local Sync\n\nUpdated in the Room.\n",
+          expectedRevision: syncedFile.revision,
+        });
+        const secondSync = await syncFolderOnce({ session: syncSession, root: syncDataDir });
+        assert.equal(secondSync.applied, true);
+        assert.equal(
+          await readFile(path.join(syncDataDir, "local-sync.md"), "utf8"),
+          "# Local Sync\n\nUpdated in the Room.\n",
+        );
+        const syncState = await readFile(path.join(syncDataDir, ".tabula-sync.json"), "utf8");
+        assert(!syncState.includes("#room="), "folder sync state must not persist the private Room URL");
+      } finally {
+        await syncSession.close();
+      }
+
       const addedComment = await callTool(client, "add_comment", {
         sessionId: session.sessionId,
         path: "README.md",
@@ -517,7 +548,7 @@ const run = async () => {
       const sessionCopy = await callTool(client, "export_copy", {
         sessionId: session.sessionId,
       });
-      assert.equal(sessionCopy.fileCount, 3);
+      assert.equal(sessionCopy.fileCount, 4);
       const importedSessionCopy = await callTool(client, "import_copy", { copyUrl: sessionCopy.copyUrl });
       assert.equal(importedSessionCopy.commentCount, 1, "Session Copy should preserve comment threads");
       const openedSessionCopy = await openJsonCopy({
@@ -618,6 +649,7 @@ const run = async () => {
     await stopProcess(jsonServer);
     await stopProcess(roomServer);
     await rm(jsonDataDir, { recursive: true, force: true });
+    await rm(syncDataDir, { recursive: true, force: true });
   }
 };
 

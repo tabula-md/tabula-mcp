@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CLI_HELP, collectDoctorChecks, formatDoctorReport, getPackageVersion, isDirectRun, parseCliOptions } from "../src/cli.js";
+import { SYNC_CLI_HELP } from "../src/sync-cli.js";
 
 describe("CLI entrypoint detection", () => {
   it("recognizes direct execution through a symlinked path", () => {
@@ -70,5 +71,11 @@ describe("CLI options", () => {
     expect(report).toContain("No room URLs, keys, Markdown, tokens, or share links");
     expect(report).not.toContain("#room=");
     expect(report).not.toContain("#json=");
+  });
+
+  it("documents the separate secret-safe folder sync lifecycle", () => {
+    expect(SYNC_CLI_HELP).toContain("TABULA_ROOM_URL");
+    expect(SYNC_CLI_HELP).toContain("Conflicts stop the entire cycle");
+    expect(SYNC_CLI_HELP).not.toContain("#room=");
   });
 });

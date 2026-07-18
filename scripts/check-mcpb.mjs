@@ -151,9 +151,6 @@ const listBundledModelFacingTools = async (bundleDir) => {
     command: process.execPath,
     args: [path.join(bundleDir, "server", "index.js")],
     cwd: bundleDir,
-    env: {
-      TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS: "1",
-    },
     stderr: "pipe",
   });
   const stderr = [];
@@ -167,10 +164,7 @@ const listBundledModelFacingTools = async (bundleDir) => {
       .sort((left, right) => left.name.localeCompare(right.name));
   } finally {
     await client.close();
-    assert(
-      stderr.every((line) => line.includes("ExperimentalWarning: localStorage is not available")),
-      `MCPB bundled server wrote unexpected stderr: ${stderr.join("")}`,
-    );
+    assert(stderr.join("").trim() === "", `MCPB bundled server wrote unexpected stderr: ${stderr.join("")}`);
   }
 };
 

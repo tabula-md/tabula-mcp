@@ -29,7 +29,8 @@
   ],
   "type": "module",
   "bin": {
-    "tabula-mcp": "dist/cli.js"
+    "tabula-mcp": "dist/cli.js",
+    "tabula-sync": "dist/sync-cli.js"
   },
   "exports": {
     ".": {
