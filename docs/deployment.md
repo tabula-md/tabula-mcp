@@ -18,7 +18,7 @@ binding so each MCP session id is pinned to one stateful Durable Object.
 Vercel remains supported for previews, self-hosting, and compatibility testing.
 
 The official `mcp.tabula.md` endpoint is a public app-style MCP endpoint. It
-does not require a bearer token, matching Tabula.md's no-login document product.
+does not require a bearer token, matching Tabula's no-login document product.
 Keep authenticated account/workspace MCP on a separate future API endpoint.
 
 Both targets use the shared Web-standard MCP handler in `src/server/web.ts`.
@@ -55,7 +55,7 @@ still goes through `tabula-json` as encrypted `#json` snapshot links.
 Live room recovery is a separate encrypted checkpoint path: configure
 `TABULA_MCP_FIREBASE_CONFIG`, `TABULA_FIREBASE_CONFIG`, or
 `VITE_TABULA_FIREBASE_CONFIG` with the Firebase Web SDK config used by
-Tabula.md. The MCP server encrypts the complete workspace Y.Doc update locally
+Tabula. The MCP server encrypts the complete workspace Y.Doc update locally
 with the `#room` key, writes the ciphertext blob to Firebase Storage, and uses
 Firestore only for the generation pointer.
 Production runtimes use the Firebase Storage and Firestore REST APIs through

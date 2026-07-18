@@ -59,7 +59,7 @@ export const registerDocumentAppResource = (
     "Tabula Handoff Card",
     resource.uri,
     {
-      description: "A compact handoff from Claude to the actual Tabula.md document or live session.",
+      description: "A compact handoff from Claude to the actual Tabula document or live session.",
       _meta: {
         ui: {
           prefersBorder: true,

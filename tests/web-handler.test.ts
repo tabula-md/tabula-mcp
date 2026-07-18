@@ -21,7 +21,7 @@ describe("Tabula MCP Web handler", () => {
     const response = await handler.fetch(new Request("https://mcp.example.com/"));
 
     await expect(response.json()).resolves.toMatchObject({
-      description: "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
+      description: "Connect Codex, Claude, and other MCP clients to shared Tabula workspaces.",
     });
   });
 
@@ -96,7 +96,7 @@ describe("Tabula MCP Web handler", () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
       documentStore: new MemoryDocumentStore(),
-      documentAppHtml: "<!doctype html><title>Tabula.md Document</title>",
+      documentAppHtml: "<!doctype html><title>Tabula Document</title>",
     });
     const client = new Client({ name: "tabula-web-handler-test", version: "0.0.0" });
     const fetchImpl = (request: RequestInfo | URL, init?: RequestInit) => {
@@ -113,20 +113,20 @@ describe("Tabula MCP Web handler", () => {
       const tools = await client.listTools();
 
       expect(tools.tools.map((tool) => tool.name)).toEqual([
-        "tabula_start_session",
-        "tabula_join_room",
-        "tabula_list_files",
-        "tabula_read_file",
-        "tabula_read_files",
-        "tabula_search_files",
-        "tabula_write_file",
-        "tabula_write_files",
-        "tabula_edit_file",
-        "tabula_create_directory",
-        "tabula_move_file",
-        "tabula_delete_path",
-        "tabula_import_copy",
-        "tabula_export_copy",
+        "start_session",
+        "join_room",
+        "list_files",
+        "read_file",
+        "read_multiple_files",
+        "search_files",
+        "write_file",
+        "write_files",
+        "edit_file",
+        "create_directory",
+        "move_file",
+        "delete_path",
+        "import_copy",
+        "export_copy",
       ]);
     } finally {
       await client.close();
@@ -147,7 +147,7 @@ describe("Tabula MCP Web handler", () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
       documentStore: new MemoryDocumentStore(),
-      documentAppHtml: "<!doctype html><title>Tabula.md Document</title>",
+      documentAppHtml: "<!doctype html><title>Tabula Document</title>",
       env: {
         TABULA_MCP_AUTH_TOKEN: "stale-secret",
         TABULA_MCP_PUBLIC_UNAUTHENTICATED: "1",
@@ -176,20 +176,20 @@ describe("Tabula MCP Web handler", () => {
       const toolNames = tools.tools.map((tool) => tool.name);
 
       expect(toolNames).toEqual([
-        "tabula_start_session",
-        "tabula_join_room",
-        "tabula_list_files",
-        "tabula_read_file",
-        "tabula_read_files",
-        "tabula_search_files",
-        "tabula_write_file",
-        "tabula_write_files",
-        "tabula_edit_file",
-        "tabula_create_directory",
-        "tabula_move_file",
-        "tabula_delete_path",
-        "tabula_import_copy",
-        "tabula_export_copy",
+        "start_session",
+        "join_room",
+        "list_files",
+        "read_file",
+        "read_multiple_files",
+        "search_files",
+        "write_file",
+        "write_files",
+        "edit_file",
+        "create_directory",
+        "move_file",
+        "delete_path",
+        "import_copy",
+        "export_copy",
       ]);
       expect(transport.sessionId).toMatch(/^[0-9a-f-]{36}$/i);
     } finally {
@@ -338,7 +338,7 @@ describe("Tabula MCP Web handler", () => {
       authToken: "secret",
       deploymentMode: "remote",
       documentStore: new MemoryDocumentStore(),
-      documentAppHtml: "<!doctype html><title>Tabula.md Document</title>",
+      documentAppHtml: "<!doctype html><title>Tabula Document</title>",
       production: true,
     });
     const client = new Client({ name: "tabula-production-web-handler-test", version: "0.0.0" });
@@ -359,20 +359,20 @@ describe("Tabula MCP Web handler", () => {
       const toolNames = tools.tools.map((tool) => tool.name);
 
       expect(toolNames).toEqual([
-        "tabula_start_session",
-        "tabula_join_room",
-        "tabula_list_files",
-        "tabula_read_file",
-        "tabula_read_files",
-        "tabula_search_files",
-        "tabula_write_file",
-        "tabula_write_files",
-        "tabula_edit_file",
-        "tabula_create_directory",
-        "tabula_move_file",
-        "tabula_delete_path",
-        "tabula_import_copy",
-        "tabula_export_copy",
+        "start_session",
+        "join_room",
+        "list_files",
+        "read_file",
+        "read_multiple_files",
+        "search_files",
+        "write_file",
+        "write_files",
+        "edit_file",
+        "create_directory",
+        "move_file",
+        "delete_path",
+        "import_copy",
+        "export_copy",
       ]);
       expect(transport.sessionId).toMatch(/^[0-9a-f-]{36}$/i);
     } finally {

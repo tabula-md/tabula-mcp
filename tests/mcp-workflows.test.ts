@@ -166,7 +166,7 @@ afterEach(() => {
 describe("core MCP workflows", () => {
   it("joins, lists, reads, writes, and reads a live session without low-level patches", async () => {
     await withClient(async (client) => {
-      const joined = await client.callTool({ name: "tabula_join_room", arguments: { roomUrl } });
+      const joined = await client.callTool({ name: "join_room", arguments: { roomUrl } });
       const session = joined.structuredContent as {
         sessionId: string;
         ready: boolean;
@@ -202,14 +202,14 @@ describe("core MCP workflows", () => {
         _meta: expect.objectContaining({ path: "docs/guide.md" }),
       });
 
-      const listed = await client.callTool({ name: "tabula_list_files", arguments: { sessionId: session.sessionId } });
+      const listed = await client.callTool({ name: "list_files", arguments: { sessionId: session.sessionId } });
       expect(listed.structuredContent).not.toHaveProperty("sessionId");
       expect((listed.structuredContent as { files: unknown[] }).files).toEqual(expect.arrayContaining([
         expect.objectContaining({ path: "shared.md" }),
       ]));
 
       const read = await client.callTool({
-        name: "tabula_read_file",
+        name: "read_file",
         arguments: { sessionId: session.sessionId, path: "shared.md", startLine: 1, lineCount: 3 },
       });
       const file = read.structuredContent as { path: string; content: string; revision: string; startLine: number };
@@ -218,14 +218,14 @@ describe("core MCP workflows", () => {
       expect(file.content).toBe("# Shared\n\nhello\n");
 
       const readMany = await client.callTool({
-        name: "tabula_read_files",
+        name: "read_multiple_files",
         arguments: { sessionId: session.sessionId, paths: ["shared.md", "docs/guide.md"] },
       });
       expect((readMany.structuredContent as { files: Array<{ path: string }> }).files.map((item) => item.path))
         .toEqual(["shared.md", "docs/guide.md"]);
 
       const searched = await client.callTool({
-        name: "tabula_search_files",
+        name: "search_files",
         arguments: { sessionId: session.sessionId, query: "nested" },
       });
       expect(searched.isError).not.toBe(true);
@@ -237,7 +237,7 @@ describe("core MCP workflows", () => {
 
       const content = `${file.content}\nhi! 👋\n`;
       const written = await client.callTool({
-        name: "tabula_write_file",
+        name: "write_file",
         arguments: {
           sessionId: session.sessionId,
           path: "shared.md",
@@ -250,13 +250,13 @@ describe("core MCP workflows", () => {
       expect(written.structuredContent).toMatchObject({ changed: true, created: false, textLength: content.length });
 
       const reread = await client.callTool({
-        name: "tabula_read_files",
+        name: "read_multiple_files",
         arguments: { sessionId: session.sessionId, paths: ["shared.md"] },
       });
       expect(reread.structuredContent).toMatchObject({ files: [expect.objectContaining({ content })] });
 
       const writtenFiles = await client.callTool({
-        name: "tabula_write_files",
+        name: "write_files",
         arguments: {
           sessionId: session.sessionId,
           files: [
@@ -270,11 +270,11 @@ describe("core MCP workflows", () => {
       expect(writtenFiles.structuredContent).toMatchObject({ createdCount: 2, changedCount: 2 });
 
       const latestShared = ((await client.callTool({
-        name: "tabula_read_files",
+        name: "read_multiple_files",
         arguments: { sessionId: session.sessionId, paths: ["shared.md"] },
       })).structuredContent as { files: Array<{ revision: string }> }).files[0]!;
       const edited = await client.callTool({
-        name: "tabula_edit_file",
+        name: "edit_file",
         arguments: {
           sessionId: session.sessionId,
           path: "shared.md",
@@ -292,7 +292,7 @@ describe("core MCP workflows", () => {
       });
 
       const createdDirectory = await client.callTool({
-        name: "tabula_create_directory",
+        name: "create_directory",
         arguments: { sessionId: session.sessionId, path: "archive/2026" },
       });
       expect(createdDirectory.isError).not.toBe(true);
@@ -301,7 +301,7 @@ describe("core MCP workflows", () => {
         files: Array<{ path: string; revision: string }>;
       }).files).find((candidate) => candidate.path === "decision.md")!;
       const moved = await client.callTool({
-        name: "tabula_move_file",
+        name: "move_file",
         arguments: {
           sessionId: session.sessionId,
           source: "decision.md",
@@ -312,7 +312,7 @@ describe("core MCP workflows", () => {
       expect(moved.isError).not.toBe(true);
       expect(moved.structuredContent).toMatchObject({ destination: "archive/2026/final.md", type: "file", changed: true });
       const deleted = await client.callTool({
-        name: "tabula_delete_path",
+        name: "delete_path",
         arguments: { sessionId: session.sessionId, path: "research", recursive: true },
       });
       expect(deleted.isError).not.toBe(true);
@@ -323,7 +323,7 @@ describe("core MCP workflows", () => {
   it("starts a writable live session directly from host-native files", async () => {
     await withClient(async (client) => {
       const started = await client.callTool({
-        name: "tabula_start_session",
+        name: "start_session",
         arguments: {
           title: "Research",
           files: [
@@ -350,10 +350,10 @@ describe("core MCP workflows", () => {
       })) as typeof fetch;
 
     await withClient(async (client) => {
-      const joined = await client.callTool({ name: "tabula_join_room", arguments: { roomUrl } });
+      const joined = await client.callTool({ name: "join_room", arguments: { roomUrl } });
       const { sessionId } = joined.structuredContent as { sessionId: string };
       const exported = await client.callTool({
-        name: "tabula_export_copy",
+        name: "export_copy",
         arguments: { sessionId, paths: ["shared.md"] },
       });
 
@@ -369,7 +369,7 @@ describe("core MCP workflows", () => {
   it("returns a recoverable error for a URL that is not a private room link", async () => {
     await withClient(async (client) => {
       const joined = await client.callTool({
-        name: "tabula_join_room",
+        name: "join_room",
         arguments: { roomUrl: "https://tabula.md/" },
       });
       expect(joined.isError).toBe(true);
@@ -386,7 +386,7 @@ describe("core MCP workflows", () => {
   it("returns session_not_ready without discarding the connected session", async () => {
     roomMock.setStateReceived(false);
     await withClient(async (client) => {
-      const joined = await client.callTool({ name: "tabula_join_room", arguments: { roomUrl } });
+      const joined = await client.callTool({ name: "join_room", arguments: { roomUrl } });
       expect(joined.isError).toBe(true);
       expect(joined.structuredContent).toBeUndefined();
       const error = JSON.parse(joined.content?.find((item) => item.type === "text")?.text ?? "{}");
@@ -398,7 +398,7 @@ describe("core MCP workflows", () => {
 
       roomMock.setStateReceived(true);
       const listed = await client.callTool({
-        name: "tabula_list_files",
+        name: "list_files",
         arguments: { sessionId: error.sessionId },
       });
       expect(listed.isError).not.toBe(true);

@@ -456,13 +456,13 @@ const run = async () => {
 
     await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, async (client) => {
       const expectedTools = [
-        "tabula_start_session", "tabula_join_room", "tabula_list_files", "tabula_read_file", "tabula_read_files",
-        "tabula_search_files", "tabula_write_file", "tabula_write_files", "tabula_edit_file", "tabula_create_directory",
-        "tabula_move_file", "tabula_delete_path", "tabula_import_copy", "tabula_export_copy",
+        "start_session", "join_room", "list_files", "read_file", "read_multiple_files",
+        "search_files", "write_file", "write_files", "edit_file", "create_directory",
+        "move_file", "delete_path", "import_copy", "export_copy",
       ];
       assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), expectedTools);
 
-      const inlineCopy = await callTool(client, "tabula_export_copy", {
+      const inlineCopy = await callTool(client, "export_copy", {
         title: "Research handoff",
         files: [
           { path: "brief.md", content: "# Brief\n\nThree-file browser handoff.\n" },
@@ -471,7 +471,7 @@ const run = async () => {
         ],
       });
       assert.equal(inlineCopy.fileCount, 3);
-      const importedInlineCopy = await callTool(client, "tabula_import_copy", {
+      const importedInlineCopy = await callTool(client, "import_copy", {
         copyUrl: inlineCopy.copyUrl,
       });
       assert.equal(importedInlineCopy.title, "Research handoff");
@@ -494,7 +494,7 @@ const run = async () => {
       );
       await openedInlineCopy.context.close();
 
-      const session = await callTool(client, "tabula_start_session", {
+      const session = await callTool(client, "start_session", {
         title: "MCP Local E2E",
         files: [{ path: "README.md", content: "# MCP Local E2E\n\nInitial from MCP.\n" }],
       });
@@ -504,9 +504,9 @@ const run = async () => {
 
       await page.goto(session.sessionUrl);
       const browserInitialText = await waitForEditorText(page, "Initial from MCP.");
-      const listed = await callTool(client, "tabula_list_files", { sessionId: session.sessionId });
+      const listed = await callTool(client, "list_files", { sessionId: session.sessionId });
       assert(listed.files.some((file) => file.path === "README.md"));
-      const readmeBatch = await callTool(client, "tabula_read_files", {
+      const readmeBatch = await callTool(client, "read_multiple_files", {
         sessionId: session.sessionId,
         paths: ["README.md"],
       });
@@ -514,11 +514,11 @@ const run = async () => {
       assert.equal(readme.content, "# MCP Local E2E\n\nInitial from MCP.\n");
 
       const nextContent = `${readme.content}\nEdited by tabula-mcp local E2E.\n`;
-      await callTool(client, "tabula_write_files", {
+      await callTool(client, "write_files", {
         sessionId: session.sessionId,
         files: [{ path: "README.md", content: nextContent, expectedRevision: readme.revision }],
       });
-      const batchWrite = await callTool(client, "tabula_write_files", {
+      const batchWrite = await callTool(client, "write_files", {
         sessionId: session.sessionId,
         files: [
           { path: "Agent Notes.md", content: "# Agent Notes\n\nCreated by MCP local E2E.\n" },
@@ -539,7 +539,7 @@ const run = async () => {
       let afterHumanEdit;
       const deadline = Date.now() + 12_000;
       while (Date.now() < deadline) {
-        const readBatch = await callTool(client, "tabula_read_files", {
+        const readBatch = await callTool(client, "read_multiple_files", {
           sessionId: session.sessionId,
           paths: ["README.md"],
         });
@@ -549,7 +549,7 @@ const run = async () => {
       }
       assert(afterHumanEdit?.content.includes("Human browser edit."), "MCP should observe browser-originated text");
 
-      const sessionCopy = await callTool(client, "tabula_export_copy", {
+      const sessionCopy = await callTool(client, "export_copy", {
         sessionId: session.sessionId,
       });
       assert.equal(sessionCopy.fileCount, 3);
@@ -564,7 +564,7 @@ const run = async () => {
       assert(copyTabs.some((tab) => tab.title === "sources.md"), "Session Copy should preserve nested batch files");
 
       const postExportContent = `${afterHumanEdit.content}\nChanged after Export Copy.\n`;
-      await callTool(client, "tabula_write_files", {
+      await callTool(client, "write_files", {
         sessionId: session.sessionId,
         files: [{ path: "README.md", content: postExportContent, expectedRevision: afterHumanEdit.revision }],
       });
@@ -582,7 +582,7 @@ const run = async () => {
       );
       await openedSessionCopy.context.close();
 
-      const peerSession = await callTool(client, "tabula_start_session", {
+      const peerSession = await callTool(client, "start_session", {
         title: "README.md",
         files: [{ path: "README.md", content: "# Peer-only recovery\n\nLoaded from the live MCP participant.\n" }],
       });
@@ -597,9 +597,9 @@ const run = async () => {
         jsonUrl,
         firebaseConfig: null,
       }, async (peerClient) => {
-        const joined = await callTool(peerClient, "tabula_join_room", { roomUrl: peerSession.sessionUrl });
+        const joined = await callTool(peerClient, "join_room", { roomUrl: peerSession.sessionUrl });
         assert.equal(joined.ready, true);
-        const peerReadBatch = await callTool(peerClient, "tabula_read_files", {
+        const peerReadBatch = await callTool(peerClient, "read_multiple_files", {
           sessionId: joined.sessionId,
           paths: ["README.md"],
         });

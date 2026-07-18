@@ -1,9 +1,9 @@
-# Tabula.md MCP Privacy Policy
+# Tabula MCP Privacy Policy
 
 Effective date: July 16, 2026
 
-Tabula.md MCP is an open-source MCP server and MCP App for working with
-Markdown documents and encrypted Tabula.md collaboration rooms. This policy
+Tabula MCP is an open-source MCP server and MCP App for working with
+Markdown documents and encrypted Tabula collaboration rooms. This policy
 explains what the software stores and where it goes in its local and hosted
 modes.
 
@@ -21,8 +21,8 @@ The default npm, Claude Code, and Claude Desktop MCPB modes run on your
 computer. By default, saved MCP document checkpoints are plaintext files in the
 local application-state directory:
 
-- macOS: `~/Library/Application Support/Tabula.md MCP/documents`
-- Windows: `%LOCALAPPDATA%\\Tabula.md MCP\\documents`
+- macOS: `~/Library/Application Support/Tabula MCP/documents`
+- Windows: `%LOCALAPPDATA%\\Tabula MCP\\documents`
 - Linux: `$XDG_STATE_HOME/tabula-mcp/documents` or
   `~/.local/state/tabula-mcp/documents`
 
@@ -31,11 +31,13 @@ desktop-app local storage so it can recover after a refresh. You can disable
 saved local checkpoints with `TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS=1` or set
 `TABULA_MCP_DOCUMENT_STORE_DIR` to a location you control. Local checkpoints
 remain until you remove them or your operating system or storage policy removes
-them; Tabula.md does not receive them in this mode.
+them; Tabula does not receive them in this mode. Existing installations that
+already use a `Tabula.md MCP/documents` directory continue using it so local
+checkpoints are not lost during the product-name migration.
 
 ## Encrypted rooms and encrypted snapshot links
 
-When you connect a Tabula.md room, Tabula MCP decrypts room Markdown locally so
+When you connect a Tabula room, Tabula MCP decrypts room Markdown locally so
 your MCP client can read or change it. The room key stays in the URL fragment
 and is not sent to the Tabula Room server. The Room server receives encrypted
 collaboration envelopes, not plaintext Markdown, room keys, or decrypted
@@ -63,7 +65,7 @@ boundary.
 
 ## Service providers and sharing
 
-Tabula.md does not sell personal data or use document content for advertising.
+Tabula does not sell personal data or use document content for advertising.
 Depending on the workflow and deployment selected, data can be processed by:
 
 - your MCP client and local device;

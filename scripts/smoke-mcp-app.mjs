@@ -41,7 +41,7 @@ const main = async () => {
 
   assertIncludes(devHtml, "/src/app-dev/main.js", "dev harness");
   assertIncludes(builtHtml, ">Tabula<", "built session card");
-  if (builtHtml.includes("Tabula.md</span>") || builtHtml.includes("sessionTitle") || builtHtml.includes("handoffSummary")) {
+  if (builtHtml.includes("Tabula.md") || builtHtml.includes("sessionTitle") || builtHtml.includes("handoffSummary")) {
     throw new Error("built session card must stay a compact Tabula handoff receipt without a document title or summary block");
   }
   assertIncludes(builtHtml, "Encrypted copy", "built handoff card");

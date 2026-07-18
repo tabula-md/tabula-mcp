@@ -30,11 +30,11 @@ const getErrorText = (result) => {
   const textBlock = result?.content?.find((item) => item.type === "text");
   const text = textBlock?.text;
   if (!text) {
-    return "Tabula.md could not prepare this handoff.";
+    return "Tabula could not prepare this handoff.";
   }
   try {
     const parsed = JSON.parse(text);
-    return typeof parsed?.message === "string" ? parsed.message : "Tabula.md could not prepare this handoff.";
+    return typeof parsed?.message === "string" ? parsed.message : "Tabula could not prepare this handoff.";
   } catch {
     return text;
   }
@@ -157,7 +157,7 @@ const boot = async () => {
   app.ontoolresult = (result) => {
     if (!renderToolResult(result)) {
       if (!result.isError) {
-        setMessage("Tabula.md did not return a handoff link.", "error");
+        setMessage("Tabula did not return a handoff link.", "error");
       }
       return;
     }
@@ -180,5 +180,5 @@ const boot = async () => {
 };
 
 boot().catch((error) => {
-  setMessage(error instanceof Error ? error.message : "Tabula.md could not start.", "error");
+  setMessage(error instanceof Error ? error.message : "Tabula could not start.", "error");
 });

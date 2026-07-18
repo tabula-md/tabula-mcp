@@ -49,20 +49,20 @@ const requiredFiles = [
 ];
 
 const requiredTools = [
-  "tabula_start_session",
-  "tabula_join_room",
-  "tabula_list_files",
-  "tabula_read_file",
-  "tabula_read_files",
-  "tabula_search_files",
-  "tabula_write_file",
-  "tabula_write_files",
-  "tabula_edit_file",
-  "tabula_create_directory",
-  "tabula_move_file",
-  "tabula_delete_path",
-  "tabula_import_copy",
-  "tabula_export_copy",
+  "start_session",
+  "join_room",
+  "list_files",
+  "read_file",
+  "read_multiple_files",
+  "search_files",
+  "write_file",
+  "write_files",
+  "edit_file",
+  "create_directory",
+  "move_file",
+  "delete_path",
+  "import_copy",
+  "export_copy",
 ];
 
 const forbiddenManifestTools = [
@@ -192,6 +192,8 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
 
   const manifest = await readJson(bundleDir, "manifest.json");
   const bundlePackage = await readJson(bundleDir, "package.json");
+  assert(manifest.display_name === "Tabula MCP", `MCPB ${label} display name must be Tabula MCP`);
+  assert(manifest.author?.name === "Tabula", `MCPB ${label} author name must be Tabula`);
   assert(!("user_config" in manifest), `MCPB ${label} manifest must not include installer user_config`);
   assert(
     Array.isArray(manifest.privacy_policies) && manifest.privacy_policies.every((policy) => /^https:\/\//.test(policy)),
@@ -227,10 +229,10 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   for (const toolName of forbiddenManifestTools) {
     assert(!toolNames.has(toolName), `MCPB ${label} manifest must not list ${toolName}`);
   }
-  const shareToolDescription = manifest.tools?.find((tool) => tool.name === "tabula_export_copy")?.description ?? "";
+  const shareToolDescription = manifest.tools?.find((tool) => tool.name === "export_copy")?.description ?? "";
   assert(
     shareToolDescription.includes("#json") && !/room share/i.test(shareToolDescription),
-    `MCPB ${label} manifest tabula_export_copy description must describe fixed #json copies`,
+    `MCPB ${label} manifest export_copy description must describe fixed #json copies`,
   );
   const modelFacingTools = await listBundledModelFacingTools(bundleDir);
   assertMatchingToolNames(
@@ -264,7 +266,7 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
   assert(appHtml.includes(">Tabula<"), `MCPB ${label} Document App must use the Tabula brand`);
   assert(!appHtml.includes("handoffSummary"), `MCPB ${label} Document App must stay a compact handoff receipt`);
   assert(!appHtml.includes("sessionTitle"), `MCPB ${label} Document App must not present a document title in its chrome`);
-  for (const toolName of ["tabula_start_session", "tabula_export_copy"]) {
+  for (const toolName of ["start_session", "export_copy"]) {
     assert(!appHtml.includes(toolName), `MCPB ${label} Document App must not embed a stateful tool call to ${toolName}`);
   }
   assert(!appHtml.includes("TabulaEmbeddedDocumentWorkbench"), `MCPB ${label} must not bundle a second Tabula editor`);

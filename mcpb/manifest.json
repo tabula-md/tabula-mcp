@@ -1,12 +1,12 @@
 {
   "manifest_version": "0.3",
   "name": "tabula-mcp",
-  "display_name": "Tabula.md MCP",
+  "display_name": "Tabula MCP",
   "version": "0.4.1",
-  "description": "Let Claude work with people in shared Tabula.md Markdown workspaces.",
-  "long_description": "Turn Markdown created in Claude or local files into shared Tabula.md workspaces. Claude can start or join encrypted live sessions, list, read, search, edit, organize, and delete Markdown files, export fixed encrypted copies, and import a #json copy for local materialization. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
+  "description": "Let Claude work with people in shared Tabula Markdown workspaces.",
+  "long_description": "Turn Markdown created in Claude or local files into shared Tabula workspaces. Claude can start or join encrypted live sessions, list, read, search, edit, organize, and delete Markdown files, export fixed encrypted copies, and import a #json copy for local materialization. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
   "author": {
-    "name": "Tabula.md",
+    "name": "Tabula",
     "url": "https://tabula.md"
   },
   "repository": {
@@ -36,59 +36,59 @@
   },
   "tools": [
     {
-      "name": "tabula_start_session",
+      "name": "start_session",
       "description": "Start an encrypted live Tabula session from one or more Markdown files."
     },
     {
-      "name": "tabula_join_room",
+      "name": "join_room",
       "description": "Join an encrypted live Tabula session from a private #room URL."
     },
     {
-      "name": "tabula_list_files",
+      "name": "list_files",
       "description": "List Markdown files and folders in a live session."
     },
     {
-      "name": "tabula_read_file",
+      "name": "read_file",
       "description": "Read one Markdown file or a bounded line range with its current revision."
     },
     {
-      "name": "tabula_read_files",
+      "name": "read_multiple_files",
       "description": "Read one or more Markdown files and their current revisions."
     },
     {
-      "name": "tabula_search_files",
+      "name": "search_files",
       "description": "Search Markdown paths and contents with line-numbered context."
     },
     {
-      "name": "tabula_write_file",
+      "name": "write_file",
       "description": "Create or replace one Markdown file with revision protection."
     },
     {
-      "name": "tabula_write_files",
+      "name": "write_files",
       "description": "Create or replace one or more Markdown files and their folders in one live session transaction."
     },
     {
-      "name": "tabula_edit_file",
+      "name": "edit_file",
       "description": "Apply exact, safely rebased replacements and return a bounded diff."
     },
     {
-      "name": "tabula_create_directory",
+      "name": "create_directory",
       "description": "Create a directory and any missing parent directories in a live session."
     },
     {
-      "name": "tabula_move_file",
+      "name": "move_file",
       "description": "Move or rename a file or directory in a live session."
     },
     {
-      "name": "tabula_delete_path",
+      "name": "delete_path",
       "description": "Delete a revision-guarded file or an explicitly recursive directory path."
     },
     {
-      "name": "tabula_import_copy",
+      "name": "import_copy",
       "description": "Decrypt a fixed #json copy into relative Markdown paths and contents for local materialization."
     },
     {
-      "name": "tabula_export_copy",
+      "name": "export_copy",
       "description": "Create an encrypted fixed #json copy from Markdown files or a live session."
     }
   ],
