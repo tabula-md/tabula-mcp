@@ -193,7 +193,7 @@ export const routeMcpRequestToSession = async (request: Request, env: WorkerEnv)
     throw error;
   }
   const initialized = existingSessionId || response.headers.get("mcp-session-id") === sessionId;
-  if (request.method === "DELETE" || !initialized) {
+  if (request.method === "DELETE" || response.status === 404 || !initialized) {
     await releaseQuotaSession(env, clientKey, sessionId).catch(() => undefined);
   }
   return response;
