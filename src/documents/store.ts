@@ -59,6 +59,7 @@ export type DefaultDocumentStoreConfig = {
   homedir?: string;
   fetchImpl?: typeof fetch;
   production?: boolean;
+  pathExists?: (candidate: string) => boolean;
 };
 
 export const defaultMaxStoredDocuments = 20;
@@ -142,6 +143,7 @@ export const resolveDefaultDocumentStoreDirectory = ({
   env = process.env,
   platform = process.platform,
   homedir: home = homedir(),
+  pathExists = existsSync,
 }: DefaultDocumentStoreConfig = {}) => {
   const configuredDirectory = env.TABULA_MCP_DOCUMENT_STORE_DIR?.trim();
   if (configuredDirectory) {
@@ -149,11 +151,17 @@ export const resolveDefaultDocumentStoreDirectory = ({
   }
 
   if (platform === "darwin") {
-    return path.join(home, "Library", "Application Support", "Tabula.md MCP", "documents");
+    const parent = path.join(home, "Library", "Application Support");
+    const directory = path.join(parent, "Tabula MCP", "documents");
+    const legacyDirectory = path.join(parent, "Tabula.md MCP", "documents");
+    return !pathExists(directory) && pathExists(legacyDirectory) ? legacyDirectory : directory;
   }
 
   if (platform === "win32") {
-    return path.join(env.LOCALAPPDATA || path.join(home, "AppData", "Local"), "Tabula.md MCP", "documents");
+    const parent = env.LOCALAPPDATA || path.join(home, "AppData", "Local");
+    const directory = path.join(parent, "Tabula MCP", "documents");
+    const legacyDirectory = path.join(parent, "Tabula.md MCP", "documents");
+    return !pathExists(directory) && pathExists(legacyDirectory) ? legacyDirectory : directory;
   }
 
   return path.join(env.XDG_STATE_HOME || path.join(home, ".local", "state"), "tabula-mcp", "documents");

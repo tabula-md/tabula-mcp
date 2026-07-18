@@ -1,14 +1,14 @@
 {
   "name": "tabula-md",
   "owner": {
-    "name": "Tabula.md"
+    "name": "Tabula"
   },
-  "description": "Connect Claude Code to shared Tabula.md Markdown workspaces.",
+  "description": "Connect Claude Code to shared Tabula Markdown workspaces.",
   "plugins": [
     {
       "name": "tabula-mcp",
       "source": "./plugins/tabula-mcp",
-      "description": "Connect Claude Code to shared Tabula.md Markdown workspaces."
+      "description": "Connect Claude Code to shared Tabula Markdown workspaces."
     }
   ]
 }

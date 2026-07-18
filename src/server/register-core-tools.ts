@@ -84,7 +84,7 @@ export const registerCoreTools = (
   registerCoreAppTool(
     server,
     options.resourceUri,
-    "tabula_start_session",
+    "start_session",
     {
       title: "Start Session",
       description: "Start an encrypted live session from Markdown files. Returns its private URL and joins the agent.",
@@ -121,9 +121,9 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_join_room",
+    "join_room",
     {
-      title: "Join Session",
+      title: "Join Room",
       description: "Join a private #room URL. Keep it private and continue only when ready is true.",
       inputSchema: {
         roomUrl: z.string().url()
@@ -150,7 +150,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_list_files",
+    "list_files",
     {
       title: "List Files",
       description: "List Markdown paths in a session. Use before reading when the target path is unknown.",
@@ -177,7 +177,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_read_file",
+    "read_file",
     {
       title: "Read File",
       description: "Read one Markdown file or bounded line range with its revision.",
@@ -210,9 +210,9 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_read_files",
+    "read_multiple_files",
     {
-      title: "Read Files",
+      title: "Read Multiple Files",
       description: "Read up to 20 complete Markdown files and their revisions. Read existing files before writing; batches fail rather than truncate.",
       inputSchema: {
         sessionId: sessionIdInputSchema,
@@ -237,7 +237,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_search_files",
+    "search_files",
     {
       title: "Search Files",
       description: "Search session file paths and contents; return paths, line numbers, and short excerpts.",
@@ -272,7 +272,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_write_file",
+    "write_file",
     {
       title: "Write File",
       description: "Create or replace one Markdown file. Creates parents; replacement needs its revision.",
@@ -298,7 +298,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_write_files",
+    "write_files",
     {
       title: "Write Files",
       description: "Atomically create or replace up to 100 Markdown files. Missing folders are created; include revisions for existing files.",
@@ -327,7 +327,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_edit_file",
+    "edit_file",
     {
       title: "Edit File",
       description: "Replace exact text in one file. Read first and pass its revision; a stale edit rebases only when oldText still matches safely.",
@@ -364,7 +364,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_create_directory",
+    "create_directory",
     {
       title: "Create Directory",
       description: "Create a directory and any missing parents in a live session. Succeeds without changing the session when the directory already exists.",
@@ -385,7 +385,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_move_file",
+    "move_file",
     {
       title: "Move or Rename",
       description: "Move or rename one file or directory by changing its path. Read files first and pass expectedRevision when the source is a file; create a missing destination directory before moving into it.",
@@ -411,7 +411,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_delete_path",
+    "delete_path",
     {
       title: "Delete Path",
       description: "Delete one file or directory. Read a file first and pass its current revision; non-empty directories require recursive true.",
@@ -437,7 +437,7 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_import_copy",
+    "import_copy",
     {
       title: "Import Copy",
       description: "Decrypt a private Tabula #json copy and return its relative Markdown paths and contents. Then use the host's file tools to create them in a user-chosen local folder. This does not join a live session or write to the filesystem.",
@@ -468,7 +468,7 @@ export const registerCoreTools = (
   registerCoreAppTool(
     server,
     options.resourceUri,
-    "tabula_export_copy",
+    "export_copy",
     {
       title: "Export Copy",
       description: "Create an encrypted fixed #json copy for a non-live Markdown handoff. Pass files (and optional title) for host-native Markdown, or sessionId (and optional paths) for a connected session. Pass exactly one of files or sessionId. Keep copyUrl private unless the user asks to share it.",

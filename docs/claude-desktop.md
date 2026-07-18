@@ -52,4 +52,4 @@ Writing documents and joining an existing Session do not render redundant App ca
 
 The card is a presentation-only handoff surface. It does not call MCP tools or
 depend on the App sharing Claude's in-memory Room session. Editing continues in
-Tabula.md.
+Tabula.

@@ -1,12 +1,12 @@
 <p align="center">
   <a href="https://tabula.md">
-    <img src="https://tabula.md/favicon.svg" alt="Tabula.md" width="56" />
+    <img src="https://tabula.md/favicon.svg" alt="Tabula" width="56" />
   </a>
 </p>
 
-# Tabula.md MCP
+# Tabula MCP
 
-Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.
+Connect Codex, Claude, and other MCP clients to shared Tabula workspaces.
 
 Draft in Claude, Codex, or the local filesystem. Tabula receives Markdown only
 when an agent joins or starts a live encrypted session, or exports a fixed
@@ -25,7 +25,7 @@ content you would not trust to that service.
 
 ### Claude Desktop
 
-Download the latest [Tabula.md MCP extension](https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb),
+Download the latest [Tabula MCP extension](https://github.com/tabula-md/tabula-mcp/releases/latest/download/tabula-mcp.mcpb),
 install it, then restart Claude Desktop.
 
 ### Claude Code
@@ -68,7 +68,7 @@ change. The browser sees the update immediately.
 ## What agents can do
 
 - **Live session** — start from one or more Markdown files, or join an existing
-  Tabula.md room and collaborate with people or other clients.
+  Tabula room and collaborate with people or other clients.
 - **Copy** — export one or more Markdown files as an encrypted `#json` snapshot,
   or import a received copy as relative paths and Markdown for the agent to
   materialize in a user-chosen local folder.
@@ -94,7 +94,7 @@ remain under the host's control.
 
 ## Backed By
 
-Tabula.md MCP is backed by
+Tabula MCP is backed by
 [Marker Inc Korea](https://github.com/Marker-Inc-Korea).
 
 ## License

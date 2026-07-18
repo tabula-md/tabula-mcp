@@ -56,7 +56,7 @@ describe("Tabula MCP HTTP server", () => {
       const response = await fetch(serverUrl(address.address, address.port, "/"));
 
       await expect(response.json()).resolves.toMatchObject({
-        description: "Connect Codex, Claude, and other MCP clients to shared Tabula.md workspaces.",
+        description: "Connect Codex, Claude, and other MCP clients to shared Tabula workspaces.",
       });
     } finally {
       await httpServer.close();
@@ -112,20 +112,20 @@ describe("Tabula MCP HTTP server", () => {
       const tools = await client.listTools();
 
       expect(tools.tools.map((tool) => tool.name)).toEqual([
-        "tabula_start_session",
-        "tabula_join_room",
-        "tabula_list_files",
-        "tabula_read_file",
-        "tabula_read_files",
-        "tabula_search_files",
-        "tabula_write_file",
-        "tabula_write_files",
-        "tabula_edit_file",
-        "tabula_create_directory",
-        "tabula_move_file",
-        "tabula_delete_path",
-        "tabula_import_copy",
-        "tabula_export_copy",
+        "start_session",
+        "join_room",
+        "list_files",
+        "read_file",
+        "read_multiple_files",
+        "search_files",
+        "write_file",
+        "write_files",
+        "edit_file",
+        "create_directory",
+        "move_file",
+        "delete_path",
+        "import_copy",
+        "export_copy",
       ]);
     } finally {
       await Promise.allSettled([client.close(), httpServer.close()]);

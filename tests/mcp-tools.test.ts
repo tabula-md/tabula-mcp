@@ -8,20 +8,20 @@ import { createEncryptedJsonShareWorkspaceSnapshot, generateJsonShareKey } from 
 
 const originalFetch = globalThis.fetch;
 const coreTools = [
-  "tabula_start_session",
-  "tabula_join_room",
-  "tabula_list_files",
-  "tabula_read_file",
-  "tabula_read_files",
-  "tabula_search_files",
-  "tabula_write_file",
-  "tabula_write_files",
-  "tabula_edit_file",
-  "tabula_create_directory",
-  "tabula_move_file",
-  "tabula_delete_path",
-  "tabula_import_copy",
-  "tabula_export_copy",
+  "start_session",
+  "join_room",
+  "list_files",
+  "read_file",
+  "read_multiple_files",
+  "search_files",
+  "write_file",
+  "write_files",
+  "edit_file",
+  "create_directory",
+  "move_file",
+  "delete_path",
+  "import_copy",
+  "export_copy",
 ];
 
 const uiCapabilities = {
@@ -113,11 +113,11 @@ describe("core MCP contract", () => {
         expect(tool.outputSchema).toBeTruthy();
         expectInputPropertiesDescribed(tool.inputSchema, tool.name);
         const destructive = [
-          "tabula_write_files",
-          "tabula_write_file",
-          "tabula_edit_file",
-          "tabula_move_file",
-          "tabula_delete_path",
+          "write_files",
+          "write_file",
+          "edit_file",
+          "move_file",
+          "delete_path",
         ].includes(tool.name);
         expect(tool.annotations).toMatchObject({
           readOnlyHint: expect.any(Boolean),
@@ -141,6 +141,20 @@ describe("core MCP contract", () => {
         "tabula_share_workspace",
         "tabula_create_draft",
         "tabula_update_draft",
+        "tabula_start_session",
+        "tabula_join_room",
+        "tabula_list_files",
+        "tabula_read_file",
+        "tabula_read_files",
+        "tabula_search_files",
+        "tabula_write_file",
+        "tabula_write_files",
+        "tabula_edit_file",
+        "tabula_create_directory",
+        "tabula_move_file",
+        "tabula_delete_path",
+        "tabula_import_copy",
+        "tabula_export_copy",
       ]) {
         expect(listed.tools.map((tool) => tool.name)).not.toContain(removed);
       }
@@ -167,58 +181,58 @@ describe("core MCP contract", () => {
     await withClient(async (client) => {
       const tools = Object.fromEntries((await client.listTools()).tools.map((tool) => [tool.name, tool]));
       expect(Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, tool.title]))).toEqual({
-        tabula_start_session: "Start Session",
-        tabula_join_room: "Join Session",
-        tabula_list_files: "List Files",
-        tabula_read_file: "Read File",
-        tabula_read_files: "Read Files",
-        tabula_search_files: "Search Files",
-        tabula_write_file: "Write File",
-        tabula_write_files: "Write Files",
-        tabula_edit_file: "Edit File",
-        tabula_create_directory: "Create Directory",
-        tabula_move_file: "Move or Rename",
-        tabula_delete_path: "Delete Path",
-        tabula_import_copy: "Import Copy",
-        tabula_export_copy: "Export Copy",
+        start_session: "Start Session",
+        join_room: "Join Room",
+        list_files: "List Files",
+        read_file: "Read File",
+        read_multiple_files: "Read Multiple Files",
+        search_files: "Search Files",
+        write_file: "Write File",
+        write_files: "Write Files",
+        edit_file: "Edit File",
+        create_directory: "Create Directory",
+        move_file: "Move or Rename",
+        delete_path: "Delete Path",
+        import_copy: "Import Copy",
+        export_copy: "Export Copy",
       });
-      expect(tools.tabula_start_session?.description).toContain("Markdown files");
-      expect(tools.tabula_join_room?.description).toContain("private #room URL");
-      expect(tools.tabula_list_files?.description).toContain("target path is unknown");
-      expect(tools.tabula_read_file?.description).toContain("bounded line range");
-      expect(tools.tabula_read_files?.description).toContain("revisions");
-      expect(tools.tabula_search_files?.description).toContain("line numbers");
-      expect(tools.tabula_write_file?.description).toContain("one Markdown file");
-      expect(tools.tabula_write_files?.description).toContain("Atomically");
-      expect(tools.tabula_edit_file?.description).toContain("oldText still matches safely");
-      expect(tools.tabula_create_directory?.description).toContain("missing parents");
-      expect(tools.tabula_move_file?.description).toContain("Move or rename");
-      expect(tools.tabula_delete_path?.description).toContain("recursive true");
-      expect(tools.tabula_import_copy?.description).toContain("does not join a live session");
-      expect(tools.tabula_export_copy?.description).toContain("exactly one of files or sessionId");
+      expect(tools.start_session?.description).toContain("Markdown files");
+      expect(tools.join_room?.description).toContain("private #room URL");
+      expect(tools.list_files?.description).toContain("target path is unknown");
+      expect(tools.read_file?.description).toContain("bounded line range");
+      expect(tools.read_multiple_files?.description).toContain("revisions");
+      expect(tools.search_files?.description).toContain("line numbers");
+      expect(tools.write_file?.description).toContain("one Markdown file");
+      expect(tools.write_files?.description).toContain("Atomically");
+      expect(tools.edit_file?.description).toContain("oldText still matches safely");
+      expect(tools.create_directory?.description).toContain("missing parents");
+      expect(tools.move_file?.description).toContain("Move or rename");
+      expect(tools.delete_path?.description).toContain("recursive true");
+      expect(tools.import_copy?.description).toContain("does not join a live session");
+      expect(tools.export_copy?.description).toContain("exactly one of files or sessionId");
     });
   });
 
   it("attaches the Tabula App only to completed handoff tools", async () => {
     await withClient(async (client) => {
       const listed = await client.listTools();
-      for (const name of ["tabula_start_session", "tabula_export_copy"]) {
+      for (const name of ["start_session", "export_copy"]) {
         const tool = listed.tools.find((candidate) => candidate.name === name);
         expect(tool?._meta?.["ui/resourceUri"]).toMatch(/^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/);
       }
       for (const name of [
-        "tabula_join_room",
-        "tabula_list_files",
-        "tabula_read_file",
-        "tabula_read_files",
-        "tabula_search_files",
-        "tabula_write_file",
-        "tabula_write_files",
-        "tabula_edit_file",
-        "tabula_create_directory",
-        "tabula_move_file",
-        "tabula_delete_path",
-        "tabula_import_copy",
+        "join_room",
+        "list_files",
+        "read_file",
+        "read_multiple_files",
+        "search_files",
+        "write_file",
+        "write_files",
+        "edit_file",
+        "create_directory",
+        "move_file",
+        "delete_path",
+        "import_copy",
       ]) {
         const tool = listed.tools.find((candidate) => candidate.name === name);
         expect(tool?._meta?.["ui/resourceUri"]).toBeUndefined();
@@ -229,10 +243,10 @@ describe("core MCP contract", () => {
   it("provides focused single-file tools alongside atomic batch tools", async () => {
     await withClient(async (client) => {
       const tools = await client.listTools();
-      const read = tools.tools.find((tool) => tool.name === "tabula_read_file");
-      const readMany = tools.tools.find((tool) => tool.name === "tabula_read_files");
-      const write = tools.tools.find((tool) => tool.name === "tabula_write_file");
-      const writeMany = tools.tools.find((tool) => tool.name === "tabula_write_files");
+      const read = tools.tools.find((tool) => tool.name === "read_file");
+      const readMany = tools.tools.find((tool) => tool.name === "read_multiple_files");
+      const write = tools.tools.find((tool) => tool.name === "write_file");
+      const writeMany = tools.tools.find((tool) => tool.name === "write_files");
       expect(JSON.stringify(read?.inputSchema)).toContain('"tailLines"');
       expect(JSON.stringify(read?.inputSchema)).toContain('"startLine"');
       expect(JSON.stringify(readMany?.inputSchema)).toContain('"paths"');
@@ -244,8 +258,8 @@ describe("core MCP contract", () => {
   it("accepts host-native Markdown files instead of exposing a private draft API", async () => {
     await withClient(async (client) => {
       const tools = await client.listTools();
-      const start = tools.tools.find((tool) => tool.name === "tabula_start_session");
-      const exported = tools.tools.find((tool) => tool.name === "tabula_export_copy");
+      const start = tools.tools.find((tool) => tool.name === "start_session");
+      const exported = tools.tools.find((tool) => tool.name === "export_copy");
       expect(JSON.stringify(start?.inputSchema)).toContain('"files"');
       expect(JSON.stringify(start?.inputSchema)).not.toContain("draftId");
       expect(JSON.stringify(exported?.inputSchema)).toContain('"files"');
@@ -277,7 +291,7 @@ describe("core MCP contract", () => {
   ])("returns one actionable tool error for invalid Export Copy input %#", async (argumentsValue, message) => {
     await withClient(async (client) => {
       const exported = await client.callTool({
-        name: "tabula_export_copy",
+        name: "export_copy",
         arguments: argumentsValue,
       });
       expect(exported.isError).toBe(true);
@@ -305,7 +319,7 @@ describe("core MCP contract", () => {
 
     await withClient(async (client) => {
       const exported = await client.callTool({
-        name: "tabula_export_copy",
+        name: "export_copy",
         arguments: {
           title: "Export me",
           files: [{ path: "export.md", content: "# Export me\n" }],
@@ -333,7 +347,7 @@ describe("core MCP contract", () => {
 
     await withClient(async (client) => {
       const exported = await client.callTool({
-        name: "tabula_export_copy",
+        name: "export_copy",
         arguments: {
           title: "Three documents",
           files: [
@@ -377,7 +391,7 @@ describe("core MCP contract", () => {
 
     await withClient(async (client) => {
       const imported = await client.callTool({
-        name: "tabula_import_copy",
+        name: "import_copy",
         arguments: { copyUrl: `https://tabula.md/#json=${snapshotId},${snapshotKey}` },
       });
       expect(imported.isError).not.toBe(true);
@@ -411,7 +425,7 @@ describe("core MCP contract", () => {
 
     await withClient(async (client) => {
       const imported = await client.callTool({
-        name: "tabula_import_copy",
+        name: "import_copy",
         arguments: { copyUrl: `https://tabula.md/#json=import_copy_123,${generateJsonShareKey()}` },
       });
       expect(imported.isError).toBe(true);
@@ -435,7 +449,7 @@ describe("core MCP contract", () => {
 
     await withClient(async (client) => {
       const exported = await client.callTool({
-        name: "tabula_export_copy",
+        name: "export_copy",
         arguments: {
           title: "Self hosted",
           files: [{ path: "self-hosted.md", content: "# Self hosted\n" }],

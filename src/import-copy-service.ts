@@ -48,7 +48,7 @@ const parseCopyUrl = (copyUrl: string) => {
   } catch {
     throw new TabulaCoreError("invalid_input", "The supplied value is not a valid Tabula URL.", {
       details: { expected: "https://tabula.md/#json=<copy-id>,<client-key>" },
-      retry: "Use the complete private #json URL copied from Tabula.md.",
+      retry: "Use the complete private #json URL copied from Tabula.",
     });
   }
   const importRoute = getJsonShareImportRoute({ pathname: url.pathname, hash: url.hash });
@@ -60,7 +60,7 @@ const parseCopyUrl = (copyUrl: string) => {
   }
   if (importRoute.status === "invalid") {
     throw new TabulaCoreError("invalid_input", importRoute.errorMessage, {
-      retry: "Use the complete #json URL copied from Tabula.md.",
+      retry: "Use the complete #json URL copied from Tabula.",
     });
   }
   return { url, route: importRoute.route };
@@ -136,7 +136,7 @@ const projectCopyFiles = async (payload: ImportedCopyPayload) => {
   if (payload.files.length > maxImportedCopyFiles) {
     throw importFailed(
       "The Tabula copy contains too many Markdown files to import through this MCP host.",
-      "Ask the sender to export a smaller copy or open it in Tabula.md.",
+      "Ask the sender to export a smaller copy or open it in Tabula.",
       { fileCount: payload.files.length, maxFiles: maxImportedCopyFiles },
     );
   }
@@ -188,7 +188,7 @@ const projectCopyFiles = async (payload: ImportedCopyPayload) => {
   if (totalCharacters > maxImportedCopyCharacters) {
     throw importFailed(
       "The Tabula copy contains too much Markdown to import through this MCP host.",
-      "Ask the sender to export a smaller copy or open it in Tabula.md.",
+      "Ask the sender to export a smaller copy or open it in Tabula.",
       { totalCharacters, maxCharacters: maxImportedCopyCharacters },
     );
   }
@@ -197,7 +197,7 @@ const projectCopyFiles = async (payload: ImportedCopyPayload) => {
   const commentCount = Object.values(payload.commentsByFileId)
     .reduce((total, comments) => total + comments.length, 0);
   return {
-    title: root?.title || "Tabula.md copy",
+    title: root?.title || "Tabula copy",
     files,
     fileCount: files.length,
     totalCharacters,

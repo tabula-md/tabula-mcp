@@ -58,7 +58,7 @@ export const getPackageVersion = () => {
   return typeof packageJson.version === "string" ? packageJson.version : "unknown";
 };
 
-export const CLI_HELP = `Tabula.md MCP
+export const CLI_HELP = `Tabula MCP
 
 ${TABULA_MCP_PRODUCT_DESCRIPTION}
 

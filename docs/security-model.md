@@ -21,8 +21,8 @@ The model must not echo a Room URL after joining. Exported Copy URLs should be p
 
 The MCP server is writable by default. Claude Desktop, Claude Code, Codex, or another MCP host controls approval for mutating calls.
 
-`tabula_write_file`, `tabula_write_files`, and `tabula_edit_file` require
-revisions returned by `tabula_read_file` or `tabula_read_files` when they
+`write_file`, `write_files`, and `edit_file` require revisions returned by
+`read_file` or `read_multiple_files` when they
 change existing files. Moving, renaming, or
 deleting a file is revision-guarded as well. The server validates existing
 files before applying a collaboration transaction and rejects stale or
@@ -43,7 +43,7 @@ File and Session export use one `exportCopy()` service and the official `@tabula
 
 ## Copy import
 
-`tabula_import_copy` downloads encrypted bytes using the public snapshot ID,
+`import_copy` downloads encrypted bytes using the public snapshot ID,
 decrypts them with the client-only fragment key, validates the schema, and
 returns safe relative Markdown paths. It does not join a Room, persist a live
 connection, or write to the local filesystem. Filesystem writes and overwrite
