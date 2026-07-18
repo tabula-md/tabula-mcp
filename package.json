@@ -116,7 +116,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "^2.1.2",
-    "@types/node": "^22.10.0",
+    "@types/node": "^26.1.1",
     "playwright": "^1.61.1",
     "tsx": "^4.20.6",
     "typescript": "^6.0.3",
