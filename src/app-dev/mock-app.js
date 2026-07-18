@@ -27,6 +27,21 @@ export const createDevApp = () => ({
   async connect() {
     this.onhostcontextchanged?.(this.getHostContext());
     queueMicrotask(() => {
+      if (getFixtureMode() === "error") {
+        this.ontoolresult?.({
+          ...textResult(
+            JSON.stringify({ message: "Legacy text fallback." }),
+            {
+              code: "write_disabled",
+              message: "This Tabula MCP server is read-only.",
+              details: {},
+              retry: "Restart without read-only mode.",
+            },
+          ),
+          isError: true,
+        });
+        return;
+      }
       if (getFixtureMode() === "session") {
         this.ontoolinput?.({ arguments: { files: [{ path: "brief.md", content: "# Brief\n" }] } });
         this.ontoolresult?.(textResult("Started a live Tabula session.", clone(roomFixture)));

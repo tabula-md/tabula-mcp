@@ -376,7 +376,7 @@ describe("core MCP workflows", () => {
       expect(missing.isError).toBe(true);
       expect(JSON.parse(missing.content?.find((item) => item.type === "text")?.text ?? "{}")).toMatchObject({
         code: "session_not_found",
-        sessionId: first.sessionId,
+        details: { sessionId: first.sessionId },
       });
       const remaining = await client.callTool({
         name: "read_file",
@@ -394,7 +394,7 @@ describe("core MCP workflows", () => {
       expect(limited.isError).toBe(true);
       expect(JSON.parse(limited.content?.find((item) => item.type === "text")?.text ?? "{}")).toMatchObject({
         code: "session_limit",
-        limit: 1,
+        details: { limit: 1 },
         retry: expect.stringContaining("Leave an inactive"),
       });
     }, { TABULA_MCP_MAX_ROOMS_PER_SESSION: "1" });
@@ -421,7 +421,7 @@ describe("core MCP workflows", () => {
         expect(foreignRead.isError).toBe(true);
         expect(JSON.parse(foreignRead.content?.find((item) => item.type === "text")?.text ?? "{}")).toMatchObject({
           code: "session_not_found",
-          sessionId: first.sessionId,
+          details: { sessionId: first.sessionId },
         });
       });
     });
@@ -484,9 +484,10 @@ describe("core MCP workflows", () => {
       expect(error).toMatchObject({
         code: "invalid_input",
         message: expect.stringContaining("valid private Tabula room URL"),
-        expected: "https://tabula.md/#room=<room-id>,<room-key>",
+        details: { expected: "https://tabula.md/#room=<room-id>,<room-key>" },
         retry: expect.stringContaining("complete #room URL"),
       });
+      expect(joined.structuredContent).toEqual(error);
     });
   });
 
@@ -495,12 +496,13 @@ describe("core MCP workflows", () => {
     await withClient(async (client) => {
       const joined = await client.callTool({ name: "join_room", arguments: { roomUrl } });
       expect(joined.isError).toBe(true);
-      expect(joined.structuredContent).toBeUndefined();
       const error = JSON.parse(joined.content?.find((item) => item.type === "text")?.text ?? "{}");
       expect(error).toMatchObject({
         code: "session_not_ready",
+        details: expect.any(Object),
         retry: expect.stringContaining("join it again"),
       });
+      expect(joined.structuredContent).toEqual(error);
 
       roomMock.setStateReceived(true);
       const retried = await client.callTool({ name: "join_room", arguments: { roomUrl } });

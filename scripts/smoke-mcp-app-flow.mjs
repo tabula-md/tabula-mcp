@@ -128,6 +128,19 @@ const runUnsupportedLinkFlow = async (baseUrl, browser) => {
   await page.close();
 };
 
+const runTypedErrorFlow = async (baseUrl, browser) => {
+  const { page, consoleErrors, pageErrors } = await createPage(browser);
+  await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1&fixture=error`);
+  await page.getByText("Handoff failed", { exact: true }).waitFor({ state: "visible" });
+  const message = page.locator("#message");
+  await message.filter({ hasText: "This Tabula MCP server is read-only." }).waitFor({ state: "visible" });
+  assert.equal(await message.getAttribute("data-tone"), "error");
+  assert.equal((await message.textContent())?.includes("Legacy text fallback"), false);
+  assert.equal(await page.locator("#openButton").isHidden(), true);
+  assertNoPageErrors(consoleErrors, pageErrors);
+  await page.close();
+};
+
 const runMobileFlow = async (baseUrl, browser) => {
   const { page, consoleErrors, pageErrors } = await createPage(browser, mobileViewport);
   await page.goto(`${baseUrl}/index-dev.html?tabula-dev=1`);
@@ -155,6 +168,7 @@ const main = async () => {
     await runSessionFlow(baseUrl, browser);
     await runDeniedLinkFlow(baseUrl, browser);
     await runUnsupportedLinkFlow(baseUrl, browser);
+    await runTypedErrorFlow(baseUrl, browser);
     await runMobileFlow(baseUrl, browser);
   } catch (error) {
     if (String(error?.message || error).includes("Executable doesn't exist")) {
