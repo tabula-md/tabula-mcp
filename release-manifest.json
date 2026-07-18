@@ -19,7 +19,9 @@
   "worker": {
     "name": "tabula-mcp",
     "origin": "https://mcp.tabula.md",
-    "healthPath": "/health"
+    "healthPath": "/health",
+    "readyPath": "/ready",
+    "mcpPath": "/mcp"
   },
   "interoperability": {
     "tabulaMd": {

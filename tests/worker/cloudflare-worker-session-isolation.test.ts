@@ -102,6 +102,16 @@ afterEach(async () => {
 });
 
 describe("production Worker Durable Object routing", () => {
+  it("reports runtime readiness only when Worker bindings and secrets are configured", async () => {
+    const response = await SELF.fetch("https://mcp.tabula.md/ready");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      service: "tabula-mcp",
+      deploymentMode: "remote",
+    });
+  });
+
   it("isolates concurrent MCP sessions and releases quota on DELETE and idle alarm", async () => {
     const sessionA = await initialize(1);
     const sessionB = await initialize(2);

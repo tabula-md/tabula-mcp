@@ -26,8 +26,10 @@ Firestore. Export Copy uploads only an encrypted snapshot to Tabula JSON.
 Consequently:
 
 - `/health` reports process policy and version, not a fictitious document store.
-- `/ready` reports that the MCP runtime can accept requests; Room/Copy provider
-  failures are reported by the operation that uses them.
+- `/ready` reports that the deployed runtime has its Session and Quota Durable
+  Object bindings plus `TABULA_MCP_QUOTA_HASH_SECRET`. It returns `503` when
+  the Worker cannot accept MCP requests. Room/Copy provider failures are still
+  reported by the operation that uses them.
 - closing an MCP session must close its Room connections and clear decrypted
   working state.
 
