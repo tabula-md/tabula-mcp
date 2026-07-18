@@ -9,9 +9,9 @@ folder with one encrypted Tabula Room. Run it only from this repository:
 ```sh
 read -s TABULA_ROOM_URL
 export TABULA_ROOM_URL
-npm run sync:dev -- status ./research
-npm run sync:dev -- sync ./research
-npm run sync:dev -- watch ./research
+npm --prefix packages/sync run dev -- status ./research
+npm --prefix packages/sync run dev -- sync ./research
+npm --prefix packages/sync run dev -- watch ./research
 ```
 
 The CLI writes revision fingerprints—not the Room URL or key—to

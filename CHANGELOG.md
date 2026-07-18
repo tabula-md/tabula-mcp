@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.2
+
+- Removed private Sync workspace metadata and development commands from the
+  published MCP package manifest. The private prototype remains outside the
+  public npm package, MCPB, exports, tools, and user documentation.
+
 ## 0.6.1
 
 - Removed the experimental Tabula Sync executable, exports, documentation, and

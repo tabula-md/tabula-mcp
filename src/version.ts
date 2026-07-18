@@ -1,1 +1,1 @@
-export const TABULA_MCP_VERSION = "0.6.1";
+export const TABULA_MCP_VERSION = "0.6.2";
