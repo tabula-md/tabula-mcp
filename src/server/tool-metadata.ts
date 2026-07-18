@@ -31,7 +31,7 @@ export type CoreToolMetadata = {
 export const CORE_TOOL_METADATA: Record<CoreToolName, CoreToolMetadata> = {
   start_session: {
     title: "Start Session",
-    description: "Use this when the user explicitly wants Markdown opened as a new live Tabula.md collaboration session. Do not use it for a private host draft, a fixed Copy, or an existing #room URL.",
+    description: "Use this when, and only when, the user explicitly wants a new live Tabula.md session or encrypted Markdown collaboration handoff. Never use it for Codex or Claude artifacts, private drafts, fixed Copies, or existing #room URLs.",
   },
   join_room: {
     title: "Join Room",
