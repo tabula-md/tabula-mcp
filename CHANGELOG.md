@@ -2,9 +2,16 @@
 
 ## Unreleased
 
+## 0.6.1
+
 - Removed the experimental Tabula Sync executable, exports, documentation, and
   implementation from the public MCP package. The prototype now lives only in
   a private monorepo package with no publishing workflow.
+- Made Cloudflare readiness validate its Durable Object bindings and quota
+  hash secret, and made published-release verification perform a real MCP
+  handshake so a live-but-unusable Worker cannot pass deployment checks.
+- Clarified that Move or Rename requires an existing destination parent and
+  returns an actionable error before applying any mutation when it is missing.
 
 ## 0.6.0
 
