@@ -1,0 +1,11 @@
+{
+  "name": "@tabula-md/sync",
+  "version": "0.0.0-private",
+  "private": true,
+  "description": "Internal preview for synchronizing a local Markdown folder with a Tabula Room.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

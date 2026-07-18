@@ -1,12 +1,12 @@
-import "./node-runtime.js";
+import "../../../src/node-runtime.js";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import type { RuntimeEnvironment } from "./env.js";
-import { sha256Text } from "./crypto.js";
-import { TabulaCoreError } from "./core-errors.js";
-import { parseRoomShareUrl } from "./protocol.js";
-import { SessionRegistry } from "./registry.js";
-import { joinRoomSession } from "./session-service.js";
+import type { RuntimeEnvironment } from "../../../src/env.js";
+import { sha256Text } from "../../../src/crypto.js";
+import { TabulaCoreError } from "../../../src/core-errors.js";
+import { parseRoomShareUrl } from "../../../src/protocol.js";
+import { SessionRegistry } from "../../../src/registry.js";
+import { joinRoomSession } from "../../../src/session-service.js";
 import {
   createSessionDirectory,
   deleteSessionPath,
@@ -14,7 +14,7 @@ import {
   moveSessionFile,
   readSessionFiles,
   writeSessionFiles,
-} from "./workspace-file-service.js";
+} from "../../../src/workspace-file-service.js";
 import {
   deleteLocalSyncFile,
   moveLocalSyncFile,
@@ -23,8 +23,8 @@ import {
   writeFolderSyncState,
   writeLocalSyncFile,
   type FolderSyncState,
-} from "./sync-local.js";
-import { planFolderSync, type SyncFile, type SyncPlan } from "./sync-model.js";
+} from "./local.js";
+import { planFolderSync, type SyncFile, type SyncPlan } from "./model.js";
 
 const chunksOf = <T>(values: readonly T[], size: number) => {
   const chunks: T[][] = [];

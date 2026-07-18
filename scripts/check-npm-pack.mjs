@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -10,8 +12,6 @@ const requiredFiles = [
   "dist/index.d.ts",
   "dist/cli.js",
   "dist/cli.d.ts",
-  "dist/sync-cli.js",
-  "dist/sync-cli.d.ts",
   "dist/env.js",
   "dist/env.d.ts",
   "dist/server/index.js",
@@ -77,6 +77,9 @@ const main = async () => {
   if (packageJson.name !== "@tabula-md/mcp" || packageJson.publishConfig?.access !== "public") {
     throw new Error("npm package metadata must publish @tabula-md/mcp with public access");
   }
+  if (Object.keys(packageJson.bin ?? {}).length !== 1 || packageJson.bin?.["tabula-mcp"] !== "dist/cli.js") {
+    throw new Error("public MCP package must expose only the tabula-mcp executable");
+  }
   if (!packageJson.repository?.url || !packageJson.bugs?.url || !packageJson.homepage) {
     throw new Error("npm package metadata is missing repository, bugs, or homepage URLs");
   }
@@ -90,6 +93,10 @@ const main = async () => {
   const forbidden = [...paths].filter(isForbiddenGeneratedArtifact);
   if (forbidden.length) {
     throw new Error(`npm package includes generated artifacts: ${forbidden.slice(0, 8).join(", ")}`);
+  }
+  const privateSyncFiles = [...paths].filter((filePath) => filePath.startsWith("dist/sync-"));
+  if (privateSyncFiles.length) {
+    throw new Error(`npm package exposes private Tabula Sync files: ${privateSyncFiles.join(", ")}`);
   }
 
   const entrypoint = await readFile(packageJson.bin["tabula-mcp"], "utf8");
@@ -107,7 +114,28 @@ const main = async () => {
     }
   }
 
-  console.log(`npm package contents check passed (${pack.entryCount ?? pack.files.length} files)`);
+  const packDirectory = await mkdtemp(path.join(tmpdir(), "tabula-mcp-pack-"));
+  try {
+    const { stdout: packedOutput } = await execFileAsync(
+      "npm",
+      ["pack", "--json", "--pack-destination", packDirectory],
+      { maxBuffer: 1024 * 1024 * 20 },
+    );
+    const packed = readPackResult(packedOutput, packageJson.name);
+    const tarball = path.join(packDirectory, packed.filename);
+    const { stdout: helpOutput, stderr: helpError } = await execFileAsync(
+      "npm",
+      ["exec", "--yes", `--package=${tarball}`, "--", "tabula-mcp", "--help"],
+      { maxBuffer: 1024 * 1024 * 20, timeout: 30_000 },
+    );
+    if (!helpOutput.includes("Tabula MCP") || helpError.trim()) {
+      throw new Error(`packed package did not run through the documented npx command${helpError.trim() ? `: ${helpError.trim()}` : ""}`);
+    }
+  } finally {
+    await rm(packDirectory, { recursive: true, force: true });
+  }
+
+  console.log(`npm package contents and documented npx command passed (${pack.entryCount ?? pack.files.length} files)`);
 };
 
 main().catch((error) => {

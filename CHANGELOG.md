@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Removed the experimental Tabula Sync executable, exports, documentation, and
+  implementation from the public MCP package. The prototype now lives only in
+  a private monorepo package with no publishing workflow.
+
 ## 0.6.0
 
 - Added first-class live comment tools for listing, adding line-anchored or
@@ -15,10 +19,6 @@
   deployment contracts to match that state model. Cloudflare Durable Objects
   are the official production session boundary; Vercel requires operator-
   supplied affinity and remains a preview/self-host compatibility target.
-- Added the separate `tabula-sync` CLI for conflict-safe two-way synchronization
-  between a local Markdown folder and one live Room, including dry-run status,
-  long-lived watch mode, explicit deletion propagation, symlink protection,
-  secret-free state, and content-preserving rename detection.
 - Added a manifest-backed release pipeline that pins browser, Room, and Copy
   interoperability revisions and publishes npm, MCPB, plugin, GitHub Release,
   and the production Cloudflare Worker from one verified tag.
