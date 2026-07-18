@@ -21,20 +21,36 @@ for (const required of [
   "steps.manifest.outputs.tabula_room_ref",
   "steps.manifest.outputs.tabula_json_ref",
   "scripts/check-interoperability-checkouts.mjs",
+  "Rebuild release artifacts after interoperability test",
+  "npm run release:pack",
   "build:release-manifest",
-  "npm publish --access public --ignore-scripts",
+  "scripts/publish-npm-release.mjs",
   "gh release create",
+  "gh release upload",
+  "--clobber",
   "dist/tabula-mcp.mcpb",
   "dist/release-manifest.json",
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
   "npm run deploy:cloudflare",
+  "Restore resolved manifest after Worker build",
   "scripts/verify-published-release.mjs",
 ]) {
   assert.ok(workflow.includes(required), `Release workflow is missing: ${required}`);
 }
 
 assert.ok(!workflow.includes("NPM_TOKEN"), "Trusted publishing must not depend on a long-lived npm token.");
+
+const assertOrdered = (first, second) => {
+  const firstIndex = workflow.indexOf(first);
+  const secondIndex = workflow.indexOf(second);
+  assert.ok(firstIndex >= 0 && secondIndex >= 0 && firstIndex < secondIndex, `${first} must run before ${second}.`);
+};
+
+assertOrdered("npm run test:e2e:local-collab", "Rebuild release artifacts after interoperability test");
+assertOrdered("Rebuild release artifacts after interoperability test", "Create GitHub Release and upload MCPB artifacts");
+assertOrdered("npm run deploy:cloudflare", "Restore resolved manifest after Worker build");
+assertOrdered("Restore resolved manifest after Worker build", "Verify npm, GitHub, and production surfaces");
 
 for (const required of [
   "scripts/export-release-manifest.mjs",
