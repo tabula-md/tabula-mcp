@@ -53,8 +53,11 @@ const requiredTools = [
   "tabula_list_files",
   "tabula_read_files",
   "tabula_search_files",
-  "tabula_write_file",
   "tabula_write_files",
+  "tabula_edit_file",
+  "tabula_create_directory",
+  "tabula_move_file",
+  "tabula_delete_path",
   "tabula_import_copy",
   "tabula_export_copy",
 ];

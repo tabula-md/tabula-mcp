@@ -457,7 +457,8 @@ const run = async () => {
     await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, async (client) => {
       const expectedTools = [
         "tabula_start_session", "tabula_join_room", "tabula_list_files", "tabula_read_files",
-        "tabula_search_files", "tabula_write_file", "tabula_write_files", "tabula_import_copy", "tabula_export_copy",
+        "tabula_search_files", "tabula_write_files", "tabula_edit_file", "tabula_create_directory",
+        "tabula_move_file", "tabula_delete_path", "tabula_import_copy", "tabula_export_copy",
       ];
       assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), expectedTools);
 
@@ -513,11 +514,9 @@ const run = async () => {
       assert.equal(readme.content, "# MCP Local E2E\n\nInitial from MCP.\n");
 
       const nextContent = `${readme.content}\nEdited by tabula-mcp local E2E.\n`;
-      await callTool(client, "tabula_write_file", {
+      await callTool(client, "tabula_write_files", {
         sessionId: session.sessionId,
-        path: "README.md",
-        content: nextContent,
-        expectedRevision: readme.revision,
+        files: [{ path: "README.md", content: nextContent, expectedRevision: readme.revision }],
       });
       const batchWrite = await callTool(client, "tabula_write_files", {
         sessionId: session.sessionId,
@@ -565,11 +564,9 @@ const run = async () => {
       assert(copyTabs.some((tab) => tab.title === "sources.md"), "Session Copy should preserve nested batch files");
 
       const postExportContent = `${afterHumanEdit.content}\nChanged after Export Copy.\n`;
-      await callTool(client, "tabula_write_file", {
+      await callTool(client, "tabula_write_files", {
         sessionId: session.sessionId,
-        path: "README.md",
-        content: postExportContent,
-        expectedRevision: afterHumanEdit.revision,
+        files: [{ path: "README.md", content: postExportContent, expectedRevision: afterHumanEdit.revision }],
       });
       await waitForEditorText(page, "Changed after Export Copy.");
       await openedSessionCopy.page.waitForTimeout(500);

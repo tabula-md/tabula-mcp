@@ -4,7 +4,7 @@
   "display_name": "Tabula.md MCP",
   "version": "0.4.1",
   "description": "Let Claude work with people in shared Tabula.md Markdown workspaces.",
-  "long_description": "Turn Markdown created in Claude or local files into shared Tabula.md workspaces. Claude can start or join encrypted live sessions, list, read, search, and write one or many Markdown files, export fixed encrypted copies, and import a #json copy for local materialization. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
+  "long_description": "Turn Markdown created in Claude or local files into shared Tabula.md workspaces. Claude can start or join encrypted live sessions, list, read, search, edit, organize, and delete Markdown files, export fixed encrypted copies, and import a #json copy for local materialization. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
   "author": {
     "name": "Tabula.md",
     "url": "https://tabula.md"
@@ -56,12 +56,24 @@
       "description": "Search Markdown paths and contents with line-numbered excerpts."
     },
     {
-      "name": "tabula_write_file",
-      "description": "Create or replace a Markdown file while the server computes the collaboration patch."
+      "name": "tabula_write_files",
+      "description": "Create or replace one or more Markdown files and their folders in one live session transaction."
     },
     {
-      "name": "tabula_write_files",
-      "description": "Create or replace multiple Markdown files and their folders in one live session transaction."
+      "name": "tabula_edit_file",
+      "description": "Apply exact, revision-guarded replacements to one Markdown file."
+    },
+    {
+      "name": "tabula_create_directory",
+      "description": "Create a directory and any missing parent directories in a live session."
+    },
+    {
+      "name": "tabula_move_file",
+      "description": "Move or rename a file or directory in a live session."
+    },
+    {
+      "name": "tabula_delete_path",
+      "description": "Delete a revision-guarded file or an explicitly recursive directory path."
     },
     {
       "name": "tabula_import_copy",

@@ -12,10 +12,17 @@ Join and edit a session:
 tabula_join_room
 → tabula_list_files
 → tabula_read_files
-→ tabula_write_file / tabula_write_files
+→ tabula_edit_file / tabula_write_files
 ```
 
-`tabula_write_file` receives complete Markdown. The server validates the revision and computes the Yjs patch. Codex should never construct text offsets or low-level workspace changes.
+`tabula_edit_file` applies exact unique replacements, while
+`tabula_write_files` creates or completely replaces one or more Markdown
+files. Both validate revisions, and the server computes the Yjs patches. Codex
+should never construct text offsets or low-level workspace changes.
+
+`tabula_create_directory`, `tabula_move_file`, and `tabula_delete_path` expose
+the remaining familiar filesystem operations. Move File also renames files and
+directories when the destination changes only the name.
 
 Codex can read local Markdown files with its filesystem tools, then pass them to `tabula_export_copy` for a fixed encrypted `#json` copy, `tabula_start_session` for a new live workspace, or `tabula_write_files` for an existing Session.
 

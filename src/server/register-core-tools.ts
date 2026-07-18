@@ -9,11 +9,14 @@ import type { SessionRegistry } from "../registry.js";
 import { joinRoomSession, startWorkspaceSession } from "../session-service.js";
 import { createWorkspaceFromFiles } from "../workspaces.js";
 import {
+  createSessionDirectory,
+  deleteSessionPath,
+  editSessionFile,
   listSessionFiles,
   maxSessionReadFiles,
+  moveSessionFile,
   readSessionFiles,
   searchSessionFiles,
-  writeSessionFile,
   writeSessionFiles,
 } from "../workspace-file-service.js";
 
@@ -23,15 +26,17 @@ const sessionIdInputSchema = sessionIdSchema.describe("ID from Start Session or 
 const filePathSchema = z.string().min(1).describe("Path from the session root.");
 const expectedRevisionSchema = sha256Schema.optional()
   .describe("Revision from Read Files; omit only for a new file.");
+const requiredRevisionSchema = sha256Schema
+  .describe("Current revision from Read Files.");
 const markdownFileSchema = z.object({
   path: filePathSchema,
   content: z.string().describe("Complete Markdown content."),
 });
 
-const annotations = (readOnly: boolean, openWorld = false, destructive = false) => ({
+const annotations = (readOnly: boolean, openWorld = false, destructive = false, idempotent = readOnly) => ({
   readOnlyHint: readOnly,
   destructiveHint: destructive,
-  idempotentHint: readOnly,
+  idempotentHint: idempotent,
   openWorldHint: openWorld,
 });
 
@@ -221,32 +226,6 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
-    "tabula_write_file",
-    {
-      title: "Write File",
-      description: "Create or replace one Markdown file. For an existing file, pass the revision returned by Read Files.",
-      inputSchema: {
-        sessionId: sessionIdInputSchema,
-        path: filePathSchema,
-        content: z.string().describe("Complete Markdown content that should remain after the write."),
-        expectedRevision: expectedRevisionSchema,
-      },
-      outputSchema: {
-        path: z.string(),
-        created: z.boolean(),
-        changed: z.boolean(),
-        revision: sha256Schema,
-        textLength: z.number().int().nonnegative(),
-      },
-      annotations: annotations(false, true, true),
-    },
-    async ({ sessionId, path, content, expectedRevision }) => run(async () => ({
-      value: withoutSessionId(await writeSessionFile({ registry, sessionId, path, content, expectedRevision })),
-      text: `Wrote "${path}" in the Tabula session.`,
-    })),
-  );
-
-  server.registerTool(
     "tabula_write_files",
     {
       title: "Write Files",
@@ -272,6 +251,111 @@ export const registerCoreTools = (
     async ({ sessionId, files }) => run(async () => ({
       value: withoutSessionId(await writeSessionFiles({ registry, sessionId, files })),
       text: `Wrote ${files.length} Markdown file${files.length === 1 ? "" : "s"} in the Tabula session.`,
+    })),
+  );
+
+  server.registerTool(
+    "tabula_edit_file",
+    {
+      title: "Edit File",
+      description: "Replace exact, unique text in one existing Markdown file. Read the file first and pass its current revision; ambiguous or stale edits fail without changing the file.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        path: filePathSchema,
+        expectedRevision: requiredRevisionSchema,
+        edits: z.array(z.object({
+          oldText: z.string().min(1)
+            .describe("Exact, non-empty text that must occur once in the current file."),
+          newText: z.string()
+            .describe("Replacement text; use an empty string to remove oldText."),
+        })).min(1).max(100)
+          .describe("One to 100 exact replacements, applied in order."),
+      },
+      outputSchema: {
+        path: z.string(),
+        changed: z.boolean(),
+        editsApplied: z.number().int().nonnegative(),
+        revision: sha256Schema,
+        textLength: z.number().int().nonnegative(),
+      },
+      annotations: annotations(false, true, true),
+    },
+    async ({ sessionId, path, expectedRevision, edits }) => run(async () => ({
+      value: withoutSessionId(await editSessionFile({ registry, sessionId, path, expectedRevision, edits })),
+      text: `Applied ${edits.length} exact edit${edits.length === 1 ? "" : "s"} to "${path}".`,
+    })),
+  );
+
+  server.registerTool(
+    "tabula_create_directory",
+    {
+      title: "Create Directory",
+      description: "Create a directory and any missing parents in a live session. Succeeds without changing the session when the directory already exists.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        path: filePathSchema.describe("Directory path relative to the session root."),
+      },
+      outputSchema: {
+        path: z.string(),
+        created: z.boolean(),
+      },
+      annotations: annotations(false, true, false, true),
+    },
+    async ({ sessionId, path }) => run(async () => ({
+      value: withoutSessionId(await createSessionDirectory({ registry, sessionId, path })),
+      text: `Created directory "${path}" in the Tabula session.`,
+    })),
+  );
+
+  server.registerTool(
+    "tabula_move_file",
+    {
+      title: "Move or Rename",
+      description: "Move or rename one file or directory by changing its path. Read files first and pass expectedRevision when the source is a file; create a missing destination directory before moving into it.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        source: filePathSchema.describe("Current file or directory path relative to the session root."),
+        destination: filePathSchema.describe("New full path relative to the session root."),
+        expectedRevision: requiredRevisionSchema.optional()
+          .describe("Current revision from Read Files; required when source is a file and omitted for a directory."),
+      },
+      outputSchema: {
+        source: z.string(),
+        destination: z.string(),
+        type: z.enum(["file", "folder"]),
+        changed: z.boolean(),
+      },
+      annotations: annotations(false, true, true),
+    },
+    async ({ sessionId, source, destination, expectedRevision }) => run(async () => ({
+      value: withoutSessionId(await moveSessionFile({ registry, sessionId, source, destination, expectedRevision })),
+      text: `Moved or renamed "${source}" to "${destination}" in the Tabula session.`,
+    })),
+  );
+
+  server.registerTool(
+    "tabula_delete_path",
+    {
+      title: "Delete Path",
+      description: "Delete one file or directory. Read a file first and pass its current revision; non-empty directories require recursive true.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        path: filePathSchema.describe("File or directory path relative to the session root."),
+        expectedRevision: requiredRevisionSchema.optional()
+          .describe("Current revision from Read Files; required when path is a file and omitted for a directory."),
+        recursive: z.boolean().default(false)
+          .describe("Delete every descendant when path is a non-empty directory; defaults to false."),
+      },
+      outputSchema: {
+        path: z.string(),
+        type: z.enum(["file", "folder"]),
+        deleted: z.literal(true),
+      },
+      annotations: annotations(false, true, true),
+    },
+    async ({ sessionId, path, expectedRevision, recursive }) => run(async () => ({
+      value: withoutSessionId(await deleteSessionPath({ registry, sessionId, path, expectedRevision, recursive })),
+      text: `Deleted "${path}" from the Tabula session.`,
     })),
   );
 

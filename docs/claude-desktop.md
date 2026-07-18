@@ -33,8 +33,12 @@ https://tabula.md/#room=...
 The expected write flow is:
 
 ```text
-Join Session → List Files → Read Files → Write File / Write Files
+Join Session → List Files → Read Files → Edit File / Write Files
 ```
+
+Claude can also create directories, move or rename files and directories, and
+delete paths. File changes remain revision-guarded, and deleting a non-empty
+directory requires explicit recursive intent.
 
 For a fixed handoff, Claude can call **Import Copy** with a private `#json`
 link. It receives relative Markdown paths and contents for host-native local
