@@ -20,10 +20,11 @@ Include:
 
 ## Security Boundaries
 
-Tabula MCP has two different data paths:
+Tabula MCP has two explicit handoff paths:
 
-- MCP document checkpoints are agent working state and may contain plaintext
-  Markdown.
+- live sessions decrypt Markdown inside the connected MCP process so the agent
+  can collaborate; optional recovery checkpoints leave that process only as
+  encrypted Yjs blobs.
 - `export_copy` exports through Tabula JSON encrypted snapshot links;
   the decryption key stays in the `#json` URL fragment.
 
@@ -33,11 +34,8 @@ boundary; use local stdio or MCPB when room plaintext must stay on the user's
 device.
 
 Production HTTP deployments must use authentication or an explicit public
-unauthenticated policy, Redis/Upstash-backed checkpoints, and an explicit
-browser Origin allowlist. Production memory
-checkpoints are available only through the explicit unsafe
-`TABULA_MCP_DOCUMENT_STORE_DRIVER=memory` plus `TABULA_MCP_ALLOW_MEMORY_STORE=1`
-override for self-hosting and tests. Do not use that override for the official
-hosted `mcp.tabula.md` service. Do not deploy public remote MCP endpoints with
+unauthenticated policy and an explicit browser Origin allowlist. They must also
+provide stateful session affinity: the official Cloudflare deployment uses one
+Durable Object per MCP session. Do not deploy public remote MCP endpoints with
 wildcard browser origins unless the endpoint is intentionally unauthenticated
 test infrastructure.

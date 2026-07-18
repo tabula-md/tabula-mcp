@@ -10,9 +10,7 @@ export default defineConfig({
       main: "./dist/worker-test-bundle/tabula-mcp-worker.js",
       miniflare: {
         bindings: {
-          TABULA_MCP_ALLOW_MEMORY_STORE: "1",
           TABULA_MCP_DEPLOYMENT_MODE: "remote",
-          TABULA_MCP_DOCUMENT_STORE_DRIVER: "memory",
           TABULA_MCP_LOG_LEVEL: "silent",
           TABULA_MCP_MAX_SESSIONS_PER_CLIENT: "2",
           TABULA_MCP_PRODUCTION: "0",

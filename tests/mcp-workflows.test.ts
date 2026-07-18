@@ -172,7 +172,6 @@ const roomMock = vi.hoisted(() => {
 
 vi.mock("../src/room-client.js", () => ({ TabulaRoomClient: roomMock.MockRoomClient }));
 
-import { MemoryDocumentStore } from "../src/documents/store.js";
 import type { RuntimeEnvironment } from "../src/env.js";
 import { createTabulaMcpServer } from "../src/index.js";
 
@@ -184,7 +183,7 @@ const withClient = async (
   callback: (client: Client) => Promise<void>,
   env: RuntimeEnvironment = {},
 ) => {
-  const instance = createTabulaMcpServer({ documentStore: new MemoryDocumentStore(), env, writeEnabled: true });
+  const instance = createTabulaMcpServer({ env, writeEnabled: true });
   const client = new Client({ name: "workflow-test", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   try {
@@ -193,7 +192,6 @@ const withClient = async (
   } finally {
     await Promise.allSettled([client.close(), instance.server.close()]);
     await instance.registry.clear();
-    await instance.documents.clear();
   }
 };
 

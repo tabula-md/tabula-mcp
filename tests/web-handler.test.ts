@@ -1,7 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it } from "vitest";
-import { MemoryDocumentStore } from "../src/documents/store.js";
 import { createTabulaMcpWebHandler } from "../src/server/web.js";
 
 const uiCapabilities = {
@@ -16,7 +15,6 @@ describe("Tabula MCP Web handler", () => {
   it("describes the hosted product at the service root", async () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
     });
     const response = await handler.fetch(new Request("https://mcp.example.com/"));
 
@@ -28,7 +26,6 @@ describe("Tabula MCP Web handler", () => {
   it("serves health metadata for serverless deployment targets", async () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       writeEnabled: true,
     });
     const response = await handler.fetch(new Request("https://mcp.example.com/health"));
@@ -40,62 +37,30 @@ describe("Tabula MCP Web handler", () => {
       version: "0.5.0",
       writeAccess: "enabled",
       deploymentMode: "remote",
-      documentStore: "memory",
     });
     expect(handler.version).toBe("0.5.0");
     expect(handler.writeAccess).toBe("enabled");
   });
 
-  it("serves readiness metadata after checking the checkpoint store", async () => {
-    let checked = false;
-    const documentStore = new MemoryDocumentStore();
-    documentStore.checkReady = () => {
-      checked = true;
-    };
+  it("serves readiness metadata without claiming a plaintext checkpoint store", async () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
-      documentStore,
     });
     const response = await handler.fetch(new Request("https://mcp.example.com/ready"));
 
     expect(response.status).toBe(200);
-    expect(checked).toBe(true);
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       service: "tabula-mcp",
       version: "0.5.0",
       writeAccess: "enabled",
       deploymentMode: "remote",
-      documentStore: "memory",
-    });
-  });
-
-  it("returns unavailable readiness when the checkpoint store cannot be reached", async () => {
-    const documentStore = new MemoryDocumentStore();
-    documentStore.checkReady = () => {
-      throw new Error("store down");
-    };
-    const handler = createTabulaMcpWebHandler({
-      deploymentMode: "remote",
-      documentStore,
-    });
-    const response = await handler.fetch(new Request("https://mcp.example.com/ready"));
-
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: false,
-      service: "tabula-mcp",
-      version: "0.5.0",
-      writeAccess: "enabled",
-      deploymentMode: "remote",
-      documentStore: "memory",
     });
   });
 
   it("accepts Streamable HTTP MCP clients without a Node HTTP server", async () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       documentAppHtml: "<!doctype html><title>Tabula Document</title>",
     });
     const client = new Client({ name: "tabula-web-handler-test", version: "0.0.0" });
@@ -143,7 +108,6 @@ describe("Tabula MCP Web handler", () => {
     expect(() =>
       createTabulaMcpWebHandler({
         deploymentMode: "remote",
-        documentStore: new MemoryDocumentStore(),
         production: true,
       }),
     ).toThrow(/TABULA_MCP_AUTH_TOKEN/);
@@ -152,7 +116,6 @@ describe("Tabula MCP Web handler", () => {
   it("allows explicit public unauthenticated hosted production without bearer headers", async () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       documentAppHtml: "<!doctype html><title>Tabula Document</title>",
       env: {
         TABULA_MCP_AUTH_TOKEN: "stale-secret",
@@ -213,7 +176,6 @@ describe("Tabula MCP Web handler", () => {
     expect(() =>
       createTabulaMcpWebHandler({
         deploymentMode: "remote",
-        documentStore: new MemoryDocumentStore(),
         env: {
           TABULA_MCP_STATELESS_HTTP: "1",
         },
@@ -227,7 +189,6 @@ describe("Tabula MCP Web handler", () => {
       createTabulaMcpWebHandler({
         authToken: "secret",
         deploymentMode: "remote",
-        documentStore: new MemoryDocumentStore(),
         env: {
           TABULA_MCP_ALLOWED_ORIGINS: "*",
         },
@@ -240,7 +201,6 @@ describe("Tabula MCP Web handler", () => {
     const handler = createTabulaMcpWebHandler({
       authToken: "secret",
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       env: {
         TABULA_MCP_ALLOWED_ORIGINS: "https://tabula.md",
       },
@@ -273,7 +233,6 @@ describe("Tabula MCP Web handler", () => {
     const handler = createTabulaMcpWebHandler({
       authToken: "secret",
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
     });
 
     const unauthorized = await handler.fetch(new Request("https://mcp.example.com/mcp"));
@@ -292,7 +251,6 @@ describe("Tabula MCP Web handler", () => {
   it("returns 404 for unknown stateful session ids", async () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
     });
     const response = await handler.fetch(
       new Request("https://mcp.example.com/mcp", {
@@ -314,7 +272,6 @@ describe("Tabula MCP Web handler", () => {
   it("rate limits MCP requests per client identity", async () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       rateLimitMax: 1,
       rateLimitWindowMs: 60_000,
     });
@@ -329,7 +286,6 @@ describe("Tabula MCP Web handler", () => {
   it("rejects oversized MCP request bodies before transport handling", async () => {
     const handler = createTabulaMcpWebHandler({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       maxRequestBytes: 8,
     });
     const response = await handler.fetch(
@@ -349,7 +305,6 @@ describe("Tabula MCP Web handler", () => {
     const handler = createTabulaMcpWebHandler({
       authToken: "secret",
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       documentAppHtml: "<!doctype html><title>Tabula Document</title>",
       production: true,
     });

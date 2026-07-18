@@ -43,10 +43,6 @@
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "default": "./dist/protocol.js"
-    },
-    "./documents": {
-      "types": "./dist/documents/index.d.ts",
-      "default": "./dist/documents/index.js"
     }
   },
   "files": [

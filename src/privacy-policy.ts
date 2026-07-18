@@ -17,25 +17,22 @@ export const tabulaMcpPrivacyPolicyHtml = `<!doctype html>
   <body>
     <main>
       <h1>Tabula MCP Privacy Policy</h1>
-      <p class="effective">Effective date: July 16, 2026</p>
-      <p>Tabula MCP is an open-source MCP server and MCP App for Markdown documents and encrypted Tabula collaboration rooms. This policy explains what the software stores and where it goes in local and hosted modes.</p>
+      <p class="effective">Effective date: July 19, 2026</p>
+      <p>Tabula MCP hands Markdown files to encrypted Tabula collaboration sessions and fixed encrypted copies. It processes only the files, workspace structure, comments, room state, and URLs that you explicitly give it.</p>
 
-      <h2>Data collection, use, and storage</h2>
-      <p>Tabula MCP processes the Markdown, document titles, workspace structure, room connection state, and URLs you provide. In local npm, Claude Code, and Claude Desktop MCPB modes, saved document checkpoints are plaintext files on your device. The MCP App may also keep an unsaved plaintext draft in its local browser or desktop-app storage for recovery. Tabula does not receive that local working state.</p>
-      <p>You can disable saved local checkpoints with <code>TABULA_MCP_DISABLE_DOCUMENT_CHECKPOINTS=1</code>, choose a different local directory with <code>TABULA_MCP_DOCUMENT_STORE_DIR</code>, or remove the local data yourself.</p>
+      <h2>Host-native Markdown and local MCP</h2>
+      <p>Drafts created in Claude, Codex, ChatGPT, or a local filesystem are not copied into a Tabula private-document database. Markdown reaches Tabula MCP only when an agent starts or joins a live session, or exports or imports an encrypted copy.</p>
+      <p>The local npm, Claude Code, Codex, and Claude Desktop MCPB modes hold room keys and decrypted live-session state in the local MCP process memory. Leaving or closing a session clears that process state.</p>
 
       <h2>Hosted MCP endpoint</h2>
-      <p>When you use <code>https://mcp.tabula.md/mcp</code> or another remote deployment, that MCP service is a trusted processor for the Markdown and room content supplied to it. Hosted document checkpoints are plaintext working state and can be stored in the configured Redis or KV-compatible checkpoint store. The official deployment sets a maximum 30-day checkpoint lifetime; self-hosted operators can choose a different retention period.</p>
+      <p>When you use <code>https://mcp.tabula.md/mcp</code> or another remote deployment, that service is a trusted plaintext processor for the Markdown, comments, room keys, and room state supplied while the MCP session is active. The official endpoint does not maintain a separate plaintext private-draft or document-checkpoint database. Use local MCP when plaintext must remain on your device.</p>
 
-      <h2>Encrypted rooms and snapshot links</h2>
-      <p>A Tabula room or snapshot URL contains its decryption key in the URL fragment. Treat the complete URL as a bearer secret. Tabula MCP uses the room key locally. The Tabula Room relay receives encrypted collaboration envelopes, not room keys, plaintext Markdown, or decrypted presence data. The Tabula JSON service receives encrypted snapshot bytes and an identifier; the snapshot key remains in the URL fragment. Optional Firebase room recovery receives encrypted Yjs checkpoint blobs and opaque generation metadata.</p>
+      <h2>Encrypted rooms and copies</h2>
+      <p>A complete Tabula Room or Copy URL contains its decryption key in the URL fragment and must be treated as a bearer secret. Room relays receive encrypted collaboration envelopes. Optional Firebase recovery receives encrypted Yjs checkpoint blobs and opaque generation metadata. The Tabula JSON service receives encrypted Copy bytes and an identifier. These services do not receive the decryption key from the MCP server as part of the upload path.</p>
 
-      <h2>Third-party processing and retention</h2>
-      <p>Depending on the workflow, data can be processed by your MCP client and device; the hosted MCP provider and its checkpoint store; the Tabula Room relay; the Tabula JSON snapshot service; and Firebase Storage and Firestore when encrypted room recovery is enabled. Tabula does not sell document content or use it for advertising. Local checkpoints remain until removed. Hosted working checkpoints use the deployment retention setting. Encrypted room and snapshot services follow their configured retention policies.</p>
-
-      <h2>Logging, support, and contact</h2>
-      <p>The official hosted endpoint emits operational logs for reliability and abuse prevention and is configured not to intentionally log plaintext Markdown or URL fragments. Network providers can process ordinary service metadata under their own policies. Do not include room links, snapshot links, document content, or other secrets in public support channels. For privacy questions or deletion requests relating to the official hosted service, use <a href="https://github.com/tabula-md/tabula-mcp/issues">the Tabula MCP issue tracker</a>.</p>
-
+      <h2>Providers, logging, and contact</h2>
+      <p>Depending on the workflow, data can be processed by your MCP client and device; the hosted MCP provider during an active session; the encrypted Room relay; the encrypted Copy service; and Firebase when encrypted room recovery is enabled. Tabula does not sell document content or use it for advertising.</p>
+      <p>The official hosted endpoint emits operational logs and is configured not to intentionally log plaintext Markdown, URL fragments, room keys, or complete Room/Copy URLs. Do not include these secrets in public support channels. For non-sensitive privacy questions, use <a href="https://github.com/tabula-md/tabula-mcp/issues">the Tabula MCP issue tracker</a>.</p>
     </main>
   </body>
 </html>`;

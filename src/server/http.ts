@@ -3,14 +3,7 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { positiveIntegerFromEnv } from "../env.js";
-import {
-  checkDocumentStoreReadiness,
-  createDefaultDocumentStore,
-  resolveDocumentStoreDeploymentMode,
-  type DocumentStore,
-  type DocumentStoreDeploymentMode,
-  type DocumentStoreKind,
-} from "../documents/store.js";
+import { resolveDeploymentMode, type DeploymentMode } from "../deployment.js";
 import { createTabulaMcpServer, type TabulaMcpServerInstance } from "./create-server.js";
 import { TABULA_MCP_VERSION } from "../version.js";
 import {
@@ -41,8 +34,7 @@ import { runWithOperationSignal } from "./operation-context.js";
 export type TabulaMcpHttpServerOptions = {
   allowedOrigins?: string[] | null;
   authToken?: string | null;
-  deploymentMode?: DocumentStoreDeploymentMode;
-  documentStore?: DocumentStore;
+  deploymentMode?: DeploymentMode;
   host?: string;
   maxActiveSessions?: number;
   maxRequestBytes?: number;
@@ -58,8 +50,7 @@ export type TabulaMcpHttpServerOptions = {
 
 export type TabulaMcpHttpServer = {
   close(): Promise<void>;
-  deploymentMode: DocumentStoreDeploymentMode;
-  documentStoreKind: DocumentStoreKind;
+  deploymentMode: DeploymentMode;
   host: string;
   listen(): Promise<void>;
   port: number;
@@ -204,7 +195,7 @@ export const resolveHttpServerOptions = (
   options: TabulaMcpHttpServerOptions = {},
   env: NodeJS.ProcessEnv = process.env,
 ) => {
-  const deploymentMode = resolveDocumentStoreDeploymentMode({
+  const deploymentMode = resolveDeploymentMode({
     deploymentMode: options.deploymentMode,
     env,
     defaultDeploymentMode: "remote",
@@ -228,13 +219,6 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
     env: process.env,
     production: policy.production,
   });
-  const sharedDocumentStore =
-    options.documentStore ??
-    createDefaultDocumentStore({
-      deploymentMode: resolved.deploymentMode,
-      defaultDeploymentMode: "remote",
-      production: policy.production,
-    });
   const writeEnabled = options.writeEnabled ?? resolveWriteEnabled({ env: process.env });
   const writeAccess = writeEnabled ? "enabled" : "read-only";
   const sessions = new Map<string, ActiveSession>();
@@ -251,7 +235,6 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
   const createServerInstance = () =>
     createTabulaMcpServer({
       deploymentMode: resolved.deploymentMode,
-      documentStore: sharedDocumentStore,
       allowRoomTools: policy.allowRemoteRoomConnections,
       forceDocumentAppTools: policy.statelessHttp,
       writeEnabled,
@@ -475,7 +458,6 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
         version: TABULA_MCP_VERSION,
         writeAccess,
         deploymentMode: resolved.deploymentMode,
-        documentStore: sharedDocumentStore.kind,
         publicUnauthenticated: policy.publicUnauthenticated,
         statelessHttp: policy.statelessHttp,
       });
@@ -483,36 +465,15 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
     }
 
     if (pathname === "/ready") {
-      void (async () => {
-        try {
-          await checkDocumentStoreReadiness(sharedDocumentStore);
-          httpJson(response, 200, {
-            ok: true,
-            service: "tabula-mcp",
-            version: TABULA_MCP_VERSION,
-            writeAccess,
-            deploymentMode: resolved.deploymentMode,
-            documentStore: sharedDocumentStore.kind,
-            publicUnauthenticated: policy.publicUnauthenticated,
-            statelessHttp: policy.statelessHttp,
-          });
-        } catch (error) {
-          logOperationalError(policy, "tabula_mcp_readiness_failed", {
-            deploymentMode: resolved.deploymentMode,
-            documentStore: sharedDocumentStore.kind,
-            error: errorMessageForLog(error),
-            errorName: error instanceof Error ? error.name : typeof error,
-          });
-          httpJson(response, 503, {
-            ok: false,
-            service: "tabula-mcp",
-            version: TABULA_MCP_VERSION,
-            writeAccess,
-            deploymentMode: resolved.deploymentMode,
-            documentStore: sharedDocumentStore.kind,
-          });
-        }
-      })();
+      httpJson(response, 200, {
+        ok: true,
+        service: "tabula-mcp",
+        version: TABULA_MCP_VERSION,
+        writeAccess,
+        deploymentMode: resolved.deploymentMode,
+        publicUnauthenticated: policy.publicUnauthenticated,
+        statelessHttp: policy.statelessHttp,
+      });
       return;
     }
 
@@ -527,7 +488,6 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
         health: "/health",
         ready: "/ready",
         deploymentMode: resolved.deploymentMode,
-        documentStore: sharedDocumentStore.kind,
         publicUnauthenticated: policy.publicUnauthenticated,
         statelessHttp: policy.statelessHttp,
       });
@@ -542,7 +502,6 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
     port: resolved.port,
     host: resolved.host,
     deploymentMode: resolved.deploymentMode,
-    documentStoreKind: sharedDocumentStore.kind,
     version: TABULA_MCP_VERSION,
     writeAccess,
     listen: () =>

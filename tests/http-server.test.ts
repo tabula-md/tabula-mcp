@@ -2,7 +2,6 @@ import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it } from "vitest";
-import { MemoryDocumentStore } from "../src/documents/store.js";
 import { createTabulaMcpHttpServer, resolveHttpServerOptions } from "../src/server/http.js";
 
 const serverUrl = (address: string, port: number, path = "") => `http://${address}:${port}${path}`;
@@ -12,10 +11,9 @@ describe("Tabula MCP HTTP server", () => {
     expect(resolveHttpServerOptions({}, {} as NodeJS.ProcessEnv).host).toBe("127.0.0.1");
   });
 
-  it("serves health metadata with remote checkpoint store details", async () => {
+  it("serves health metadata without claiming a plaintext checkpoint store", async () => {
     const httpServer = createTabulaMcpHttpServer({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       host: "127.0.0.1",
       port: 0,
       writeEnabled: true,
@@ -33,7 +31,6 @@ describe("Tabula MCP HTTP server", () => {
         version: "0.5.0",
         writeAccess: "enabled",
         deploymentMode: "remote",
-        documentStore: "memory",
       });
       expect(httpServer.version).toBe("0.5.0");
       expect(httpServer.writeAccess).toBe("enabled");
@@ -45,7 +42,6 @@ describe("Tabula MCP HTTP server", () => {
   it("describes the hosted product at the service root", async () => {
     const httpServer = createTabulaMcpHttpServer({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       host: "127.0.0.1",
       port: 0,
     });
@@ -63,15 +59,9 @@ describe("Tabula MCP HTTP server", () => {
     }
   });
 
-  it("serves readiness metadata after checking the checkpoint store", async () => {
-    let checked = false;
-    const documentStore = new MemoryDocumentStore();
-    documentStore.checkReady = () => {
-      checked = true;
-    };
+  it("serves readiness metadata for the HTTP process", async () => {
     const httpServer = createTabulaMcpHttpServer({
       deploymentMode: "remote",
-      documentStore,
       host: "127.0.0.1",
       port: 0,
     });
@@ -82,14 +72,12 @@ describe("Tabula MCP HTTP server", () => {
       const response = await fetch(serverUrl(address.address, address.port, "/ready"));
 
       expect(response.status).toBe(200);
-      expect(checked).toBe(true);
       await expect(response.json()).resolves.toMatchObject({
         ok: true,
         service: "tabula-mcp",
         version: "0.5.0",
         writeAccess: "enabled",
         deploymentMode: "remote",
-        documentStore: "memory",
       });
     } finally {
       await httpServer.close();
@@ -99,7 +87,6 @@ describe("Tabula MCP HTTP server", () => {
   it("accepts Streamable HTTP MCP clients on /mcp", async () => {
     const httpServer = createTabulaMcpHttpServer({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       host: "127.0.0.1",
       port: 0,
     });
@@ -142,7 +129,6 @@ describe("Tabula MCP HTTP server", () => {
     const httpServer = createTabulaMcpHttpServer({
       authToken: "secret",
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       host: "127.0.0.1",
       port: 0,
     });
@@ -167,7 +153,6 @@ describe("Tabula MCP HTTP server", () => {
   it("returns 404 for unknown stateful session ids", async () => {
     const httpServer = createTabulaMcpHttpServer({
       deploymentMode: "remote",
-      documentStore: new MemoryDocumentStore(),
       host: "127.0.0.1",
       port: 0,
     });

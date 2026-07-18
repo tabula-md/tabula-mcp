@@ -1,4 +1,4 @@
-import { assertMarkdownSize } from "./documents/snapshot.js";
+import { assertMarkdownSize } from "./markdown-limits.js";
 import { TabulaCoreError } from "./core-errors.js";
 import type { RuntimeEnvironment } from "./env.js";
 import type { SessionRegistry } from "./registry.js";

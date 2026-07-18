@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { TabulaMcpError } from "../protocol.js";
 import { isTruthyEnvValue, positiveIntegerFromEnv, resolveProductionMode, type RuntimeEnvironment } from "../env.js";
-import type { DocumentStoreDeploymentMode } from "../documents/store.js";
+import type { DeploymentMode } from "../deployment.js";
 import { operationCommitForSignal } from "./operation-context.js";
 
 export type LogLevel = "silent" | "error" | "warn" | "info" | "debug";
@@ -136,7 +136,7 @@ export const resolveOperationalPolicy = ({
   env,
   options = {},
 }: {
-  deploymentMode: DocumentStoreDeploymentMode;
+  deploymentMode: DeploymentMode;
   env: RuntimeEnvironment;
   options?: OperationalPolicyOptions;
 }): OperationalPolicy => {

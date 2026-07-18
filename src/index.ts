@@ -15,34 +15,8 @@ export {
   resolveWriteEnabled,
   type WriteAccessConfig,
 } from "./server/index.js";
-export {
-  FileDocumentStore,
-  MemoryDocumentStore,
-  UpstashRedisDocumentStore,
-  createDefaultDocumentStore,
-  defaultRemoteDocumentTtlSeconds,
-  defaultMaxStoredDocuments,
-  normalizeStoredDocument,
-  resolveDefaultDocumentStoreDirectory,
-  resolveDocumentStoreDeploymentMode,
-  DocumentRegistry,
-  assertMarkdownSize,
-  createDocumentSnapshot,
-  inferDocumentTitle,
-  summarizeDocument,
-} from "./documents/index.js";
-export type {
-  DefaultDocumentStoreConfig,
-  DocumentStore,
-  DocumentStoreDeploymentMode,
-  DocumentStoreKind,
-  FileDocumentStoreOptions,
-  MemoryDocumentStoreOptions,
-  StoredDocument,
-  TabulaDocumentSnapshot,
-  TabulaDocumentSummary,
-  UpstashRedisDocumentStoreOptions,
-} from "./documents/index.js";
+export { resolveDeploymentMode, type DeploymentMode } from "./deployment.js";
+export { assertMarkdownSize, maxMarkdownFileBytes } from "./markdown-limits.js";
 
 import { isDirectRun, runCli } from "./cli.js";
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { TabulaMcpServerInstance } from "./server/create-server.js";
@@ -120,17 +120,11 @@ export const collectDoctorChecks = (): DoctorCheck[] => {
     },
   ];
 
-  const configuredStore = process.env.TABULA_MCP_DOCUMENT_STORE_DIR?.trim();
-  if (configuredStore) {
-    try {
-      accessSync(configuredStore, constants.R_OK | constants.W_OK);
-      checks.push({ label: "Document store", status: "pass", detail: "configured directory is readable and writable" });
-    } catch {
-      checks.push({ label: "Document store", status: "warn", detail: "configured directory is not readable and writable" });
-    }
-  } else {
-    checks.push({ label: "Document store", status: "pass", detail: "using the platform-local default" });
-  }
+  checks.push({
+    label: "Private drafts",
+    status: "pass",
+    detail: "host-native until explicitly exported or started as a live session",
+  });
 
   checks.push({
     label: "Room writes",
@@ -157,7 +151,6 @@ export const runStdioServer = async () => {
   const transport = new StdioServerTransport();
   transport.onclose = () => {
     void instance.registry.clear();
-    void instance.documents.clear();
   };
   await instance.server.connect(transport);
   return instance;
@@ -168,7 +161,7 @@ export const runHttpServer = async ({ host, port }: Pick<CliOptions, "host" | "p
   const httpServer = createTabulaMcpHttpServer({ host, port });
   await httpServer.listen();
   console.error(
-    `Tabula MCP HTTP server listening on http://${httpServer.host}:${httpServer.port}/mcp (${httpServer.deploymentMode}, ${httpServer.documentStoreKind})`,
+    `Tabula MCP HTTP server listening on http://${httpServer.host}:${httpServer.port}/mcp (${httpServer.deploymentMode})`,
   );
   return httpServer;
 };
@@ -220,7 +213,6 @@ export const runCli = (
     .catch((error) => {
       console.error(redactOperationalText(error instanceof Error ? error.message : "Fatal Tabula MCP error."));
       void instance?.registry.clear();
-      void instance?.documents.clear();
       void httpServer?.close();
       process.exit(1);
     });

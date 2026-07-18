@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryDocumentStore, type DocumentStoreDeploymentMode } from "../src/documents/store.js";
+import type { DeploymentMode } from "../src/deployment.js";
 import type { RuntimeEnvironment } from "../src/env.js";
 import { createTabulaMcpServer, resolveWriteEnabled } from "../src/index.js";
 import { createEncryptedJsonShareWorkspaceSnapshot, generateJsonShareKey } from "../src/share.js";
@@ -43,13 +43,12 @@ const withClient = async <T>(
   options: {
     mcpApps?: boolean;
     writeEnabled?: boolean;
-    deploymentMode?: DocumentStoreDeploymentMode;
+    deploymentMode?: DeploymentMode;
     env?: RuntimeEnvironment;
   } = {},
 ) => {
   const instance = createTabulaMcpServer({
     writeEnabled: options.writeEnabled ?? true,
-    documentStore: new MemoryDocumentStore(),
     deploymentMode: options.deploymentMode,
     env: options.env ?? {},
   });
@@ -64,8 +63,6 @@ const withClient = async <T>(
   } finally {
     await Promise.allSettled([client.close(), instance.server.close()]);
     await instance.registry.clear();
-    instance.workspaces.clear();
-    await instance.documents.clear();
   }
 };
 

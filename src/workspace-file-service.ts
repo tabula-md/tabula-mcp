@@ -3,7 +3,7 @@ import path from "node:path";
 import { getTextPatchesForChange } from "@tabula-md/tabula/text-patches";
 import { TabulaCoreError } from "./core-errors.js";
 import { sha256Text } from "./crypto.js";
-import { assertMarkdownSize } from "./documents/snapshot.js";
+import { assertMarkdownSize } from "./markdown-limits.js";
 import type { SessionRegistry } from "./registry.js";
 import { WorkspaceConflictError } from "./protocol.js";
 import { renderExactTextDiff, type ExactTextChange } from "./text-diff.js";
