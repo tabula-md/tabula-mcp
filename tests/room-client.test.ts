@@ -6,7 +6,9 @@ import {
   type EncryptedEnvelope,
   type WorkspaceRoomSyncAdapters,
   type WorkspaceRoomCheckpointStore,
+  type WorkspaceRoomCrdt,
 } from "@tabula-md/tabula/collaboration";
+import * as Y from "yjs";
 import { describe, expect, it } from "vitest";
 import { importRoomKey, sha256Text } from "../src/crypto.js";
 import { parseRoomShareUrl } from "../src/protocol.js";
@@ -212,6 +214,43 @@ describe("TabulaRoomClient protocol v2", () => {
     }
   });
 
+  it("applies text patches incrementally so unaffected collaborative positions survive", async () => {
+    const relay = createMemoryRelay();
+    const client = createClient({ relay });
+    const markdown = "prefix TARGET suffix";
+    try {
+      await client.publishWorkspaceSnapshot({
+        workspace: await createWorkspaceState(markdown),
+        documents: [{ documentId: "doc_1", title: "Draft.md", markdown }],
+      });
+      const room = (client as unknown as { room: WorkspaceRoomCrdt }).room;
+      const text = room.documents.get("doc_1")!;
+      const suffixOffset = markdown.indexOf("suffix");
+      const relative = Y.createRelativePositionFromTypeIndex(text, suffixOffset);
+      const before = await client.readWorkspaceDocument({ documentId: "doc_1" });
+
+      await client.applyWorkspaceChanges({
+        changes: [{
+          type: "document.patch",
+          documentId: "doc_1",
+          baseSha256: before.sha256,
+          patches: [{
+            from: markdown.indexOf("TARGET"),
+            to: markdown.indexOf("TARGET") + "TARGET".length,
+            insert: "UPDATED CONTENT",
+          }],
+        }],
+      });
+
+      const absolute = Y.createAbsolutePositionFromRelativePosition(relative, room.doc);
+      expect(absolute?.index).toBe("prefix UPDATED CONTENT ".length);
+      await expect(client.readWorkspaceDocument({ documentId: "doc_1" }))
+        .resolves.toMatchObject({ markdown: "prefix UPDATED CONTENT suffix" });
+    } finally {
+      client.disconnect();
+    }
+  });
+
   it("restores an app-compatible encrypted Y.Doc checkpoint", async () => {
     const relay = createMemoryRelay();
     const checkpointStore = createMemoryWorkspaceRoomCheckpointStore();
@@ -316,6 +355,50 @@ describe("TabulaRoomClient protocol v2", () => {
       await expect(client.readWorkspaceDocument({ documentId: "doc_1" })).resolves.toMatchObject({
         markdown: "# Temporary room\n",
       });
+    } finally {
+      client.disconnect();
+    }
+  });
+
+  it("moves, renames, and recursively deletes workspace nodes", async () => {
+    const relay = createMemoryRelay();
+    const client = createClient({ relay });
+    try {
+      await client.publishWorkspaceSnapshot({
+        workspace: await createWorkspaceState(),
+        documents: [{ documentId: "doc_1", title: "Draft.md", markdown: "# Draft\n" }],
+      });
+      await client.applyWorkspaceChanges({
+        changes: [{ type: "folder.create", folderId: "archive", parentId: null, title: "archive" }],
+      });
+      const before = await client.readWorkspaceSnapshot();
+      const document = before.workspace.nodes.find((node) => node.id === "doc_1")!;
+      await client.applyWorkspaceChanges({
+        changes: [{
+          type: "node.move",
+          nodeId: document.id,
+          baseParentId: document.parentId,
+          baseTitle: document.title,
+          baseSha256: document.type === "document" ? document.sha256 : undefined,
+          parentId: "archive",
+          title: "Final.md",
+        }],
+      });
+      await expect(client.readWorkspace()).resolves.toMatchObject({
+        documents: [expect.objectContaining({ parentId: "archive", title: "Final.md" })],
+      });
+
+      const moved = await client.readWorkspaceSnapshot();
+      const archive = moved.workspace.nodes.find((node) => node.id === "archive")!;
+      await client.applyWorkspaceChanges({
+        changes: [{
+          type: "node.delete",
+          nodeId: archive.id,
+          baseParentId: archive.parentId,
+          baseTitle: archive.title,
+        }],
+      });
+      await expect(client.readWorkspace()).resolves.toMatchObject({ documents: [] });
     } finally {
       client.disconnect();
     }

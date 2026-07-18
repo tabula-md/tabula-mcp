@@ -4,6 +4,7 @@ import { getTextPatchesForChange } from "@tabula-md/tabula";
 import { TabulaCoreError } from "./core-errors.js";
 import { assertMarkdownSize } from "./documents/snapshot.js";
 import type { SessionRegistry } from "./registry.js";
+import { renderExactTextDiff, type ExactTextChange } from "./text-diff.js";
 import type { WorkspaceChange } from "./workspace-contract.js";
 import { buildWorkspacePathIndex, normalizeWorkspaceFilePath } from "./workspace-paths.js";
 
@@ -54,8 +55,96 @@ export type SessionFileWrite = {
   expectedRevision?: string;
 };
 
+export type SessionTextEdit = {
+  oldText: string;
+  newText: string;
+  replaceAll?: boolean;
+};
+
+type WorkspacePathIndex = ReturnType<typeof buildWorkspacePathIndex>;
+
+const requireWriteAccess = (session: { writeAccess: boolean }) => {
+  if (!session.writeAccess) {
+    throw new TabulaCoreError("write_disabled", "This Tabula MCP connection is read-only.", {
+      retry: "Reconnect using a writable Tabula MCP configuration.",
+    });
+  }
+};
+
+const parentPathOf = (entryPath: string) => {
+  const parentPath = path.posix.dirname(entryPath);
+  return parentPath === "." ? "" : parentPath;
+};
+
+const planFolderPath = ({
+  folderPath,
+  index,
+  changes,
+  plannedFolderIds,
+  blockedFilePaths = new Set<string>(),
+}: {
+  folderPath: string;
+  index: WorkspacePathIndex;
+  changes: WorkspaceChange[];
+  plannedFolderIds: Map<string, string>;
+  blockedFilePaths?: ReadonlySet<string>;
+}): string | null => {
+  if (!folderPath) return null;
+  const existing = index.byPath.get(folderPath);
+  if (existing) {
+    if (existing.node.type !== "folder") {
+      throw new TabulaCoreError("invalid_path", "A Markdown file blocks a requested folder path.", {
+        details: { path: folderPath },
+        retry: "Choose a different folder path or move the blocking file.",
+      });
+    }
+    return existing.node.id;
+  }
+  if (blockedFilePaths.has(folderPath)) {
+    throw new TabulaCoreError("invalid_path", "A requested file also needs to be a parent folder.", {
+      details: { path: folderPath },
+      retry: "Do not create a file at a path that must contain another file.",
+    });
+  }
+  const planned = plannedFolderIds.get(folderPath);
+  if (planned) return planned;
+  const folderId = randomUUID();
+  changes.push({
+    type: "folder.create",
+    folderId,
+    parentId: planFolderPath({
+      folderPath: parentPathOf(folderPath),
+      index,
+      changes,
+      plannedFolderIds,
+      blockedFilePaths,
+    }),
+    title: path.posix.basename(folderPath),
+  });
+  plannedFolderIds.set(folderPath, folderId);
+  return folderId;
+};
+
+const exactMatchOffsets = (content: string, search: string) => {
+  const offsets: number[] = [];
+  let from = 0;
+  while (from <= content.length - search.length) {
+    const offset = content.indexOf(search, from);
+    if (offset < 0) break;
+    offsets.push(offset);
+    from = offset + Math.max(1, search.length);
+  }
+  return offsets;
+};
+
+const lineAtOffset = (content: string, offset: number) =>
+  content.slice(0, offset).split("\n").length;
+
 export const maxSessionReadFiles = 20;
 export const maxSessionReadCharacters = 100_000;
+export const defaultSessionReadLines = 400;
+export const maxSessionReadLines = 2_000;
+export const maxSearchContextLines = 5;
 
 export const listSessionFiles = async ({
   registry,
@@ -172,34 +261,170 @@ export const readSessionFiles = async ({
   };
 };
 
+const lineStartsOf = (content: string) => {
+  const starts = [0];
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === "\n") starts.push(index + 1);
+  }
+  return starts;
+};
+
+export const readSessionFile = async ({
+  registry,
+  sessionId,
+  path: requestedPath,
+  startLine,
+  lineCount,
+  tailLines,
+}: {
+  registry: SessionRegistry;
+  sessionId: string;
+  path: string;
+  startLine?: number;
+  lineCount?: number;
+  tailLines?: number;
+}) => {
+  if (tailLines !== undefined && (startLine !== undefined || lineCount !== undefined)) {
+    throw new TabulaCoreError("invalid_input", "tailLines cannot be combined with startLine or lineCount.", {
+      retry: "Use tailLines by itself, or use startLine with an optional lineCount.",
+    });
+  }
+  const requestedCount = tailLines ?? lineCount ?? defaultSessionReadLines;
+  if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > maxSessionReadLines) {
+    throw new TabulaCoreError("invalid_range", "The requested line count is outside the supported range.", {
+      details: { requestedLines: requestedCount, maxLines: maxSessionReadLines },
+      retry: `Read between 1 and ${maxSessionReadLines} lines at a time.`,
+    });
+  }
+  if (startLine !== undefined && (!Number.isInteger(startLine) || startLine < 1)) {
+    throw new TabulaCoreError("invalid_range", "startLine must be a positive line number.", {
+      retry: "Use a startLine of 1 or greater.",
+    });
+  }
+
+  const filePath = normalizeWorkspaceFilePath(requestedPath);
+  const { snapshot } = await readReadySnapshot(registry, sessionId);
+  const entry = buildWorkspacePathIndex(snapshot.workspace).byPath.get(filePath);
+  if (!entry || entry.node.type !== "document") {
+    throw new TabulaCoreError("file_not_found", "Markdown file was not found in the Tabula session.", {
+      details: { path: filePath },
+      retry: "List files to find the correct path.",
+    });
+  }
+  const fullContent = snapshot.documents[entry.node.id];
+  if (fullContent === undefined) {
+    throw new TabulaCoreError("session_not_ready", "The file content has not arrived yet.", {
+      details: { sessionId, path: filePath },
+      retry: "Wait for session state and retry.",
+    });
+  }
+
+  const lineStarts = lineStartsOf(fullContent);
+  const totalLines = lineStarts.length;
+  const firstLine = tailLines === undefined
+    ? (startLine ?? 1)
+    : Math.max(1, totalLines - requestedCount + 1);
+  if (firstLine > totalLines) {
+    throw new TabulaCoreError("invalid_range", "startLine is beyond the end of the file.", {
+      details: { path: filePath, startLine: firstLine, totalLines },
+      retry: `Use a startLine between 1 and ${totalLines}.`,
+    });
+  }
+  const endLine = Math.min(totalLines, firstLine + requestedCount - 1);
+  const startOffset = lineStarts[firstLine - 1]!;
+  const endOffset = endLine < totalLines ? lineStarts[endLine]! : fullContent.length;
+  const content = fullContent.slice(startOffset, endOffset);
+  if (content.length > maxSessionReadCharacters) {
+    throw new TabulaCoreError("read_too_large", "The selected Markdown lines are too large to return.", {
+      details: { path: filePath, startLine: firstLine, endLine, maxCharacters: maxSessionReadCharacters },
+      retry: "Read a smaller line range.",
+    });
+  }
+
+  return {
+    sessionId,
+    path: filePath,
+    content,
+    revision: entry.node.sha256,
+    textLength: fullContent.length,
+    totalLines,
+    startLine: firstLine,
+    endLine,
+    truncated: firstLine > 1 || endLine < totalLines,
+  };
+};
+
 export const searchSessionFiles = async ({
   registry,
   sessionId,
   query,
   path: requestedPath,
   maxResults = 20,
+  contextLines = 1,
 }: {
   registry: SessionRegistry;
   sessionId: string;
   query: string;
   path?: string;
   maxResults?: number;
+  contextLines?: number;
 }) => {
   const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) {
+    throw new TabulaCoreError("invalid_input", "Search query must not be empty.", {
+      retry: "Provide literal text to find in paths or Markdown content.",
+    });
+  }
+  if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 100) {
+    throw new TabulaCoreError("invalid_range", "Search maxResults is outside the supported range.", {
+      details: { maxResults, maximum: 100 },
+      retry: "Use maxResults between 1 and 100.",
+    });
+  }
+  if (!Number.isInteger(contextLines) || contextLines < 0 || contextLines > maxSearchContextLines) {
+    throw new TabulaCoreError("invalid_range", "Search contextLines is outside the supported range.", {
+      details: { contextLines, maxContextLines: maxSearchContextLines },
+      retry: `Use contextLines between 0 and ${maxSearchContextLines}.`,
+    });
+  }
   const { snapshot } = await readReadySnapshot(registry, sessionId);
   const index = buildWorkspacePathIndex(snapshot.workspace);
   const basePath = requestedPath ? normalizeWorkspaceFilePath(requestedPath) : "";
   const prefix = basePath ? `${basePath}/` : "";
-  const matches: Array<{ path: string; line: number; excerpt: string }> = [];
+  const matches: Array<{
+    path: string;
+    kind: "path" | "content";
+    line: number;
+    match: string;
+    before: string[];
+    after: string[];
+  }> = [];
+  const addMatch = (match: (typeof matches)[number]) => {
+    matches.push(match);
+    return matches.length > maxResults;
+  };
 
   for (const entry of index.entries) {
     if (entry.node.type !== "document" || (basePath && entry.path !== basePath && !entry.path.startsWith(prefix))) continue;
     const content = snapshot.documents[entry.node.id] ?? "";
-    const pathMatches = entry.path.toLocaleLowerCase().includes(normalizedQuery);
-    for (const [lineIndex, line] of content.split(/\r?\n/).entries()) {
-      if (!pathMatches && !line.toLocaleLowerCase().includes(normalizedQuery)) continue;
-      matches.push({ path: entry.path, line: lineIndex + 1, excerpt: line.slice(0, 240) });
-      if (matches.length >= maxResults) return { sessionId, matches, truncated: true };
+    if (entry.path.toLocaleLowerCase().includes(normalizedQuery)) {
+      if (addMatch({ path: entry.path, kind: "path", line: 1, match: entry.path, before: [], after: [] })) {
+        return { sessionId, matches: matches.slice(0, maxResults), truncated: true };
+      }
+    }
+    const lines = content.split(/\r?\n/);
+    for (const [lineIndex, line] of lines.entries()) {
+      if (!line.toLocaleLowerCase().includes(normalizedQuery)) continue;
+      if (addMatch({
+        path: entry.path,
+        kind: "content",
+        line: lineIndex + 1,
+        match: line.slice(0, 240),
+        before: lines.slice(Math.max(0, lineIndex - contextLines), lineIndex).map((value: string) => value.slice(0, 240)),
+        after: lines.slice(lineIndex + 1, lineIndex + contextLines + 1).map((value: string) => value.slice(0, 240)),
+      })) {
+        return { sessionId, matches: matches.slice(0, maxResults), truncated: true };
+      }
     }
   }
   return { sessionId, matches, truncated: false };
@@ -236,47 +461,11 @@ export const writeSessionFiles = async ({
   }
 
   const { session, snapshot } = await readReadySnapshot(registry, sessionId);
-  if (!session.writeAccess) {
-    throw new TabulaCoreError("write_disabled", "This Tabula MCP connection is read-only.", {
-      retry: "Reconnect using a writable Tabula MCP configuration.",
-    });
-  }
+  requireWriteAccess(session);
   const index = buildWorkspacePathIndex(snapshot.workspace);
   const changes: WorkspaceChange[] = [];
   const plannedFolderIds = new Map<string, string>();
   const outcomes = new Map<string, { created: boolean; changed: boolean; textLength: number }>();
-
-  const ensureFolder = (folderPath: string): string | null => {
-    if (!folderPath) return null;
-    const existing = index.byPath.get(folderPath);
-    if (existing) {
-      if (existing.node.type !== "folder") {
-        throw new TabulaCoreError("invalid_path", "A Markdown file blocks a requested folder path.", {
-          details: { path: folderPath },
-          retry: "Choose a different nested path or rename the blocking file.",
-        });
-      }
-      return existing.node.id;
-    }
-    if (requestedPaths.has(folderPath)) {
-      throw new TabulaCoreError("invalid_path", "A requested file also needs to be a parent folder.", {
-        details: { path: folderPath },
-        retry: "Do not create a file at a path that must contain another file.",
-      });
-    }
-    const planned = plannedFolderIds.get(folderPath);
-    if (planned) return planned;
-    const parentPath = path.posix.dirname(folderPath) === "." ? "" : path.posix.dirname(folderPath);
-    const folderId = randomUUID();
-    changes.push({
-      type: "folder.create",
-      folderId,
-      parentId: ensureFolder(parentPath),
-      title: path.posix.basename(folderPath),
-    });
-    plannedFolderIds.set(folderPath, folderId);
-    return folderId;
-  };
 
   for (const file of normalizedFiles) {
     const existing = index.byPath.get(file.path);
@@ -292,7 +481,7 @@ export const writeSessionFiles = async ({
       if (!file.expectedRevision) {
         throw new TabulaCoreError("stale_revision", "An expected revision is required when replacing an existing file.", {
           details: { path: file.path, currentRevision },
-          retry: "Read the file, then pass its revision to Write File or Write Files.",
+          retry: "Read the file, then pass its revision to the write.",
         });
       }
       if (file.expectedRevision !== currentRevision) {
@@ -314,10 +503,16 @@ export const writeSessionFiles = async ({
       continue;
     }
 
-    const parentPath = path.posix.dirname(file.path) === "." ? "" : path.posix.dirname(file.path);
+    const parentPath = parentPathOf(file.path);
     changes.push({
       type: "document.create",
-      parentId: ensureFolder(parentPath),
+      parentId: planFolderPath({
+        folderPath: parentPath,
+        index,
+        changes,
+        plannedFolderIds,
+        blockedFilePaths: requestedPaths,
+      }),
       title: path.posix.basename(file.path),
       markdown: file.content,
     });
@@ -394,6 +589,388 @@ export const writeSessionFile = async ({
   const written = result.files[0];
   if (!written) throw writeFailed(filePath);
   return { sessionId, ...written };
+};
+
+export const editSessionFile = async ({
+  registry,
+  sessionId,
+  path: requestedPath,
+  expectedRevision,
+  edits,
+}: {
+  registry: SessionRegistry;
+  sessionId: string;
+  path: string;
+  expectedRevision: string;
+  edits: readonly SessionTextEdit[];
+}) => {
+  const filePath = normalizeWorkspaceFilePath(requestedPath);
+  if (edits.length === 0) {
+    throw new TabulaCoreError("invalid_input", "At least one exact text edit is required.", {
+      retry: "Retry with one or more oldText and newText pairs.",
+    });
+  }
+  const { session, snapshot } = await readReadySnapshot(registry, sessionId);
+  requireWriteAccess(session);
+  const planEdits = (candidateSnapshot: typeof snapshot, stale: boolean) => {
+    const entry = buildWorkspacePathIndex(candidateSnapshot.workspace).byPath.get(filePath);
+    if (!entry || entry.node.type !== "document") {
+      throw new TabulaCoreError("file_not_found", "Markdown file was not found in the Tabula session.", {
+        details: { path: filePath },
+        retry: "List files to find the correct path.",
+      });
+    }
+    const documentId = entry.node.id;
+    const currentRevision = entry.node.sha256;
+    const currentContent = candidateSnapshot.documents[entry.node.id];
+    if (currentContent === undefined) {
+      throw new TabulaCoreError("session_not_ready", "The file content has not arrived yet.", {
+        details: { sessionId, path: filePath },
+        retry: "Wait for session state and retry.",
+      });
+    }
+    let nextContent = currentContent;
+    let editsApplied = 0;
+    const diffChanges: ExactTextChange[] = [];
+    const staleFailure = (message: string, details: Record<string, unknown>) =>
+      new TabulaCoreError("stale_revision", message, {
+        details: { path: filePath, expectedRevision, currentRevision, ...details },
+        retry: "Read the latest file, update the exact edits, and retry.",
+      });
+
+    for (const [editIndex, edit] of edits.entries()) {
+      if (!edit.oldText) {
+        throw new TabulaCoreError("invalid_input", "oldText must not be empty.", {
+          details: { path: filePath, editIndex },
+          retry: "Use Write File to replace the whole file or provide exact non-empty oldText.",
+        });
+      }
+      const offsets = exactMatchOffsets(nextContent, edit.oldText);
+      if (offsets.length === 0) {
+        if (stale) throw staleFailure("The file changed and oldText no longer matches exactly.", { editIndex });
+        throw new TabulaCoreError("edit_not_found", "The exact oldText was not found in the file.", {
+          details: { path: filePath, editIndex },
+          retry: "Read the latest file and copy the exact text to replace.",
+        });
+      }
+      if (offsets.length > 1 && !edit.replaceAll) {
+        const details = {
+          editIndex,
+          matchCount: offsets.length,
+          matchingLines: offsets.slice(0, 10).map((offset) => lineAtOffset(nextContent, offset)),
+        };
+        if (stale) throw staleFailure("The file changed and oldText is no longer unique.", details);
+        throw new TabulaCoreError("edit_ambiguous", "The exact oldText occurs more than once in the file.", {
+          details: { path: filePath, ...details },
+          retry: "Use a longer unique oldText segment or set replaceAll true.",
+        });
+      }
+      const selectedOffsets = edit.replaceAll ? offsets : offsets.slice(0, 1);
+      for (const offset of [...selectedOffsets].reverse()) {
+        const before = nextContent;
+        nextContent = `${nextContent.slice(0, offset)}${edit.newText}${nextContent.slice(offset + edit.oldText.length)}`;
+        diffChanges.push({ before, after: nextContent, offset, oldText: edit.oldText, newText: edit.newText });
+        editsApplied += 1;
+      }
+    }
+    assertMarkdownSize(nextContent);
+    return { documentId, currentRevision, currentContent, nextContent, editsApplied, diffChanges };
+  };
+
+  const initialEntry = buildWorkspacePathIndex(snapshot.workspace).byPath.get(filePath);
+  if (!initialEntry || initialEntry.node.type !== "document") {
+    throw new TabulaCoreError("file_not_found", "Markdown file was not found in the Tabula session.", {
+      details: { path: filePath },
+      retry: "List files to find the correct path.",
+    });
+  }
+  let rebased = expectedRevision !== initialEntry.node.sha256;
+  let activeSnapshot = snapshot;
+  let plan = planEdits(activeSnapshot, rebased);
+  let changed = plan.nextContent !== plan.currentContent;
+  if (changed) {
+    try {
+      await session.applyWorkspaceChanges({ changes: [{
+        type: "document.patch",
+        documentId: plan.documentId,
+        baseSha256: plan.currentRevision,
+        patches: getTextPatchesForChange(plan.currentContent, plan.nextContent),
+      }] });
+    } catch (error) {
+      if (!(error instanceof Error) || !/changed before/i.test(error.message)) {
+        if (error instanceof TabulaCoreError) throw error;
+        throw writeFailed(filePath);
+      }
+      activeSnapshot = await session.readWorkspaceSnapshot();
+      plan = planEdits(activeSnapshot, true);
+      rebased = true;
+      changed = plan.nextContent !== plan.currentContent;
+      if (changed) {
+        try {
+          await session.applyWorkspaceChanges({ changes: [{
+            type: "document.patch",
+            documentId: plan.documentId,
+            baseSha256: plan.currentRevision,
+            patches: getTextPatchesForChange(plan.currentContent, plan.nextContent),
+          }] });
+        } catch (retryError) {
+          if (retryError instanceof Error && /changed before/i.test(retryError.message)) {
+            throw new TabulaCoreError("stale_revision", "The file kept changing before the edit could be applied.", {
+              details: { path: filePath },
+              retry: "Read the latest file and retry the edit.",
+            });
+          }
+          if (retryError instanceof TabulaCoreError) throw retryError;
+          throw writeFailed(filePath);
+        }
+      }
+    }
+    try {
+      await session.flushCheckpoint();
+    } catch (error) {
+      if (error instanceof TabulaCoreError) throw error;
+      throw writeFailed(filePath);
+    }
+  }
+  let updated = activeSnapshot;
+  if (changed) {
+    try {
+      updated = await session.readWorkspaceSnapshot();
+    } catch {
+      throw writeFailed(filePath);
+    }
+  }
+  const node = buildWorkspacePathIndex(updated.workspace).byPath.get(filePath)?.node;
+  if (!node || node.type !== "document") throw writeFailed(filePath);
+  const renderedDiff = renderExactTextDiff({ path: filePath, changes: plan.diffChanges });
+  return {
+    sessionId,
+    path: filePath,
+    changed,
+    editsApplied: plan.editsApplied,
+    rebased,
+    revision: node.sha256,
+    textLength: node.textLength,
+    ...renderedDiff,
+  };
+};
+
+export const createSessionDirectory = async ({
+  registry,
+  sessionId,
+  path: requestedPath,
+}: {
+  registry: SessionRegistry;
+  sessionId: string;
+  path: string;
+}) => {
+  const directoryPath = normalizeWorkspaceFilePath(requestedPath);
+  const { session, snapshot } = await readReadySnapshot(registry, sessionId);
+  requireWriteAccess(session);
+  const index = buildWorkspacePathIndex(snapshot.workspace);
+  const existing = index.byPath.get(directoryPath);
+  if (existing) {
+    if (existing.node.type !== "folder") {
+      throw new TabulaCoreError("path_exists", "A Markdown file already exists at the requested directory path.", {
+        details: { path: directoryPath },
+        retry: "Choose another directory path or move the existing file first.",
+      });
+    }
+    return { sessionId, path: directoryPath, created: false };
+  }
+  const changes: WorkspaceChange[] = [];
+  planFolderPath({
+    folderPath: directoryPath,
+    index,
+    changes,
+    plannedFolderIds: new Map(),
+  });
+  try {
+    await session.applyWorkspaceChanges({ changes });
+    await session.flushCheckpoint();
+  } catch (error) {
+    if (error instanceof TabulaCoreError) throw error;
+    throw writeFilesFailed([directoryPath]);
+  }
+  const updated = buildWorkspacePathIndex((await session.readWorkspaceSnapshot()).workspace).byPath.get(directoryPath);
+  if (!updated || updated.node.type !== "folder") throw writeFilesFailed([directoryPath]);
+  return { sessionId, path: directoryPath, created: true };
+};
+
+export const moveSessionFile = async ({
+  registry,
+  sessionId,
+  source: requestedSource,
+  destination: requestedDestination,
+  expectedRevision,
+}: {
+  registry: SessionRegistry;
+  sessionId: string;
+  source: string;
+  destination: string;
+  expectedRevision?: string;
+}) => {
+  const source = normalizeWorkspaceFilePath(requestedSource);
+  const destination = normalizeWorkspaceFilePath(requestedDestination);
+  const { session, snapshot } = await readReadySnapshot(registry, sessionId);
+  requireWriteAccess(session);
+  const index = buildWorkspacePathIndex(snapshot.workspace);
+  const sourceEntry = index.byPath.get(source);
+  if (!sourceEntry) {
+    throw new TabulaCoreError("file_not_found", "The source file or directory was not found.", {
+      details: { path: source },
+      retry: "List files to find the correct source path.",
+    });
+  }
+  if (source === destination) {
+    return { sessionId, source, destination, type: sourceEntry.node.type === "document" ? "file" as const : "folder" as const, changed: false };
+  }
+  const destinationCollision = index.entries.find((entry) =>
+    entry.node.id !== sourceEntry.node.id && entry.path.toLocaleLowerCase() === destination.toLocaleLowerCase()
+  );
+  if (destinationCollision) {
+    throw new TabulaCoreError("path_exists", "Another file or directory already exists at the destination.", {
+      details: { path: destination },
+      retry: "Choose an unused destination path.",
+    });
+  }
+  if (
+    sourceEntry.node.type === "folder" &&
+    destination.toLocaleLowerCase().startsWith(`${source.toLocaleLowerCase()}/`)
+  ) {
+    throw new TabulaCoreError("invalid_path", "A directory cannot be moved inside itself.", {
+      details: { source, destination },
+      retry: "Choose a destination outside the source directory.",
+    });
+  }
+  const parentPath = parentPathOf(destination);
+  const parent = parentPath ? index.byPath.get(parentPath) : undefined;
+  if (parentPath && (!parent || parent.node.type !== "folder")) {
+    throw new TabulaCoreError("parent_folder_not_found", "The destination parent directory does not exist.", {
+      details: { path: parentPath },
+      retry: "Create the destination directory first, then retry Move or Rename.",
+    });
+  }
+  if (sourceEntry.node.type === "document") {
+    if (!expectedRevision) {
+      throw new TabulaCoreError("stale_revision", "An expected revision is required when moving or renaming a file.", {
+        details: { path: source, currentRevision: sourceEntry.node.sha256 },
+        retry: "Read the file, then pass its revision to Move or Rename.",
+      });
+    }
+    if (expectedRevision !== sourceEntry.node.sha256) {
+      throw new TabulaCoreError("stale_revision", "The file changed before it could be moved or renamed.", {
+        details: { path: source, expectedRevision, currentRevision: sourceEntry.node.sha256 },
+        retry: "Read the file again and retry with its current revision.",
+      });
+    }
+  }
+  const parentId = parent?.node.id ?? null;
+  try {
+    await session.applyWorkspaceChanges({ changes: [{
+      type: "node.move",
+      nodeId: sourceEntry.node.id,
+      baseParentId: sourceEntry.node.parentId,
+      baseTitle: sourceEntry.node.title,
+      ...(sourceEntry.node.type === "document" ? { baseSha256: sourceEntry.node.sha256 } : {}),
+      parentId,
+      title: path.posix.basename(destination),
+    }] });
+    await session.flushCheckpoint();
+  } catch (error) {
+    if (error instanceof Error && /changed before|path changed/i.test(error.message)) {
+      throw new TabulaCoreError("stale_revision", "The source changed before it could be moved or renamed.", {
+        details: { path: source },
+        retry: "List files again and retry from the current path.",
+      });
+    }
+    if (error instanceof TabulaCoreError) throw error;
+    throw writeFilesFailed([source, destination]);
+  }
+  const updated = buildWorkspacePathIndex((await session.readWorkspaceSnapshot()).workspace).byPath.get(destination);
+  if (!updated || updated.node.id !== sourceEntry.node.id) throw writeFilesFailed([source, destination]);
+  return {
+    sessionId,
+    source,
+    destination,
+    type: updated.node.type === "document" ? "file" as const : "folder" as const,
+    changed: true,
+  };
+};
+
+export const deleteSessionPath = async ({
+  registry,
+  sessionId,
+  path: requestedPath,
+  expectedRevision,
+  recursive = false,
+}: {
+  registry: SessionRegistry;
+  sessionId: string;
+  path: string;
+  expectedRevision?: string;
+  recursive?: boolean;
+}) => {
+  const targetPath = normalizeWorkspaceFilePath(requestedPath);
+  const { session, snapshot } = await readReadySnapshot(registry, sessionId);
+  requireWriteAccess(session);
+  const index = buildWorkspacePathIndex(snapshot.workspace);
+  const entry = index.byPath.get(targetPath);
+  if (!entry) {
+    throw new TabulaCoreError("file_not_found", "The file or directory to delete was not found.", {
+      details: { path: targetPath },
+      retry: "List files to find the correct path.",
+    });
+  }
+  if (entry.node.type === "folder") {
+    const hasChildren = index.entries.some((candidate) => candidate.path.startsWith(`${targetPath}/`));
+    if (hasChildren && !recursive) {
+      throw new TabulaCoreError("directory_not_empty", "The directory is not empty.", {
+        details: { path: targetPath },
+        retry: "Retry with recursive true only if the user intends to delete every descendant.",
+      });
+    }
+  } else {
+    if (!expectedRevision) {
+      throw new TabulaCoreError("stale_revision", "An expected revision is required when deleting a file.", {
+        details: { path: targetPath, currentRevision: entry.node.sha256 },
+        retry: "Read the file, then pass its revision to Delete Path.",
+      });
+    }
+    if (expectedRevision !== entry.node.sha256) {
+      throw new TabulaCoreError("stale_revision", "The file changed before it could be deleted.", {
+        details: { path: targetPath, expectedRevision, currentRevision: entry.node.sha256 },
+        retry: "Read the file again and retry with its current revision.",
+      });
+    }
+  }
+  try {
+    await session.applyWorkspaceChanges({ changes: [{
+      type: "node.delete",
+      nodeId: entry.node.id,
+      baseParentId: entry.node.parentId,
+      baseTitle: entry.node.title,
+      ...(entry.node.type === "document" ? { baseSha256: entry.node.sha256 } : {}),
+    }] });
+    await session.flushCheckpoint();
+  } catch (error) {
+    if (error instanceof Error && /changed before|path changed/i.test(error.message)) {
+      throw new TabulaCoreError("stale_revision", "The path changed before it could be deleted.", {
+        details: { path: targetPath },
+        retry: "List files again and retry from the current path.",
+      });
+    }
+    if (error instanceof TabulaCoreError) throw error;
+    throw writeFilesFailed([targetPath]);
+  }
+  const updatedIndex = buildWorkspacePathIndex((await session.readWorkspaceSnapshot()).workspace);
+  if (updatedIndex.byPath.has(targetPath)) throw writeFilesFailed([targetPath]);
+  return {
+    sessionId,
+    path: targetPath,
+    type: entry.node.type === "document" ? "file" as const : "folder" as const,
+    deleted: true,
+  };
 };
 
 export const readSessionExportSnapshot = async ({

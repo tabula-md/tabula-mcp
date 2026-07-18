@@ -11,10 +11,15 @@ const coreTools = [
   "tabula_start_session",
   "tabula_join_room",
   "tabula_list_files",
+  "tabula_read_file",
   "tabula_read_files",
   "tabula_search_files",
   "tabula_write_file",
   "tabula_write_files",
+  "tabula_edit_file",
+  "tabula_create_directory",
+  "tabula_move_file",
+  "tabula_delete_path",
   "tabula_import_copy",
   "tabula_export_copy",
 ];
@@ -95,11 +100,11 @@ describe("write access configuration", () => {
 });
 
 describe("core MCP contract", () => {
-  it.each([false, true])("exposes exactly nine high-level tools (MCP Apps=%s)", async (mcpApps) => {
+  it.each([false, true])("exposes exactly fourteen high-level tools (MCP Apps=%s)", async (mcpApps) => {
     await withClient(async (client) => {
       const listed = await client.listTools();
       expect(listed.tools.map((tool) => tool.name)).toEqual(coreTools);
-      expect(Buffer.byteLength(JSON.stringify(listed), "utf8")).toBeLessThan(16_000);
+      expect(Buffer.byteLength(JSON.stringify(listed), "utf8")).toBeLessThan(22_000);
 
       for (const tool of listed.tools) {
         expect(tool.title).toBeTruthy();
@@ -107,7 +112,13 @@ describe("core MCP contract", () => {
         expect(tool.inputSchema).toBeTruthy();
         expect(tool.outputSchema).toBeTruthy();
         expectInputPropertiesDescribed(tool.inputSchema, tool.name);
-        const destructive = tool.name === "tabula_write_file" || tool.name === "tabula_write_files";
+        const destructive = [
+          "tabula_write_files",
+          "tabula_write_file",
+          "tabula_edit_file",
+          "tabula_move_file",
+          "tabula_delete_path",
+        ].includes(tool.name);
         expect(tool.annotations).toMatchObject({
           readOnlyHint: expect.any(Boolean),
           destructiveHint: destructive,
@@ -140,8 +151,10 @@ describe("core MCP contract", () => {
     await withClient(async (client) => {
       const instructions = client.getInstructions() ?? "";
       expect(instructions).toContain("keep the URL private");
-      expect(instructions).toContain("Read existing files with Read Files");
-      expect(instructions).toContain("pass their revisions to Write File or Write Files");
+      expect(instructions).toContain("Use Read File for one file");
+      expect(instructions).toContain("pass their revisions to Write File, Write Files, Edit File, Move or Rename, or Delete Path");
+      expect(instructions).toContain("Use Edit File for small exact replacements");
+      expect(instructions).toContain("Move or Rename accepts files and directories");
       expect(instructions).toContain("Export Copy");
       expect(instructions).toContain("Import Copy");
       expect(instructions).toContain("does not join a live session");
@@ -157,20 +170,30 @@ describe("core MCP contract", () => {
         tabula_start_session: "Start Session",
         tabula_join_room: "Join Session",
         tabula_list_files: "List Files",
+        tabula_read_file: "Read File",
         tabula_read_files: "Read Files",
         tabula_search_files: "Search Files",
         tabula_write_file: "Write File",
         tabula_write_files: "Write Files",
+        tabula_edit_file: "Edit File",
+        tabula_create_directory: "Create Directory",
+        tabula_move_file: "Move or Rename",
+        tabula_delete_path: "Delete Path",
         tabula_import_copy: "Import Copy",
         tabula_export_copy: "Export Copy",
       });
       expect(tools.tabula_start_session?.description).toContain("Markdown files");
       expect(tools.tabula_join_room?.description).toContain("private #room URL");
       expect(tools.tabula_list_files?.description).toContain("target path is unknown");
+      expect(tools.tabula_read_file?.description).toContain("bounded line range");
       expect(tools.tabula_read_files?.description).toContain("revisions");
       expect(tools.tabula_search_files?.description).toContain("line numbers");
-      expect(tools.tabula_write_file?.description).toContain("revision returned by Read Files");
+      expect(tools.tabula_write_file?.description).toContain("one Markdown file");
       expect(tools.tabula_write_files?.description).toContain("Atomically");
+      expect(tools.tabula_edit_file?.description).toContain("oldText still matches safely");
+      expect(tools.tabula_create_directory?.description).toContain("missing parents");
+      expect(tools.tabula_move_file?.description).toContain("Move or rename");
+      expect(tools.tabula_delete_path?.description).toContain("recursive true");
       expect(tools.tabula_import_copy?.description).toContain("does not join a live session");
       expect(tools.tabula_export_copy?.description).toContain("exactly one of files or sessionId");
     });
@@ -183,20 +206,38 @@ describe("core MCP contract", () => {
         const tool = listed.tools.find((candidate) => candidate.name === name);
         expect(tool?._meta?.["ui/resourceUri"]).toMatch(/^ui:\/\/tabula\/document-[a-f0-9]{16}\.html$/);
       }
-      for (const name of ["tabula_join_room", "tabula_list_files", "tabula_read_files", "tabula_search_files", "tabula_write_file", "tabula_write_files", "tabula_import_copy"]) {
+      for (const name of [
+        "tabula_join_room",
+        "tabula_list_files",
+        "tabula_read_file",
+        "tabula_read_files",
+        "tabula_search_files",
+        "tabula_write_file",
+        "tabula_write_files",
+        "tabula_edit_file",
+        "tabula_create_directory",
+        "tabula_move_file",
+        "tabula_delete_path",
+        "tabula_import_copy",
+      ]) {
         const tool = listed.tools.find((candidate) => candidate.name === name);
         expect(tool?._meta?.["ui/resourceUri"]).toBeUndefined();
       }
     }, { mcpApps: true });
   });
 
-  it("reads one or many files through one array-based tool contract", async () => {
+  it("provides focused single-file tools alongside atomic batch tools", async () => {
     await withClient(async (client) => {
       const tools = await client.listTools();
-      const read = tools.tools.find((tool) => tool.name === "tabula_read_files");
-      expect(JSON.stringify(read?.inputSchema)).toContain('"paths"');
-      expect(JSON.stringify(read?.inputSchema)).not.toContain('"path"');
-      expect(tools.tools.map((tool) => tool.name)).not.toContain("tabula_read_file");
+      const read = tools.tools.find((tool) => tool.name === "tabula_read_file");
+      const readMany = tools.tools.find((tool) => tool.name === "tabula_read_files");
+      const write = tools.tools.find((tool) => tool.name === "tabula_write_file");
+      const writeMany = tools.tools.find((tool) => tool.name === "tabula_write_files");
+      expect(JSON.stringify(read?.inputSchema)).toContain('"tailLines"');
+      expect(JSON.stringify(read?.inputSchema)).toContain('"startLine"');
+      expect(JSON.stringify(readMany?.inputSchema)).toContain('"paths"');
+      expect(JSON.stringify(write?.inputSchema)).toContain('"content"');
+      expect(JSON.stringify(writeMany?.inputSchema)).toContain('"files"');
     });
   });
 

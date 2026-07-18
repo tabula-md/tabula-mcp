@@ -9,8 +9,15 @@ import type { SessionRegistry } from "../registry.js";
 import { joinRoomSession, startWorkspaceSession } from "../session-service.js";
 import { createWorkspaceFromFiles } from "../workspaces.js";
 import {
+  createSessionDirectory,
+  deleteSessionPath,
+  editSessionFile,
   listSessionFiles,
+  maxSearchContextLines,
   maxSessionReadFiles,
+  maxSessionReadLines,
+  moveSessionFile,
+  readSessionFile,
   readSessionFiles,
   searchSessionFiles,
   writeSessionFile,
@@ -18,20 +25,22 @@ import {
 } from "../workspace-file-service.js";
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
-const sessionIdSchema = z.string().uuid();
-const sessionIdInputSchema = sessionIdSchema.describe("ID from Start Session or Join Session.");
-const filePathSchema = z.string().min(1).describe("Path from the session root.");
+const sessionIdSchema = z.string().min(1).max(100);
+const sessionIdInputSchema = sessionIdSchema.describe("ID from Start or Join Session.");
+const filePathSchema = z.string().min(1).describe("Session-relative path.");
 const expectedRevisionSchema = sha256Schema.optional()
-  .describe("Revision from Read Files; omit only for a new file.");
+  .describe("Read revision; omit only for a new file.");
+const requiredRevisionSchema = sha256Schema
+  .describe("Revision returned by a Read tool.");
 const markdownFileSchema = z.object({
   path: filePathSchema,
   content: z.string().describe("Complete Markdown content."),
 });
 
-const annotations = (readOnly: boolean, openWorld = false, destructive = false) => ({
+const annotations = (readOnly: boolean, openWorld = false, destructive = false, idempotent = readOnly) => ({
   readOnlyHint: readOnly,
   destructiveHint: destructive,
-  idempotentHint: readOnly,
+  idempotentHint: idempotent,
   openWorldHint: openWorld,
 });
 
@@ -78,12 +87,12 @@ export const registerCoreTools = (
     "tabula_start_session",
     {
       title: "Start Session",
-      description: "Start an encrypted live session from Markdown files and return its private URL. The agent joins as a collaborator.",
+      description: "Start an encrypted live session from Markdown files. Returns its private URL and joins the agent.",
       inputSchema: {
         title: z.string().min(1).max(120).optional()
           .describe("Optional session title."),
         files: z.array(markdownFileSchema).min(1).max(100)
-          .describe("One to 100 Markdown files that initialize the session."),
+          .describe("One to 100 initial Markdown files."),
       },
       outputSchema: {
         sessionId: z.string().uuid(),
@@ -115,10 +124,10 @@ export const registerCoreTools = (
     "tabula_join_room",
     {
       title: "Join Session",
-      description: "Join the live session in a private #room URL. Keep the URL private and continue only when ready is true.",
+      description: "Join a private #room URL. Keep it private and continue only when ready is true.",
       inputSchema: {
         roomUrl: z.string().url()
-          .describe("Complete private Tabula #room URL supplied by the user."),
+          .describe("Private Tabula #room URL from the user."),
       },
       outputSchema: {
         sessionId: z.string().uuid(),
@@ -148,9 +157,9 @@ export const registerCoreTools = (
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: z.string().min(1).optional()
-          .describe("Folder path relative to the session root; omit for the root."),
+          .describe("Folder path; omit for the root."),
         recursive: z.boolean().default(true)
-          .describe("Include descendants; false lists only direct children."),
+          .describe("Include descendants; false lists direct children."),
       },
       outputSchema: {
         files: z.array(z.union([
@@ -168,6 +177,39 @@ export const registerCoreTools = (
   );
 
   server.registerTool(
+    "tabula_read_file",
+    {
+      title: "Read File",
+      description: "Read one Markdown file or bounded line range with its revision.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        path: filePathSchema,
+        startLine: z.number().int().min(1).optional()
+          .describe("First line; default 1. Not with tailLines."),
+        lineCount: z.number().int().min(1).max(maxSessionReadLines).optional()
+          .describe(`Line count; default 400, max ${maxSessionReadLines}. Not with tailLines.`),
+        tailLines: z.number().int().min(1).max(maxSessionReadLines).optional()
+          .describe(`Final line count, max ${maxSessionReadLines}. Use alone.`),
+      },
+      outputSchema: {
+        path: z.string(),
+        content: z.string(),
+        revision: sha256Schema,
+        textLength: z.number().int().nonnegative(),
+        totalLines: z.number().int().positive(),
+        startLine: z.number().int().positive(),
+        endLine: z.number().int().positive(),
+        truncated: z.boolean(),
+      },
+      annotations: annotations(true, true),
+    },
+    async ({ sessionId, path, startLine, lineCount, tailLines }) => run(async () => ({
+      value: withoutSessionId(await readSessionFile({ registry, sessionId, path, startLine, lineCount, tailLines })),
+      text: `Read Markdown from "${path}" in the Tabula session.`,
+    })),
+  );
+
+  server.registerTool(
     "tabula_read_files",
     {
       title: "Read Files",
@@ -175,7 +217,7 @@ export const registerCoreTools = (
       inputSchema: {
         sessionId: sessionIdInputSchema,
         paths: z.array(filePathSchema).min(1).max(maxSessionReadFiles)
-          .describe("One to 20 file paths, returned in the same order."),
+          .describe("One to 20 paths, returned in order."),
       },
       outputSchema: {
         files: z.array(z.object({
@@ -202,20 +244,29 @@ export const registerCoreTools = (
       inputSchema: {
         sessionId: sessionIdInputSchema,
         query: z.string().trim().min(1).max(200)
-          .describe("Literal text to find in file paths or Markdown content."),
+          .describe("Literal text to find in paths or content."),
         path: z.string().min(1).optional()
-          .describe("Folder path that limits the search; omit for all files."),
+          .describe("Folder scope; omit for all files."),
         maxResults: z.number().int().min(1).max(100).default(20)
-          .describe("Maximum matches to return; defaults to 20."),
+          .describe("Maximum matches; default 20."),
+        contextLines: z.number().int().min(0).max(maxSearchContextLines).default(1)
+          .describe(`Context lines before and after; default 1, max ${maxSearchContextLines}.`),
       },
       outputSchema: {
-        matches: z.array(z.object({ path: z.string(), line: z.number().int().positive(), excerpt: z.string() })),
+        matches: z.array(z.object({
+          path: z.string(),
+          kind: z.enum(["path", "content"]),
+          line: z.number().int().positive(),
+          match: z.string(),
+          before: z.array(z.string()),
+          after: z.array(z.string()),
+        })),
         truncated: z.boolean(),
       },
       annotations: annotations(true, true),
     },
-    async ({ sessionId, query, path, maxResults }) => run(async () => ({
-      value: withoutSessionId(await searchSessionFiles({ registry, sessionId, query, path, maxResults })),
+    async ({ sessionId, query, path, maxResults, contextLines }) => run(async () => ({
+      value: withoutSessionId(await searchSessionFiles({ registry, sessionId, query, path, maxResults, contextLines })),
       text: `Searched the Tabula session for "${query}".`,
     })),
   );
@@ -224,11 +275,11 @@ export const registerCoreTools = (
     "tabula_write_file",
     {
       title: "Write File",
-      description: "Create or replace one Markdown file. For an existing file, pass the revision returned by Read Files.",
+      description: "Create or replace one Markdown file. Creates parents; replacement needs its revision.",
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: filePathSchema,
-        content: z.string().describe("Complete Markdown content that should remain after the write."),
+        content: z.string().describe("Complete Markdown content."),
         expectedRevision: expectedRevisionSchema,
       },
       outputSchema: {
@@ -254,7 +305,7 @@ export const registerCoreTools = (
       inputSchema: {
         sessionId: sessionIdInputSchema,
         files: z.array(markdownFileSchema.extend({ expectedRevision: expectedRevisionSchema })).min(1).max(100)
-          .describe("One to 100 complete file writes applied as one transaction."),
+          .describe("One to 100 complete writes in one transaction."),
       },
       outputSchema: {
         files: z.array(z.object({
@@ -272,6 +323,116 @@ export const registerCoreTools = (
     async ({ sessionId, files }) => run(async () => ({
       value: withoutSessionId(await writeSessionFiles({ registry, sessionId, files })),
       text: `Wrote ${files.length} Markdown file${files.length === 1 ? "" : "s"} in the Tabula session.`,
+    })),
+  );
+
+  server.registerTool(
+    "tabula_edit_file",
+    {
+      title: "Edit File",
+      description: "Replace exact text in one file. Read first and pass its revision; a stale edit rebases only when oldText still matches safely.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        path: filePathSchema,
+        expectedRevision: requiredRevisionSchema,
+        edits: z.array(z.object({
+          oldText: z.string().min(1)
+            .describe("Exact text; must be unique unless replaceAll."),
+          newText: z.string()
+            .describe("Replacement; empty removes oldText."),
+          replaceAll: z.boolean().default(false)
+            .describe("Replace every occurrence; default false."),
+        })).min(1).max(100)
+          .describe("One to 100 replacements in order."),
+      },
+      outputSchema: {
+        path: z.string(),
+        changed: z.boolean(),
+        editsApplied: z.number().int().nonnegative(),
+        rebased: z.boolean(),
+        revision: sha256Schema,
+        textLength: z.number().int().nonnegative(),
+        diff: z.string(),
+        diffTruncated: z.boolean(),
+      },
+      annotations: annotations(false, true, true),
+    },
+    async ({ sessionId, path, expectedRevision, edits }) => run(async () => ({
+      value: withoutSessionId(await editSessionFile({ registry, sessionId, path, expectedRevision, edits })),
+      text: `Applied ${edits.length} exact edit${edits.length === 1 ? "" : "s"} to "${path}".`,
+    })),
+  );
+
+  server.registerTool(
+    "tabula_create_directory",
+    {
+      title: "Create Directory",
+      description: "Create a directory and any missing parents in a live session. Succeeds without changing the session when the directory already exists.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        path: filePathSchema.describe("Directory path relative to the session root."),
+      },
+      outputSchema: {
+        path: z.string(),
+        created: z.boolean(),
+      },
+      annotations: annotations(false, true, false, true),
+    },
+    async ({ sessionId, path }) => run(async () => ({
+      value: withoutSessionId(await createSessionDirectory({ registry, sessionId, path })),
+      text: `Created directory "${path}" in the Tabula session.`,
+    })),
+  );
+
+  server.registerTool(
+    "tabula_move_file",
+    {
+      title: "Move or Rename",
+      description: "Move or rename one file or directory by changing its path. Read files first and pass expectedRevision when the source is a file; create a missing destination directory before moving into it.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        source: filePathSchema.describe("Current file or directory path relative to the session root."),
+        destination: filePathSchema.describe("New full path relative to the session root."),
+        expectedRevision: requiredRevisionSchema.optional()
+          .describe("Read revision; required for a file and omitted for a directory."),
+      },
+      outputSchema: {
+        source: z.string(),
+        destination: z.string(),
+        type: z.enum(["file", "folder"]),
+        changed: z.boolean(),
+      },
+      annotations: annotations(false, true, true),
+    },
+    async ({ sessionId, source, destination, expectedRevision }) => run(async () => ({
+      value: withoutSessionId(await moveSessionFile({ registry, sessionId, source, destination, expectedRevision })),
+      text: `Moved or renamed "${source}" to "${destination}" in the Tabula session.`,
+    })),
+  );
+
+  server.registerTool(
+    "tabula_delete_path",
+    {
+      title: "Delete Path",
+      description: "Delete one file or directory. Read a file first and pass its current revision; non-empty directories require recursive true.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        path: filePathSchema.describe("File or directory path relative to the session root."),
+        expectedRevision: requiredRevisionSchema.optional()
+          .describe("Read revision; required for a file and omitted for a directory."),
+        recursive: z.boolean().default(false)
+          .describe("Delete every descendant when path is a non-empty directory; defaults to false."),
+      },
+      outputSchema: {
+        path: z.string(),
+        type: z.enum(["file", "folder"]),
+        deleted: z.literal(true),
+      },
+      annotations: annotations(false, true, true),
+    },
+    async ({ sessionId, path, expectedRevision, recursive }) => run(async () => ({
+      value: withoutSessionId(await deleteSessionPath({ registry, sessionId, path, expectedRevision, recursive })),
+      text: `Deleted "${path}" from the Tabula session.`,
     })),
   );
 

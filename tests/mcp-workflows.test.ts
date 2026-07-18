@@ -102,6 +102,24 @@ const roomMock = vi.hoisted(() => {
             sha256: hash(change.markdown), textLength: change.markdown.length,
           });
           changedDocumentIds.push(id);
+        } else if (change.type === "node.move") {
+          this.workspace.nodes = this.workspace.nodes.map((node) => node.id === change.nodeId
+            ? { ...node, parentId: change.parentId ?? this.workspace.rootId, title: change.title }
+            : node);
+        } else if (change.type === "node.delete") {
+          const deletedIds = new Set([change.nodeId]);
+          let added = true;
+          while (added) {
+            added = false;
+            for (const node of this.workspace.nodes) {
+              if (node.parentId && deletedIds.has(node.parentId) && !deletedIds.has(node.id)) {
+                deletedIds.add(node.id);
+                added = true;
+              }
+            }
+          }
+          this.workspace.nodes = this.workspace.nodes.filter((node) => !deletedIds.has(node.id));
+          for (const id of deletedIds) delete this.documents[id];
         }
       }
       return { changedDocumentIds };
@@ -191,16 +209,20 @@ describe("core MCP workflows", () => {
       ]));
 
       const read = await client.callTool({
+        name: "tabula_read_file",
+        arguments: { sessionId: session.sessionId, path: "shared.md", startLine: 1, lineCount: 3 },
+      });
+      const file = read.structuredContent as { path: string; content: string; revision: string; startLine: number };
+      expect(read.structuredContent).not.toHaveProperty("sessionId");
+      expect(file).toMatchObject({ path: "shared.md", startLine: 1 });
+      expect(file.content).toBe("# Shared\n\nhello\n");
+
+      const readMany = await client.callTool({
         name: "tabula_read_files",
         arguments: { sessionId: session.sessionId, paths: ["shared.md", "docs/guide.md"] },
       });
-      const readFiles = (read.structuredContent as {
-        files: Array<{ path: string; content: string; revision: string }>;
-      }).files;
-      expect(read.structuredContent).not.toHaveProperty("sessionId");
-      expect(readFiles.map((file) => file.path)).toEqual(["shared.md", "docs/guide.md"]);
-      const file = readFiles[0]!;
-      expect(file.content).toBe("# Shared\n\nhello\n");
+      expect((readMany.structuredContent as { files: Array<{ path: string }> }).files.map((item) => item.path))
+        .toEqual(["shared.md", "docs/guide.md"]);
 
       const searched = await client.callTool({
         name: "tabula_search_files",
@@ -209,14 +231,19 @@ describe("core MCP workflows", () => {
       expect(searched.isError).not.toBe(true);
       expect(searched.structuredContent).not.toHaveProperty("sessionId");
       expect(searched.structuredContent).toMatchObject({
-        matches: [expect.objectContaining({ path: "docs/guide.md", line: 3, excerpt: "nested" })],
+        matches: [expect.objectContaining({ path: "docs/guide.md", kind: "content", line: 3, match: "nested" })],
         truncated: false,
       });
 
       const content = `${file.content}\nhi! 👋\n`;
       const written = await client.callTool({
         name: "tabula_write_file",
-        arguments: { sessionId: session.sessionId, path: "shared.md", content, expectedRevision: file.revision },
+        arguments: {
+          sessionId: session.sessionId,
+          path: "shared.md",
+          content,
+          expectedRevision: file.revision,
+        },
       });
       expect(written.isError).not.toBe(true);
       expect(written.structuredContent).not.toHaveProperty("sessionId");
@@ -241,6 +268,55 @@ describe("core MCP workflows", () => {
       expect(writtenFiles.isError).not.toBe(true);
       expect(writtenFiles.structuredContent).not.toHaveProperty("sessionId");
       expect(writtenFiles.structuredContent).toMatchObject({ createdCount: 2, changedCount: 2 });
+
+      const latestShared = ((await client.callTool({
+        name: "tabula_read_files",
+        arguments: { sessionId: session.sessionId, paths: ["shared.md"] },
+      })).structuredContent as { files: Array<{ revision: string }> }).files[0]!;
+      const edited = await client.callTool({
+        name: "tabula_edit_file",
+        arguments: {
+          sessionId: session.sessionId,
+          path: "shared.md",
+          expectedRevision: latestShared.revision,
+          edits: [{ oldText: "hi! 👋", newText: "hello from Tabula" }],
+        },
+      });
+      expect(edited.isError).not.toBe(true);
+      expect(edited.structuredContent).toMatchObject({
+        path: "shared.md",
+        changed: true,
+        editsApplied: 1,
+        rebased: false,
+        diff: expect.stringContaining("-hi! 👋"),
+      });
+
+      const createdDirectory = await client.callTool({
+        name: "tabula_create_directory",
+        arguments: { sessionId: session.sessionId, path: "archive/2026" },
+      });
+      expect(createdDirectory.isError).not.toBe(true);
+      expect(createdDirectory.structuredContent).toMatchObject({ path: "archive/2026", created: true });
+      const decision = ((writtenFiles.structuredContent as {
+        files: Array<{ path: string; revision: string }>;
+      }).files).find((candidate) => candidate.path === "decision.md")!;
+      const moved = await client.callTool({
+        name: "tabula_move_file",
+        arguments: {
+          sessionId: session.sessionId,
+          source: "decision.md",
+          destination: "archive/2026/final.md",
+          expectedRevision: decision.revision,
+        },
+      });
+      expect(moved.isError).not.toBe(true);
+      expect(moved.structuredContent).toMatchObject({ destination: "archive/2026/final.md", type: "file", changed: true });
+      const deleted = await client.callTool({
+        name: "tabula_delete_path",
+        arguments: { sessionId: session.sessionId, path: "research", recursive: true },
+      });
+      expect(deleted.isError).not.toBe(true);
+      expect(deleted.structuredContent).toMatchObject({ path: "research", type: "folder", deleted: true });
     });
   });
 
