@@ -4,31 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DeploymentMode } from "../src/deployment.js";
 import type { RuntimeEnvironment } from "../src/env.js";
 import { createTabulaMcpServer, resolveWriteEnabled } from "../src/index.js";
+import { CORE_TOOL_METADATA, CORE_TOOL_NAMES } from "../src/server/tool-metadata.js";
 import { createEncryptedJsonShareWorkspaceSnapshot, generateJsonShareKey } from "../src/share.js";
 
 const originalFetch = globalThis.fetch;
-const coreTools = [
-  "start_session",
-  "join_room",
-  "leave_session",
-  "list_files",
-  "read_file",
-  "read_multiple_files",
-  "search_files",
-  "list_comments",
-  "add_comment",
-  "reply_to_comment",
-  "resolve_comment",
-  "delete_comment",
-  "write_file",
-  "write_files",
-  "edit_file",
-  "create_directory",
-  "move_file",
-  "delete_path",
-  "import_copy",
-  "export_copy",
-];
+const coreTools = [...CORE_TOOL_NAMES];
 
 const uiCapabilities = {
   extensions: {
@@ -144,7 +124,7 @@ describe("core MCP contract", () => {
     await withClient(async (client) => {
       const listed = await client.listTools();
       expect(listed.tools.map((tool) => tool.name)).toEqual(coreTools);
-      expect(Buffer.byteLength(JSON.stringify(listed), "utf8")).toBeLessThan(32_000);
+      expect(Buffer.byteLength(JSON.stringify(listed), "utf8")).toBeLessThan(40_000);
 
       for (const tool of listed.tools) {
         expect(Buffer.byteLength(JSON.stringify(tool), "utf8")).toBeLessThan(4_000);
@@ -318,50 +298,26 @@ describe("core MCP contract", () => {
   it("uses concise titles and decision-oriented descriptions", async () => {
     await withClient(async (client) => {
       const tools = Object.fromEntries((await client.listTools()).tools.map((tool) => [tool.name, tool]));
-      expect(Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, tool.title]))).toEqual({
-        start_session: "Start Session",
-        join_room: "Join Room",
-        leave_session: "Leave Session",
-        list_files: "List Files",
-        read_file: "Read File",
-        read_multiple_files: "Read Multiple Files",
-        search_files: "Search Files",
-        list_comments: "List Comments",
-        add_comment: "Add Comment",
-        reply_to_comment: "Reply to Comment",
-        resolve_comment: "Resolve Comment",
-        delete_comment: "Delete Comment",
-        write_file: "Write File",
-        write_files: "Write Files",
-        edit_file: "Edit File",
-        create_directory: "Create Directory",
-        move_file: "Move or Rename",
-        delete_path: "Delete Path",
-        import_copy: "Import Copy",
-        export_copy: "Export Copy",
-      });
-      expect(tools.start_session?.description).toContain("Markdown files");
-      expect(tools.join_room?.description).toContain("private #room URL");
-      expect(tools.leave_session?.description).toContain("without deleting");
-      expect(tools.list_files?.description).toContain("target is unknown");
-      expect(tools.read_file?.description).toContain("bounded line range");
-      expect(tools.read_multiple_files?.description).toContain("revisions");
-      expect(tools.search_files?.description).toContain("line context");
-      expect(tools.list_comments?.description).toContain("open, resolved, or all");
-      expect(tools.add_comment?.description).toContain("inclusive line range");
-      expect(tools.reply_to_comment?.description).toContain("existing comment");
-      expect(tools.resolve_comment?.description).toContain("reopen");
-      expect(tools.delete_comment?.description).toContain("Permanently delete");
-      expect(tools.write_file?.description).toContain("one file");
-      expect(tools.write_files?.description).toContain("Atomically");
-      expect(tools.edit_file?.description).toContain("safe match");
-      expect(tools.create_directory?.description).toContain("missing parents");
-      expect(tools.move_file?.description).toContain("destination parent must already exist");
+      for (const name of coreTools) {
+        expect(tools[name]?.title).toBe(CORE_TOOL_METADATA[name].title);
+        expect(tools[name]?.description).toBe(CORE_TOOL_METADATA[name].description);
+        expect(tools[name]?.description).toMatch(/^Use this when/);
+        expect(tools[name]?.description).toContain("Tabula.md");
+        expect(CORE_TOOL_METADATA[name].description.length).toBeLessThanOrEqual(240);
+      }
+      for (const name of [
+        "start_session",
+        "list_files",
+        "read_file",
+        "read_multiple_files",
+        "search_files",
+        "write_file",
+        "write_files",
+      ]) {
+        expect(tools[name]?.description).toMatch(/Do not|do not/);
+      }
       expect(tools.move_file?.inputSchema.properties?.destination?.description)
         .toContain("parent directory already exists");
-      expect(tools.delete_path?.description).toContain("recursive true");
-      expect(tools.import_copy?.description).toContain("does not join");
-      expect(tools.export_copy?.description).toContain("exactly one of files or sessionId");
     });
   });
 

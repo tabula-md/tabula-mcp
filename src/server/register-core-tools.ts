@@ -20,6 +20,7 @@ import type { SessionRegistry } from "../registry.js";
 import { joinRoomSession, startWorkspaceSession } from "../session-service.js";
 import { createWorkspaceFromFiles } from "../workspaces.js";
 import { OperationLedger } from "./operation-ledger.js";
+import { getCoreToolMetadata } from "./tool-metadata.js";
 import {
   createSessionDirectory,
   deleteSessionPath,
@@ -40,14 +41,18 @@ import {
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 const sessionIdSchema = z.string().min(1).max(100);
-const sessionIdInputSchema = sessionIdSchema.describe("Session ID.");
-const filePathSchema = z.string().min(1).describe("Relative path.");
+const sessionIdInputSchema = sessionIdSchema
+  .describe("Session ID returned by Start Session or Join Room; never guess or reuse one from another session.");
+const filePathSchema = z.string().min(1)
+  .describe("Relative path inside the connected Tabula.md session; not a local filesystem path.");
+const handoffFilePathSchema = z.string().min(1)
+  .describe("Relative Markdown path in the Tabula.md workspace; never pass an absolute local filesystem path.");
 const expectedRevisionSchema = sha256Schema.optional()
-  .describe("Current revision; omit for a new file.");
+  .describe("Current revision from Read File, Read Multiple Files, or a previous mutation; omit only for a new file.");
 const requiredRevisionSchema = sha256Schema
-  .describe("Current revision from Read.");
+  .describe("Current revision from Read File, Read Multiple Files, or a previous mutation in this session.");
 const markdownFileSchema = z.object({
-  path: filePathSchema,
+  path: handoffFilePathSchema,
   content: z.string().describe("Complete Markdown."),
 });
 const commentReplyOutputSchema = z.object({
@@ -134,8 +139,7 @@ export const registerCoreTools = (
     options.resourceUri,
     "start_session",
     {
-      title: "Start Session",
-      description: "Start an encrypted live session with Markdown files.",
+      ...getCoreToolMetadata("start_session"),
       inputSchema: {
         title: z.string().min(1).max(120).optional()
           .describe("Session title."),
@@ -177,8 +181,7 @@ export const registerCoreTools = (
   server.registerTool(
     "join_room",
     {
-      title: "Join Room",
-      description: "Join a private #room URL and wait until ready; keep it private.",
+      ...getCoreToolMetadata("join_room"),
       inputSchema: {
         roomUrl: z.string().url()
           .describe("Private #room URL from the user."),
@@ -213,8 +216,7 @@ export const registerCoreTools = (
   server.registerTool(
     "leave_session",
     {
-      title: "Leave Session",
-      description: "Disconnect from one live session without deleting its files.",
+      ...getCoreToolMetadata("leave_session"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
       },
@@ -243,8 +245,7 @@ export const registerCoreTools = (
   server.registerTool(
     "list_files",
     {
-      title: "List Files",
-      description: "List session paths when the target is unknown.",
+      ...getCoreToolMetadata("list_files"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: z.string().min(1).optional()
@@ -275,8 +276,7 @@ export const registerCoreTools = (
   server.registerTool(
     "read_file",
     {
-      title: "Read File",
-      description: "Read one file or bounded line range with its revision.",
+      ...getCoreToolMetadata("read_file"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: filePathSchema,
@@ -308,8 +308,7 @@ export const registerCoreTools = (
   server.registerTool(
     "read_multiple_files",
     {
-      title: "Read Multiple Files",
-      description: "Read up to 20 complete files with revisions; never truncates.",
+      ...getCoreToolMetadata("read_multiple_files"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         paths: z.array(filePathSchema).min(1).max(maxSessionReadFiles)
@@ -335,8 +334,7 @@ export const registerCoreTools = (
   server.registerTool(
     "search_files",
     {
-      title: "Search Files",
-      description: "Search paths and contents with line context.",
+      ...getCoreToolMetadata("search_files"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         query: z.string().trim().min(1).max(200)
@@ -370,8 +368,7 @@ export const registerCoreTools = (
   server.registerTool(
     "list_comments",
     {
-      title: "List Comments",
-      description: "List open, resolved, or all comments in a live session.",
+      ...getCoreToolMetadata("list_comments"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: filePathSchema.optional()
@@ -399,8 +396,7 @@ export const registerCoreTools = (
   server.registerTool(
     "add_comment",
     {
-      title: "Add Comment",
-      description: "Add a file-level comment or anchor it to an inclusive line range.",
+      ...getCoreToolMetadata("add_comment"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: filePathSchema,
@@ -440,8 +436,7 @@ export const registerCoreTools = (
   server.registerTool(
     "reply_to_comment",
     {
-      title: "Reply to Comment",
-      description: "Reply to an existing comment in a live session.",
+      ...getCoreToolMetadata("reply_to_comment"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         commentId: z.string().uuid().describe("Comment ID from List Comments."),
@@ -469,8 +464,7 @@ export const registerCoreTools = (
   server.registerTool(
     "resolve_comment",
     {
-      title: "Resolve Comment",
-      description: "Resolve or reopen an existing comment.",
+      ...getCoreToolMetadata("resolve_comment"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         commentId: z.string().uuid().describe("Comment ID from List Comments."),
@@ -506,8 +500,7 @@ export const registerCoreTools = (
   server.registerTool(
     "delete_comment",
     {
-      title: "Delete Comment",
-      description: "Permanently delete one comment and its replies.",
+      ...getCoreToolMetadata("delete_comment"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         commentId: z.string().uuid().describe("Comment ID from List Comments."),
@@ -533,8 +526,7 @@ export const registerCoreTools = (
   server.registerTool(
     "write_file",
     {
-      title: "Write File",
-      description: "Create or replace one file; existing files need revisions.",
+      ...getCoreToolMetadata("write_file"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: filePathSchema,
@@ -564,8 +556,7 @@ export const registerCoreTools = (
   server.registerTool(
     "write_files",
     {
-      title: "Write Files",
-      description: "Atomically create or replace up to 100 files; existing files need revisions.",
+      ...getCoreToolMetadata("write_files"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         files: z.array(markdownFileSchema.extend({ expectedRevision: expectedRevisionSchema })).min(1).max(100)
@@ -600,8 +591,7 @@ export const registerCoreTools = (
   server.registerTool(
     "edit_file",
     {
-      title: "Edit File",
-      description: "Replace exact text; stale edits rebase only on a safe match.",
+      ...getCoreToolMetadata("edit_file"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: filePathSchema,
@@ -648,8 +638,7 @@ export const registerCoreTools = (
   server.registerTool(
     "create_directory",
     {
-      title: "Create Directory",
-      description: "Create a directory and missing parents; existing is a no-op.",
+      ...getCoreToolMetadata("create_directory"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: filePathSchema.describe("Relative directory path."),
@@ -670,8 +659,7 @@ export const registerCoreTools = (
   server.registerTool(
     "move_file",
     {
-      title: "Move or Rename",
-      description: "Move or rename one file or directory. The destination parent must already exist; use Create Directory first. Files require their current revision.",
+      ...getCoreToolMetadata("move_file"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         source: filePathSchema.describe("Current relative path."),
@@ -704,8 +692,7 @@ export const registerCoreTools = (
   server.registerTool(
     "delete_path",
     {
-      title: "Delete Path",
-      description: "Delete a path; files need revisions and non-empty directories need recursive true.",
+      ...getCoreToolMetadata("delete_path"),
       inputSchema: {
         sessionId: sessionIdInputSchema,
         path: filePathSchema.describe("Relative file or directory path."),
@@ -735,8 +722,7 @@ export const registerCoreTools = (
   server.registerTool(
     "import_copy",
     {
-      title: "Import Copy",
-      description: "Decrypt a private #json Copy; does not join or write locally.",
+      ...getCoreToolMetadata("import_copy"),
       inputSchema: {
         copyUrl: z.string().url()
           .describe("Private #json URL from the user."),
@@ -766,8 +752,7 @@ export const registerCoreTools = (
     options.resourceUri,
     "export_copy",
     {
-      title: "Export Copy",
-      description: "Create a fixed #json Copy from exactly one of files or sessionId; keep it private.",
+      ...getCoreToolMetadata("export_copy"),
       inputSchema: z.object({
         title: z.string().min(1).max(120).optional()
           .describe("Copy title; files source only."),
