@@ -1,3 +1,4 @@
+import "../node-runtime.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createDocumentAppResource, registerDocumentAppResource } from "../app/resource.js";
 import { DocumentRegistry } from "../documents/registry.js";
