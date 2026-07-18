@@ -41,6 +41,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Load the checked-in release manifest
+        id: manifest
+        run: node scripts/export-release-manifest.mjs
+
+      - name: Verify production deployment credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/check-release-secrets.mjs
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
@@ -56,20 +66,26 @@ jobs:
       - name: Checkout Tabula browser dependencies
         uses: actions/checkout@v6
         with:
-          repository: tabula-md/tabula-md
+          repository: ${{ steps.manifest.outputs.tabula_md_repository }}
+          ref: ${{ steps.manifest.outputs.tabula_md_ref }}
           path: deps/tabula-md
 
       - name: Checkout Room service
         uses: actions/checkout@v6
         with:
-          repository: tabula-md/tabula-room
+          repository: ${{ steps.manifest.outputs.tabula_room_repository }}
+          ref: ${{ steps.manifest.outputs.tabula_room_ref }}
           path: deps/tabula-room
 
       - name: Checkout Copy service
         uses: actions/checkout@v6
         with:
-          repository: tabula-md/tabula-json
+          repository: ${{ steps.manifest.outputs.tabula_json_repository }}
+          ref: ${{ steps.manifest.outputs.tabula_json_ref }}
           path: deps/tabula-json
+
+      - name: Verify pinned interoperability commits
+        run: node scripts/check-interoperability-checkouts.mjs
 
       - name: Install interoperability dependencies
         run: npm ci --prefix deps/tabula-md && npm ci --prefix deps/tabula-room && npm ci --prefix deps/tabula-json
@@ -80,6 +96,9 @@ jobs:
           TABULA_ROOM_REPO_DIR: ${{ github.workspace }}/deps/tabula-room
           TABULA_JSON_REPO_DIR: ${{ github.workspace }}/deps/tabula-json
         run: npm run test:e2e:local-collab
+
+      - name: Resolve release provenance
+        run: npm run build:release-manifest -- --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA"
 
       - name: Publish npm package through OIDC
         run: npm publish --access public --ignore-scripts
@@ -94,11 +113,18 @@ jobs:
             "dist/tabula-mcp-${VERSION}.mcpb.sha256#SHA-256 checksum ${VERSION}" \
             "dist/tabula-mcp.mcpb#Latest Claude Desktop extension" \
             "dist/tabula-mcp.mcpb.sha256#Latest SHA-256 checksum" \
+            "dist/release-manifest.json#Resolved release manifest" \
             --title "Tabula MCP ${VERSION}" \
             --generate-notes \
             --verify-tag
 
-      - name: Verify published npm and GitHub surfaces
+      - name: Deploy the production Cloudflare Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy:cloudflare
+
+      - name: Verify npm, GitHub, and production surfaces
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/verify-published-release.mjs

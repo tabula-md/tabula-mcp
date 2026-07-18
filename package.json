@@ -60,7 +60,8 @@
     "LICENSE",
     "SECURITY.md",
     "CONTRIBUTING.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "release-manifest.json"
   ],
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
@@ -95,7 +96,8 @@
     "check:release-contract": "node scripts/check-release-contract.mjs",
     "check:release-workflow": "node scripts/check-release-workflow.mjs",
     "check:release-artifacts": "node scripts/check-release-artifacts.mjs",
-    "release:pack": "node scripts/pack-release.mjs && npm run check:release-artifacts && npm run check:claude-plugin",
+    "build:release-manifest": "node scripts/build-release-manifest.mjs",
+    "release:pack": "node scripts/pack-release.mjs && npm run build:release-manifest && npm run check:release-artifacts && npm run check:claude-plugin",
     "release:verify": "npm run check:release-contract && npm run check:release-workflow && npm run typecheck && npm run check:p0-invariants && npm run test:worker && npm run check:secret-boundaries && npm test && npm run test:app && npm run test:stdio && npm run check:context-budget && npm run check:deploy-targets && npm run release:pack && npm run check:exports && npm run check:pack && npm audit --json && git diff --check",
     "release:verify:full": "npm run release:verify && npm run test:e2e:local-collab",
     "prepublishOnly": "npm run release:verify",

@@ -20,9 +20,13 @@ const versionedHash = await sha256(path.join(distDir, versionedName));
 const stableHash = await sha256(path.join(distDir, stableName));
 const versionedChecksum = (await readFile(path.join(distDir, `${versionedName}.sha256`), "utf8")).trim();
 const stableChecksum = (await readFile(path.join(distDir, `${stableName}.sha256`), "utf8")).trim();
+const releaseManifest = JSON.parse(await readFile(path.join(distDir, "release-manifest.json"), "utf8"));
 
 assert.equal(stableHash, versionedHash, "Stable MCPB alias must be byte-identical to the versioned artifact.");
 assert.equal(versionedChecksum, `${versionedHash}  ${versionedName}`);
 assert.equal(stableChecksum, `${stableHash}  ${stableName}`);
+assert.equal(releaseManifest.releaseVersion, packageJson.version);
+assert.equal(releaseManifest.releaseTag, `v${packageJson.version}`);
+assert.match(releaseManifest.sourceCommit, /^[0-9a-f]{40}$/);
 
 console.log(`Release artifacts passed for ${versionedName} and ${stableName}`);
