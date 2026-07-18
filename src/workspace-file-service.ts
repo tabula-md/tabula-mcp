@@ -10,6 +10,11 @@ import { renderExactTextDiff, type ExactTextChange } from "./text-diff.js";
 import type { WorkspaceChange } from "./workspace-contract.js";
 import { buildWorkspacePathIndex, normalizeWorkspaceFilePath } from "./workspace-paths.js";
 import { throwIfOperationAborted } from "./server/operation-context.js";
+import {
+  checkpointWithoutMutation,
+  mutationReceipt,
+  persistAppliedMutation,
+} from "./mutation-receipt.js";
 
 const requireSession = (registry: SessionRegistry, sessionId: string) => {
   try {
@@ -71,35 +76,6 @@ const requireWriteAccess = (session: { writeAccess: boolean }) => {
     throw new TabulaCoreError("write_disabled", "This Tabula MCP connection is read-only.", {
       retry: "Reconnect using a writable Tabula MCP configuration.",
     });
-  }
-};
-
-type CheckpointPersistence = "disabled" | "not_needed" | "pending" | "saved";
-
-const checkpointWithoutMutation = (session?: {
-  checkpointPersistenceStatus?: () => "disabled" | "pending" | "saved";
-}): CheckpointPersistence => session?.checkpointPersistenceStatus?.() ?? "not_needed";
-
-const mutationReceipt = (checkpoint: CheckpointPersistence) => ({
-  applied: true as const,
-  persisted: checkpoint === "saved" || checkpoint === "not_needed",
-  checkpointPending: checkpoint === "pending",
-});
-
-const persistAppliedMutation = async (session: {
-  flushCheckpoint(): Promise<void>;
-  persistCheckpointAfterMutation?: () => Promise<"disabled" | "pending" | "saved">;
-  recoveryMode?: "durable" | "temporary";
-  scheduleCheckpointRetry?: () => void;
-}): Promise<CheckpointPersistence> => {
-  if (session.persistCheckpointAfterMutation) return session.persistCheckpointAfterMutation();
-  if (session.recoveryMode === "temporary") return "disabled";
-  try {
-    await session.flushCheckpoint();
-    return "saved";
-  } catch {
-    session.scheduleCheckpointRetry?.();
-    return "pending";
   }
 };
 

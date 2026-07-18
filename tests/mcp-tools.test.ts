@@ -15,6 +15,11 @@ const coreTools = [
   "read_file",
   "read_multiple_files",
   "search_files",
+  "list_comments",
+  "add_comment",
+  "reply_to_comment",
+  "resolve_comment",
+  "delete_comment",
   "write_file",
   "write_files",
   "edit_file",
@@ -120,7 +125,7 @@ describe("write access configuration", () => {
 });
 
 describe("core MCP contract", () => {
-  it.each([false, true])("exposes exactly fifteen high-level tools (MCP Apps=%s)", async (mcpApps) => {
+  it.each([false, true])("exposes exactly twenty high-level tools (MCP Apps=%s)", async (mcpApps) => {
     await withClient(async (client) => {
       const listed = await client.listTools();
       expect(listed.tools.map((tool) => tool.name)).toEqual(coreTools);
@@ -139,6 +144,7 @@ describe("core MCP contract", () => {
           "edit_file",
           "move_file",
           "delete_path",
+          "delete_comment",
         ].includes(tool.name);
         expect(tool.annotations).toMatchObject({
           readOnlyHint: expect.any(Boolean),
@@ -190,6 +196,8 @@ describe("core MCP contract", () => {
       expect(instructions).toContain("pass their revisions to Write File, Write Files, Edit File, Move or Rename, or Delete Path");
       expect(instructions).toContain("Use Edit File for small exact replacements");
       expect(instructions).toContain("Move or Rename accepts files and directories");
+      expect(instructions).toContain("Use List Comments");
+      expect(instructions).toContain("inclusive startLine and endLine together");
       expect(instructions).toContain("Export Copy");
       expect(instructions).toContain("Import Copy");
       expect(instructions).toContain("does not join a live session");
@@ -205,6 +213,26 @@ describe("core MCP contract", () => {
     ["read_file", { sessionId: "00000000-0000-4000-8000-000000000099", path: "missing.md" }],
     ["read_multiple_files", { sessionId: "00000000-0000-4000-8000-000000000099", paths: ["missing.md"] }],
     ["search_files", { sessionId: "00000000-0000-4000-8000-000000000099", query: "missing" }],
+    ["list_comments", { sessionId: "00000000-0000-4000-8000-000000000099" }],
+    ["add_comment", {
+      sessionId: "00000000-0000-4000-8000-000000000099",
+      path: "missing.md",
+      body: "Review this.",
+    }],
+    ["reply_to_comment", {
+      sessionId: "00000000-0000-4000-8000-000000000099",
+      commentId: "00000000-0000-4000-8000-000000000001",
+      body: "Done.",
+    }],
+    ["resolve_comment", {
+      sessionId: "00000000-0000-4000-8000-000000000099",
+      commentId: "00000000-0000-4000-8000-000000000001",
+      resolved: true,
+    }],
+    ["delete_comment", {
+      sessionId: "00000000-0000-4000-8000-000000000099",
+      commentId: "00000000-0000-4000-8000-000000000001",
+    }],
     ["write_file", { sessionId: "00000000-0000-4000-8000-000000000099", path: "new.md", content: "# New\n" }],
     ["write_files", { sessionId: "00000000-0000-4000-8000-000000000099", files: [{ path: "new.md", content: "# New\n" }] }],
     ["edit_file", {
@@ -277,6 +305,11 @@ describe("core MCP contract", () => {
         read_file: "Read File",
         read_multiple_files: "Read Multiple Files",
         search_files: "Search Files",
+        list_comments: "List Comments",
+        add_comment: "Add Comment",
+        reply_to_comment: "Reply to Comment",
+        resolve_comment: "Resolve Comment",
+        delete_comment: "Delete Comment",
         write_file: "Write File",
         write_files: "Write Files",
         edit_file: "Edit File",
@@ -293,6 +326,11 @@ describe("core MCP contract", () => {
       expect(tools.read_file?.description).toContain("bounded line range");
       expect(tools.read_multiple_files?.description).toContain("revisions");
       expect(tools.search_files?.description).toContain("line context");
+      expect(tools.list_comments?.description).toContain("open, resolved, or all");
+      expect(tools.add_comment?.description).toContain("inclusive line range");
+      expect(tools.reply_to_comment?.description).toContain("existing comment");
+      expect(tools.resolve_comment?.description).toContain("reopen");
+      expect(tools.delete_comment?.description).toContain("Permanently delete");
       expect(tools.write_file?.description).toContain("one file");
       expect(tools.write_files?.description).toContain("Atomically");
       expect(tools.edit_file?.description).toContain("safe match");
@@ -318,6 +356,11 @@ describe("core MCP contract", () => {
         "read_file",
         "read_multiple_files",
         "search_files",
+        "list_comments",
+        "add_comment",
+        "reply_to_comment",
+        "resolve_comment",
+        "delete_comment",
         "write_file",
         "write_files",
         "edit_file",
@@ -570,7 +613,7 @@ describe("core MCP contract", () => {
     });
   });
 
-  it("keeps the same fifteen-tool contract in read-only mode", async () => {
+  it("keeps the same twenty-tool contract in read-only mode", async () => {
     await withClient(async (client) => {
       expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(coreTools);
     }, { writeEnabled: false });

@@ -1,7 +1,18 @@
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { WORKSPACE_ROOM_MAX_COMMENT_LENGTH } from "@tabula-md/tabula/collaboration";
 import { coreErrorContent } from "../core-errors.js";
+import type { TabulaAgentIdentity } from "../agent-identity.js";
+import {
+  addSessionComment,
+  defaultCommentPageSize,
+  deleteSessionComment,
+  listSessionComments,
+  maxCommentPageSize,
+  replyToSessionComment,
+  setSessionCommentResolved,
+} from "../comments-service.js";
 import type { RuntimeEnvironment } from "../env.js";
 import { exportCopy, resolveExportCopySource, type ExportCopyInput } from "../export-copy-service.js";
 import { importCopy, maxImportedCopyFiles } from "../import-copy-service.js";
@@ -38,6 +49,24 @@ const requiredRevisionSchema = sha256Schema
 const markdownFileSchema = z.object({
   path: filePathSchema,
   content: z.string().describe("Complete Markdown."),
+});
+const commentReplyOutputSchema = z.object({
+  id: z.string().uuid(),
+  body: z.string(),
+  author: z.string(),
+  createdAt: z.string().datetime(),
+});
+const commentOutputSchema = z.object({
+  id: z.string().uuid(),
+  path: z.string(),
+  body: z.string(),
+  author: z.string(),
+  createdAt: z.string().datetime(),
+  resolved: z.boolean(),
+  startLine: z.number().int().positive().optional(),
+  endLine: z.number().int().positive().optional(),
+  quote: z.string().optional(),
+  replies: z.array(commentReplyOutputSchema),
 });
 const mutationStateOutputSchema = {
   applied: z.literal(true),
@@ -89,6 +118,7 @@ export const registerCoreTools = (
     allowTemporaryRooms: boolean;
     env?: RuntimeEnvironment;
     resourceUri: string;
+    resolveAgentIdentity: () => TabulaAgentIdentity;
     writeEnabled: boolean;
   },
 ) => {
@@ -137,6 +167,7 @@ export const registerCoreTools = (
         env: options.env,
         writeEnabled: options.writeEnabled,
         allowTemporaryRooms: options.allowTemporaryRooms,
+        identity: options.resolveAgentIdentity(),
       });
       return { value: session, text: "Started a live Tabula session. The agent is connected." };
       },
@@ -163,7 +194,13 @@ export const registerCoreTools = (
       annotations: annotations(false, true),
     },
     async ({ roomUrl }: { roomUrl: string }) => runMutation("join_room", { roomUrl }, async () => {
-      const session = await joinRoomSession({ registry, roomUrl, env: options.env, writeEnabled: options.writeEnabled });
+      const session = await joinRoomSession({
+        registry,
+        roomUrl,
+        env: options.env,
+        writeEnabled: options.writeEnabled,
+        identity: options.resolveAgentIdentity(),
+      });
       return {
         value: session,
         text: session.ready
@@ -328,6 +365,169 @@ export const registerCoreTools = (
       value: withoutSessionId(await searchSessionFiles({ registry, sessionId, query, path, maxResults, contextLines })),
       text: `Searched the Tabula session for "${query}".`,
     })),
+  );
+
+  server.registerTool(
+    "list_comments",
+    {
+      title: "List Comments",
+      description: "List open, resolved, or all comments in a live session.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        path: filePathSchema.optional()
+          .describe("File path; omit for comments across the session."),
+        status: z.enum(["open", "resolved", "all"]).default("open")
+          .describe("Comment status; default open."),
+        limit: z.number().int().min(1).max(maxCommentPageSize).default(defaultCommentPageSize)
+          .describe(`Comments per page; default ${defaultCommentPageSize}, max ${maxCommentPageSize}.`),
+        cursor: z.string().min(1).max(4_096).optional()
+          .describe("Opaque nextCursor from the previous page."),
+      },
+      outputSchema: {
+        comments: z.array(commentOutputSchema),
+        truncated: z.boolean(),
+        nextCursor: z.string().optional(),
+      },
+      annotations: annotations(true, true),
+    },
+    async ({ sessionId, path, status, limit, cursor }) => run(async () => ({
+      value: withoutSessionId(await listSessionComments({ registry, sessionId, path, status, limit, cursor })),
+      text: "Listed comments in the Tabula session.",
+    })),
+  );
+
+  server.registerTool(
+    "add_comment",
+    {
+      title: "Add Comment",
+      description: "Add a file-level comment or anchor it to an inclusive line range.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        path: filePathSchema,
+        body: z.string().trim().min(1).max(WORKSPACE_ROOM_MAX_COMMENT_LENGTH)
+          .describe("Comment text."),
+        startLine: z.number().int().min(1).optional()
+          .describe("First anchored line; provide with endLine."),
+        endLine: z.number().int().min(1).optional()
+          .describe("Last anchored line, inclusive; provide with startLine."),
+      },
+      outputSchema: {
+        commentId: z.string().uuid(),
+        path: z.string(),
+        startLine: z.number().int().positive().optional(),
+        endLine: z.number().int().positive().optional(),
+        ...mutationStateOutputSchema,
+      },
+      annotations: annotations(false, true),
+    },
+    async ({ sessionId, path, body, startLine, endLine }) => runMutation(
+      "add_comment",
+      { sessionId, path, body, startLine, endLine },
+      async () => {
+        const value = withoutSessionId(await addSessionComment({
+          registry,
+          sessionId,
+          path,
+          body,
+          startLine,
+          endLine,
+        }));
+        return { value, text: mutationText(`Added a comment to "${path}".`, value) };
+      },
+    ),
+  );
+
+  server.registerTool(
+    "reply_to_comment",
+    {
+      title: "Reply to Comment",
+      description: "Reply to an existing comment in a live session.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        commentId: z.string().uuid().describe("Comment ID from List Comments."),
+        body: z.string().trim().min(1).max(WORKSPACE_ROOM_MAX_COMMENT_LENGTH)
+          .describe("Reply text."),
+      },
+      outputSchema: {
+        commentId: z.string().uuid(),
+        path: z.string(),
+        replyId: z.string().uuid(),
+        ...mutationStateOutputSchema,
+      },
+      annotations: annotations(false, true),
+    },
+    async ({ sessionId, commentId, body }) => runMutation(
+      "reply_to_comment",
+      { sessionId, commentId, body },
+      async () => {
+        const value = withoutSessionId(await replyToSessionComment({ registry, sessionId, commentId, body }));
+        return { value, text: mutationText("Replied to the Tabula comment.", value) };
+      },
+    ),
+  );
+
+  server.registerTool(
+    "resolve_comment",
+    {
+      title: "Resolve Comment",
+      description: "Resolve or reopen an existing comment.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        commentId: z.string().uuid().describe("Comment ID from List Comments."),
+        resolved: z.boolean().describe("True resolves; false reopens."),
+      },
+      outputSchema: {
+        commentId: z.string().uuid(),
+        path: z.string(),
+        resolved: z.boolean(),
+        changed: z.boolean(),
+        ...mutationStateOutputSchema,
+      },
+      annotations: annotations(false, true, false, true),
+    },
+    async ({ sessionId, commentId, resolved }) => runMutation(
+      "resolve_comment",
+      { sessionId, commentId, resolved },
+      async () => {
+        const value = withoutSessionId(await setSessionCommentResolved({
+          registry,
+          sessionId,
+          commentId,
+          resolved,
+        }));
+        return {
+          value,
+          text: mutationText(resolved ? "Resolved the Tabula comment." : "Reopened the Tabula comment.", value),
+        };
+      },
+    ),
+  );
+
+  server.registerTool(
+    "delete_comment",
+    {
+      title: "Delete Comment",
+      description: "Permanently delete one comment and its replies.",
+      inputSchema: {
+        sessionId: sessionIdInputSchema,
+        commentId: z.string().uuid().describe("Comment ID from List Comments."),
+      },
+      outputSchema: {
+        commentId: z.string().uuid(),
+        path: z.string(),
+        deleted: z.literal(true),
+        ...mutationStateOutputSchema,
+      },
+      annotations: annotations(false, true, true),
+    },
+    async ({ sessionId, commentId }) => runMutation(
+      "delete_comment",
+      { sessionId, commentId },
+      async () => {
+        const value = withoutSessionId(await deleteSessionComment({ registry, sessionId, commentId }));
+        return { value, text: mutationText("Deleted the Tabula comment.", value) };
+      },
+    ),
   );
 
   server.registerTool(

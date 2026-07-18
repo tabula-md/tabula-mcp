@@ -1,4 +1,5 @@
 export const tabulaCoreErrorCodes = [
+  "comment_not_found",
   "copy_import_failed",
   "directory_not_empty",
   "edit_ambiguous",

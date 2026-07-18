@@ -74,6 +74,8 @@ change. The browser sees the update immediately.
   materialize in a user-chosen local folder.
 - **Workspace files** — list, read, search, and atomically write files and
   nested folders in a connected session.
+- **Comments** — read comment threads, add file-level or line-anchored
+  comments, reply, resolve or reopen, and delete threads when requested.
 
 Use a live session when work should continue. Use a copy when the recipient
 needs a snapshot instead of an ongoing workspace.

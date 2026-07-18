@@ -76,6 +76,11 @@ try {
     "read_file",
     "read_multiple_files",
     "search_files",
+    "list_comments",
+    "add_comment",
+    "reply_to_comment",
+    "resolve_comment",
+    "delete_comment",
     "write_file",
     "write_files",
     "edit_file",
@@ -84,7 +89,7 @@ try {
     "delete_path",
     "import_copy",
     "export_copy",
-  ]), "Vercel MCP endpoint did not expose exactly the fifteen core tools");
+  ]), "Vercel MCP endpoint did not expose exactly the twenty core tools");
 } finally {
   await client.close();
 }

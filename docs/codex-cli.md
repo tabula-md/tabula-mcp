@@ -28,6 +28,10 @@ changes.
 the remaining familiar filesystem operations. Move File also renames files and
 directories when the destination changes only the name.
 
+`list_comments`, `add_comment`, `reply_to_comment`, `resolve_comment`, and
+`delete_comment` expose the same comment threads shown in Tabula. Line comments
+use inclusive `startLine` and `endLine` values; omit both for a file comment.
+
 All Room operations use the explicit `sessionId` returned by `join_room` or
 `start_session`, so several Rooms can remain connected without an active-Room
 fallback. `leave_session` disconnects one agent connection without deleting

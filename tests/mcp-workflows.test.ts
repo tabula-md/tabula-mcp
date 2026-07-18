@@ -6,13 +6,15 @@ const roomMock = vi.hoisted(() => {
   const hash = (value: string) => `${value.length.toString(16).padStart(64, "0")}`;
   let sequence = 0;
   let stateReceived = true;
+  const actorIds: string[] = [];
   class MockRoomClient {
     readonly sessionId = `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`;
     readonly roomId: string;
     readonly shareUrl: string;
     readonly roomServerUrl: string;
     readonly writeAccess: boolean;
-    readonly actor = { id: "agent", capabilities: ["presence", "read", "write"] };
+    readonly actor: { id: string; name: string; color?: string; capabilities: string[] };
+    commentsByFileId: Record<string, Array<any>> = { main: [], guide: [] };
     documents: Record<string, string> = {
       main: "# Shared\n\nhello\n",
       guide: "# Guide\n\nnested\n",
@@ -30,15 +32,25 @@ const roomMock = vi.hoisted(() => {
         { id: "guide", type: "document" as const, parentId: "docs", title: "guide.md", order: 0, createdAt: "2026-07-17T00:00:00.000Z", updatedAt: "2026-07-17T00:00:00.000Z", sha256: hash("# Guide\n\nnested\n"), textLength: 17 },
       ],
     };
-    constructor({ parsedRoom, roomServerUrl, writeAccess }: {
+    constructor({ parsedRoom, roomServerUrl, writeAccess, identityId, identityName, identityColor }: {
       parsedRoom: { roomId: string; shareUrl: string };
       roomServerUrl: string;
       writeAccess: boolean;
+      identityId?: string;
+      identityName?: string;
+      identityColor?: string;
     }) {
       this.roomId = parsedRoom.roomId;
       this.shareUrl = parsedRoom.shareUrl;
       this.roomServerUrl = roomServerUrl;
       this.writeAccess = writeAccess;
+      this.actor = {
+        id: identityId ?? "agent",
+        name: identityName ?? "Agent",
+        color: identityColor,
+        capabilities: writeAccess ? ["presence", "read", "write"] : ["presence", "read"],
+      };
+      actorIds.push(this.actor.id);
       this.workspace.roomId = parsedRoom.roomId;
     }
     async connect() { return "checkpoint-disabled"; }
@@ -63,7 +75,7 @@ const roomMock = vi.hoisted(() => {
         sessionId: this.sessionId,
         workspace: this.workspace,
         documents: { ...this.documents },
-        commentsByFileId: {},
+        commentsByFileId: this.commentsByFileId,
         activeDocumentId: this.workspace.activeDocumentId,
       };
     }
@@ -124,6 +136,27 @@ const roomMock = vi.hoisted(() => {
       }
       return { changedDocumentIds };
     }
+    async upsertComment(comment: any) {
+      (this.commentsByFileId[comment.fileId] ??= []).push(comment);
+      this.workspace.version += 1;
+    }
+    async addCommentReply(commentId: string, reply: any) {
+      const comment = Object.values(this.commentsByFileId).flat().find((candidate) => candidate.id === commentId);
+      comment.replies.push(reply);
+      this.workspace.version += 1;
+    }
+    async setCommentResolved(commentId: string, resolved: boolean) {
+      const comment = Object.values(this.commentsByFileId).flat().find((candidate) => candidate.id === commentId);
+      comment.resolved = resolved;
+      this.workspace.version += 1;
+    }
+    async deleteComment(commentId: string) {
+      for (const [fileId, comments] of Object.entries(this.commentsByFileId)) {
+        this.commentsByFileId[fileId] = comments.filter((candidate) => candidate.id !== commentId);
+      }
+      this.workspace.version += 1;
+    }
+    checkpointPersistenceStatus() { return "disabled" as const; }
     async flushCheckpoint() {}
     async persistCheckpointAfterMutation() { return "disabled" as const; }
     disconnect() {}
@@ -133,6 +166,7 @@ const roomMock = vi.hoisted(() => {
     setStateReceived(value: boolean) {
       stateReceived = value;
     },
+    actorIds,
   };
 });
 
@@ -166,6 +200,7 @@ const withClient = async (
 afterEach(() => {
   globalThis.fetch = originalFetch;
   roomMock.setStateReceived(true);
+  roomMock.actorIds.splice(0);
   vi.restoreAllMocks();
 });
 
@@ -327,6 +362,46 @@ describe("core MCP workflows", () => {
       });
       expect(deleted.isError).not.toBe(true);
       expect(deleted.structuredContent).toMatchObject({ path: "research", type: "folder", deleted: true });
+
+      const addedComment = await client.callTool({
+        name: "add_comment",
+        arguments: {
+          sessionId: session.sessionId,
+          path: "shared.md",
+          body: "Please verify this greeting.",
+          startLine: 3,
+          endLine: 3,
+        },
+      });
+      expect(addedComment.isError).not.toBe(true);
+      const commentId = (addedComment.structuredContent as { commentId: string }).commentId;
+      expect(addedComment.structuredContent).toMatchObject({
+        path: "shared.md",
+        startLine: 3,
+        endLine: 3,
+      });
+      const replied = await client.callTool({
+        name: "reply_to_comment",
+        arguments: { sessionId: session.sessionId, commentId, body: "Verified." },
+      });
+      expect(replied.isError).not.toBe(true);
+      const resolved = await client.callTool({
+        name: "resolve_comment",
+        arguments: { sessionId: session.sessionId, commentId, resolved: true },
+      });
+      expect(resolved.structuredContent).toMatchObject({ resolved: true, changed: true });
+      const listedComments = await client.callTool({
+        name: "list_comments",
+        arguments: { sessionId: session.sessionId, status: "resolved" },
+      });
+      expect(listedComments.structuredContent).toMatchObject({
+        comments: [expect.objectContaining({ id: commentId, replies: [expect.objectContaining({ body: "Verified." })] })],
+      });
+      const deletedComment = await client.callTool({
+        name: "delete_comment",
+        arguments: { sessionId: session.sessionId, commentId },
+      });
+      expect(deletedComment.structuredContent).toMatchObject({ deleted: true, commentId });
     });
   });
 
@@ -339,6 +414,7 @@ describe("core MCP workflows", () => {
         sessionId: string;
       };
       expect(first.sessionId).not.toBe(second.sessionId);
+      expect(roomMock.actorIds.at(-2)).toBe(roomMock.actorIds.at(-1));
 
       const firstRead = (await client.callTool({
         name: "read_file",

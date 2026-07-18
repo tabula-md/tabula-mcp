@@ -14,6 +14,7 @@ export const startWorkspaceRoom = async ({
   env,
   appOrigin = "https://tabula.md",
   roomServerUrl,
+  identityId,
   identityName,
   identityColor,
   allowTemporary = true,
@@ -24,6 +25,7 @@ export const startWorkspaceRoom = async ({
   env?: RuntimeEnvironment;
   appOrigin?: string;
   roomServerUrl?: string;
+  identityId?: string;
   identityName?: string;
   identityColor?: string;
   /** Temporary Rooms must remain attached to a local, stateful MCP process. */
@@ -63,6 +65,7 @@ export const startWorkspaceRoom = async ({
     parsedRoom,
     roomServerUrl: resolvedRoomServerUrl,
     writeAccess,
+    identityId,
     identityName,
     identityColor,
     roomCheckpointStore,

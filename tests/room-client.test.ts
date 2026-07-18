@@ -6,6 +6,7 @@ import {
   type EncryptedEnvelope,
   type WorkspaceRoomSyncAdapters,
   type WorkspaceRoomCheckpointStore,
+  type WorkspaceRoomComment,
 } from "@tabula-md/tabula/collaboration";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { importRoomKey, sha256Text } from "../src/crypto.js";
@@ -128,16 +129,19 @@ const createClient = ({
   relay,
   writeAccess = true,
   checkpointStore = createMemoryWorkspaceRoomCheckpointStore(),
+  identityId,
   identityName,
 }: {
   relay: ReturnType<typeof createMemoryRelay>;
   writeAccess?: boolean;
   checkpointStore?: WorkspaceRoomCheckpointStore;
+  identityId?: string;
   identityName?: string;
 }) => new TabulaRoomClient({
   parsedRoom: parseRoomShareUrl(roomUrl),
   roomServerUrl: "https://rooms.tabula.md",
   writeAccess,
+  identityId,
   identityName,
   roomCheckpointStore: checkpointStore,
   createRoomTransport: relay.createRoomTransport,
@@ -209,6 +213,59 @@ describe("TabulaRoomClient protocol v2", () => {
       expect(client.actor.name).toMatch(/ Agent$/);
     } finally {
       client.disconnect();
+    }
+  });
+
+  it("uses an injected session-stable actor id across Room clients", () => {
+    const first = createClient({ relay: createMemoryRelay(), identityId: "stable-agent", identityName: "Claude" });
+    const second = createClient({ relay: createMemoryRelay(), identityId: "stable-agent", identityName: "Claude" });
+    expect(first.actor).toMatchObject({ id: "stable-agent", name: "Claude", kind: "agent" });
+    expect(second.actor.id).toBe(first.actor.id);
+    first.disconnect();
+    second.disconnect();
+  });
+
+  it("synchronizes agent-authored comment threads through the shared Room CRDT", async () => {
+    const relay = createMemoryRelay();
+    const first = createClient({ relay, identityId: "agent-1", identityName: "Claude" });
+    const second = createClient({ relay, identityId: "agent-2", identityName: "Codex" });
+    const comment: WorkspaceRoomComment = {
+      id: "00000000-0000-4000-8000-000000000001",
+      fileId: "doc_1",
+      body: "Please verify this line.",
+      authorId: first.actor.id,
+      authorName: first.actor.name,
+      resolved: false,
+      createdAt: "2026-07-17T01:00:00.000Z",
+      replies: [],
+    };
+    try {
+      await first.publishWorkspaceSnapshot({
+        workspace: await createWorkspaceState(),
+        documents: [{ documentId: "doc_1", title: "Draft.md", markdown: "# Draft\n" }],
+        persistCheckpoint: false,
+      });
+      await first.connect();
+      await second.connect({ waitForStateMs: 2_000 });
+      await first.upsertComment(comment);
+      await waitFor(async () => (await second.readWorkspaceSnapshot()).commentsByFileId.doc_1?.length === 1);
+      await second.addCommentReply(comment.id, {
+        id: "00000000-0000-4000-8000-000000000002",
+        body: "Verified.",
+        authorId: second.actor.id,
+        authorName: second.actor.name,
+        createdAt: "2026-07-17T01:01:00.000Z",
+      });
+      await second.setCommentResolved(comment.id, true);
+      await waitFor(async () => {
+        const synced = (await first.readWorkspaceSnapshot()).commentsByFileId.doc_1?.[0];
+        return synced?.resolved === true && synced.replies[0]?.body === "Verified.";
+      });
+      await first.deleteComment(comment.id);
+      await waitFor(async () => ((await second.readWorkspaceSnapshot()).commentsByFileId.doc_1?.length ?? 0) === 0);
+    } finally {
+      first.disconnect();
+      second.disconnect();
     }
   });
 

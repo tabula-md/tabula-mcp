@@ -1,4 +1,5 @@
 import "../node-runtime.js";
+import { createSessionAgentIdentity } from "../agent-identity.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createDocumentAppResource, registerDocumentAppResource } from "../app/resource.js";
 import { DocumentRegistry } from "../documents/registry.js";
@@ -54,6 +55,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const workspaces = new WorkspaceRegistry();
   const documents = new DocumentRegistry(documentStore);
   const documentAppResource = createDocumentAppResource({ documentAppHtml: options.documentAppHtml });
+  const resolveAgentIdentity = createSessionAgentIdentity({ env });
   const server = new McpServer({
     name: "tabula-mcp",
     version: TABULA_MCP_VERSION,
@@ -68,6 +70,7 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
     allowTemporaryRooms: allowRoomTools && allowTemporaryRooms,
     env,
     resourceUri: documentAppResource.uri,
+    resolveAgentIdentity: () => resolveAgentIdentity(server.server.getClientVersion()?.name),
     writeEnabled: allowRoomTools && writeEnabled,
   });
 
