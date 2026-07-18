@@ -1,5 +1,6 @@
 import documentAppHtml from "../dist/document-app.html";
 import { tabulaMcpPrivacyPolicyHtml } from "../src/privacy-policy.js";
+import { TABULA_MCP_VERSION } from "../src/version.js";
 import { createTabulaMcpWebHandler, type TabulaMcpWebHandler, type WebEnvironment } from "../src/server/web.js";
 import {
   quotaClientKey,
@@ -33,6 +34,29 @@ const stringEnv = (env: Record<string, unknown>): WebEnvironment =>
 const requestPathname = (request: Request) => new URL(request.url).pathname;
 
 const isPrivacyRequest = (request: Request) => requestPathname(request) === "/privacy";
+const isReadinessRequest = (request: Request) => requestPathname(request) === "/ready";
+
+export const cloudflareReadiness = (env: WorkerEnv) => {
+  const missing: string[] = [];
+  if (!env.TABULA_MCP_SESSIONS) missing.push("TABULA_MCP_SESSIONS");
+  if (!env.TABULA_MCP_QUOTA) missing.push("TABULA_MCP_QUOTA");
+  if (!env.TABULA_MCP_QUOTA_HASH_SECRET?.trim()) missing.push("TABULA_MCP_QUOTA_HASH_SECRET");
+  return { ready: missing.length === 0, missing };
+};
+
+const readinessResponse = (env: WorkerEnv) => {
+  const readiness = cloudflareReadiness(env);
+  return Response.json({
+    ok: readiness.ready,
+    service: "tabula-mcp",
+    version: TABULA_MCP_VERSION,
+    deploymentMode: "remote",
+    ...(readiness.ready ? {} : { code: "runtime_not_ready", missing: readiness.missing }),
+  }, {
+    status: readiness.ready ? 200 : 503,
+    headers: { "cache-control": "no-store" },
+  });
+};
 
 const isMcpRequest = (request: Request) => {
   const pathname = requestPathname(request);
@@ -208,6 +232,10 @@ export default {
           "content-type": "text/html; charset=utf-8",
         },
       });
+    }
+
+    if (isReadinessRequest(request)) {
+      return readinessResponse(env);
     }
 
     if (isMcpRequest(request)) {

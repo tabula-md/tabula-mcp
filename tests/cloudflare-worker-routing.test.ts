@@ -1,8 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
-import { routeMcpRequestToSession } from "../workers/tabula-mcp-worker.js";
+import worker, { cloudflareReadiness, routeMcpRequestToSession } from "../workers/tabula-mcp-worker.js";
 import type { WorkerEnv } from "../workers/tabula-mcp-session-do.js";
 
 describe("Cloudflare Worker MCP session routing", () => {
+  it("reports missing runtime dependencies without exposing secret values", () => {
+    expect(cloudflareReadiness({})).toEqual({
+      ready: false,
+      missing: ["TABULA_MCP_SESSIONS", "TABULA_MCP_QUOTA", "TABULA_MCP_QUOTA_HASH_SECRET"],
+    });
+    expect(cloudflareReadiness({
+      TABULA_MCP_SESSIONS: {} as never,
+      TABULA_MCP_QUOTA: {} as never,
+      TABULA_MCP_QUOTA_HASH_SECRET: "configured-secret-value",
+    })).toEqual({ ready: true, missing: [] });
+  });
+
+  it("returns 503 from /ready when required Cloudflare runtime configuration is missing", async () => {
+    const response = await worker.fetch(new Request("https://mcp.tabula.md/ready"), {});
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      service: "tabula-mcp",
+      version: "0.6.0",
+      deploymentMode: "remote",
+      code: "runtime_not_ready",
+      missing: ["TABULA_MCP_SESSIONS", "TABULA_MCP_QUOTA", "TABULA_MCP_QUOTA_HASH_SECRET"],
+    });
+  });
+
   it("routes initialize, follow-up, and delete requests through one named Session Durable Object", async () => {
     const routedSessionIds: string[] = [];
     const sessionRequests: Request[] = [];

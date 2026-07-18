@@ -12,6 +12,8 @@ export const loadReleaseManifest = async (filePath = "release-manifest.json") =>
   assert.equal(manifest.worker?.name, "tabula-mcp");
   assert.match(manifest.worker?.origin, /^https:\/\//, "Worker origin must use HTTPS.");
   assert.match(manifest.worker?.healthPath, /^\//, "Worker healthPath must be absolute.");
+  assert.match(manifest.worker?.readyPath, /^\//, "Worker readyPath must be absolute.");
+  assert.match(manifest.worker?.mcpPath, /^\//, "Worker mcpPath must be absolute.");
   for (const [name, dependency] of Object.entries(manifest.interoperability ?? {})) {
     assert.match(dependency.repository, /^[\w.-]+\/[\w.-]+$/, `${name} repository must be owner/name.`);
     assert.match(dependency.ref, shaPattern, `${name} ref must be an immutable 40-character commit SHA.`);

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const releaseManifest = JSON.parse(await readFile("dist/release-manifest.json", "utf8"));
@@ -72,4 +74,30 @@ for (let attempt = 1; attempt <= 12; attempt += 1) {
 assert(productionHealth, `Production health did not report Tabula MCP ${version} within 60 seconds.`);
 assert.equal(productionHealth.service, releaseManifest.worker.name);
 
-console.log(`Published npm package, GitHub Release, and production Worker verified for ${tag}`);
+const readyUrl = new URL(releaseManifest.worker.readyPath, releaseManifest.worker.origin);
+let productionReady;
+for (let attempt = 1; attempt <= 12; attempt += 1) {
+  const response = await fetch(readyUrl);
+  if (response.ok) {
+    const ready = await response.json();
+    if (ready.ok === true && ready.version === version) {
+      productionReady = ready;
+      break;
+    }
+  }
+  if (attempt < 12) await sleep(5_000);
+}
+assert(productionReady, `Production readiness did not report Tabula MCP ${version} within 60 seconds.`);
+
+const mcpUrl = new URL(releaseManifest.worker.mcpPath, releaseManifest.worker.origin);
+const client = new Client({ name: "tabula-release-verifier", version });
+try {
+  await client.connect(new StreamableHTTPClientTransport(mcpUrl));
+  const tools = await client.listTools();
+  assert(tools.tools.some((tool) => tool.name === "list_files"), "Production MCP tools/list did not expose list_files.");
+  assert(tools.tools.some((tool) => tool.name === "export_copy"), "Production MCP tools/list did not expose export_copy.");
+} finally {
+  await client.close();
+}
+
+console.log(`Published npm package, GitHub Release, production readiness, and MCP handshake verified for ${tag}`);
