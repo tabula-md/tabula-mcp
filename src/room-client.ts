@@ -6,6 +6,8 @@ import {
   type EncryptedEnvelope,
   type RoomActor,
   type RoomCapability,
+  type WorkspaceRoomComment,
+  type WorkspaceRoomCommentReply,
   type WorkspaceRoomCheckpointStore,
   type WorkspaceRoomNode,
   type WorkspaceRoomSnapshot,
@@ -79,6 +81,7 @@ export type RoomClientOptions = {
   parsedRoom: ParsedRoomShareUrl;
   roomServerUrl: string;
   writeAccess: boolean;
+  identityId?: string;
   identityName?: string;
   identityColor?: string;
   actorCapabilities?: readonly RoomCapability[];
@@ -186,6 +189,7 @@ export class TabulaRoomClient {
     parsedRoom,
     roomServerUrl,
     writeAccess,
+    identityId,
     identityName,
     identityColor,
     actorCapabilities,
@@ -200,7 +204,7 @@ export class TabulaRoomClient {
       capability === "presence" || capability === "read" || capability === "write"
     ) ?? (writeAccess ? ["presence", "read", "write"] : ["presence", "read"]);
     this.actor = createRoomActor({
-      id: `tabula-mcp-${randomUUID()}`,
+      id: identityId?.trim() || `tabula-mcp-${randomUUID()}`,
       kind: "agent",
       client: "tabula-mcp",
       name: identityName,
@@ -553,6 +557,34 @@ export class TabulaRoomClient {
       changes: appliedChanges,
       changedDocumentIds: [...changedDocumentIds],
     };
+  }
+
+  async upsertComment(comment: WorkspaceRoomComment) {
+    this.assertWritable("write comments");
+    this.assertHydrated("write comments");
+    await this.requireClient().upsertComment(comment);
+    markOperationCommitted("comment_upsert");
+  }
+
+  async addCommentReply(commentId: string, reply: WorkspaceRoomCommentReply) {
+    this.assertWritable("reply to comments");
+    this.assertHydrated("reply to comments");
+    await this.requireClient().addCommentReply(commentId, reply);
+    markOperationCommitted("comment_reply");
+  }
+
+  async setCommentResolved(commentId: string, resolved: boolean) {
+    this.assertWritable("resolve comments");
+    this.assertHydrated("resolve comments");
+    await this.requireClient().setCommentResolved(commentId, resolved);
+    markOperationCommitted("comment_resolve");
+  }
+
+  async deleteComment(commentId: string) {
+    this.assertWritable("delete comments");
+    this.assertHydrated("delete comments");
+    await this.requireClient().deleteComment(commentId);
+    markOperationCommitted("comment_delete");
   }
 
   async flushCheckpoint() {

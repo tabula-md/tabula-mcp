@@ -399,7 +399,8 @@ const run = async () => {
     await withMcpClient({ serverEntrypoint: options.serverEntrypoint, roomUrl, appOrigin, jsonUrl, firebaseConfig }, async (client) => {
       const expectedTools = [
         "start_session", "join_room", "leave_session", "list_files", "read_file", "read_multiple_files",
-        "search_files", "write_file", "write_files", "edit_file", "create_directory",
+        "search_files", "list_comments", "add_comment", "reply_to_comment", "resolve_comment", "delete_comment",
+        "write_file", "write_files", "edit_file", "create_directory",
         "move_file", "delete_path", "import_copy", "export_copy",
       ];
       assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), expectedTools);
@@ -491,10 +492,34 @@ const run = async () => {
       }
       assert(afterHumanEdit?.content.includes("Human browser edit."), "MCP should observe browser-originated text");
 
+      const addedComment = await callTool(client, "add_comment", {
+        sessionId: session.sessionId,
+        path: "README.md",
+        body: "Verify the E2E title.",
+        startLine: 1,
+        endLine: 1,
+      });
+      const listedComments = await callTool(client, "list_comments", {
+        sessionId: session.sessionId,
+      });
+      assert.equal(listedComments.comments[0]?.id, addedComment.commentId);
+      await callTool(client, "reply_to_comment", {
+        sessionId: session.sessionId,
+        commentId: addedComment.commentId,
+        body: "Verified by the second pass.",
+      });
+      await callTool(client, "resolve_comment", {
+        sessionId: session.sessionId,
+        commentId: addedComment.commentId,
+        resolved: true,
+      });
+
       const sessionCopy = await callTool(client, "export_copy", {
         sessionId: session.sessionId,
       });
       assert.equal(sessionCopy.fileCount, 3);
+      const importedSessionCopy = await callTool(client, "import_copy", { copyUrl: sessionCopy.copyUrl });
+      assert.equal(importedSessionCopy.commentCount, 1, "Session Copy should preserve comment threads");
       const openedSessionCopy = await openJsonCopy({
         browser,
         copyUrl: sessionCopy.copyUrl,

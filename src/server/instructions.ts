@@ -17,6 +17,8 @@ export const createCoreInstructions = ({
   "Use Edit File for small exact replacements; stale edits rebase only when their text anchors remain safe.",
   "Move or Rename accepts files and directories; create a missing destination directory first.",
   "Delete Path requires recursive true for a non-empty directory.",
+  "Use List Comments before replying, resolving, reopening, or deleting a comment; comment IDs belong to one live session.",
+  "Add Comment accepts an inclusive startLine and endLine together, or neither for a file-level comment.",
   "When given a #json URL, use Import Copy, keep the URL private, and preserve the returned relative paths when the user asks to materialize the Markdown locally.",
   "Import Copy does not join a live session or write to the filesystem; use the host's file tools and do not overwrite existing files without the user's approval.",
   "When the user wants multiple new Markdown files without a live session, call Export Copy once with files so they open as one Tabula workspace.",

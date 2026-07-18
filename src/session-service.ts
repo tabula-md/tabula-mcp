@@ -6,6 +6,7 @@ import { createFirebaseWorkspaceRoomCheckpointStore } from "./room-checkpoints.j
 import { TabulaRoomClient } from "./room-client.js";
 import { startWorkspaceRoom } from "./room-session.js";
 import type { StoredWorkspace } from "./workspaces.js";
+import type { TabulaAgentIdentity } from "./agent-identity.js";
 import { abortableOperation, markOperationCommitted, throwIfOperationAborted } from "./server/operation-context.js";
 
 const summarizeSession = async (client: TabulaRoomClient) => {
@@ -25,11 +26,13 @@ export const joinRoomSession = async ({
   roomUrl,
   env,
   writeEnabled,
+  identity,
 }: {
   registry: SessionRegistry;
   roomUrl: string;
   env?: RuntimeEnvironment;
   writeEnabled: boolean;
+  identity: TabulaAgentIdentity;
 }) => {
   let parsedRoom: ReturnType<typeof parseRoomShareUrl>;
   try {
@@ -53,6 +56,9 @@ export const joinRoomSession = async ({
     parsedRoom,
     roomServerUrl,
     writeAccess: writeEnabled,
+    identityId: identity.id,
+    identityName: identity.name,
+    identityColor: identity.color,
     roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
   });
   await registry.reserve(client.sessionId);
@@ -89,12 +95,14 @@ export const startWorkspaceSession = async ({
   env,
   writeEnabled,
   allowTemporaryRooms,
+  identity,
 }: {
   registry: SessionRegistry;
   workspace: StoredWorkspace;
   env?: RuntimeEnvironment;
   writeEnabled: boolean;
   allowTemporaryRooms: boolean;
+  identity: TabulaAgentIdentity;
 }) => {
   const started = await startWorkspaceRoom({
     registry,
@@ -103,6 +111,9 @@ export const startWorkspaceSession = async ({
     appOrigin: env?.TABULA_APP_ORIGIN?.trim() || "https://tabula.md",
     allowTemporary: allowTemporaryRooms,
     writeAccess: writeEnabled,
+    identityId: identity.id,
+    identityName: identity.name,
+    identityColor: identity.color,
   });
   return {
     sessionId: started.sessionId,

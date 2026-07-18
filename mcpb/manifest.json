@@ -4,7 +4,7 @@
   "display_name": "Tabula MCP",
   "version": "0.5.0",
   "description": "Let Claude work with people in shared Tabula Markdown workspaces.",
-  "long_description": "Turn Markdown created in Claude or local files into shared Tabula workspaces. Claude can start or join encrypted live sessions, list, read, search, edit, organize, and delete Markdown files, export fixed encrypted copies, and import a #json copy for local materialization. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
+  "long_description": "Turn Markdown created in Claude or local files into shared Tabula workspaces. Claude can start or join encrypted live sessions, work with Markdown files and comment threads, export fixed encrypted copies, and import a #json copy for local materialization. Room and copy keys stay in URL fragments; relays and snapshot storage receive encrypted data.",
   "author": {
     "name": "Tabula",
     "url": "https://tabula.md"
@@ -62,6 +62,26 @@
     {
       "name": "search_files",
       "description": "Search Markdown paths and contents with line-numbered context."
+    },
+    {
+      "name": "list_comments",
+      "description": "List open, resolved, or all comment threads in a live session."
+    },
+    {
+      "name": "add_comment",
+      "description": "Add a file-level or line-anchored comment to a Markdown file."
+    },
+    {
+      "name": "reply_to_comment",
+      "description": "Reply to an existing comment thread in a live session."
+    },
+    {
+      "name": "resolve_comment",
+      "description": "Resolve or reopen a comment thread in a live session."
+    },
+    {
+      "name": "delete_comment",
+      "description": "Permanently delete a comment thread and its replies."
     },
     {
       "name": "write_file",

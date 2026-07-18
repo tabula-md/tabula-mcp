@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added first-class live comment tools for listing, adding line-anchored or
+  file-level comments, replying, resolving or reopening, and deleting threads.
+- Kept one agent identity across every Room joined by the same MCP connection,
+  with host-aware names and optional operator overrides.
+
 ## 0.5.0
 
 - Removed the redundant `tabula_` prefix from all model-facing tools. MCP hosts
