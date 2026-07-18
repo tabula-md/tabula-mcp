@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+const releaseManifest = JSON.parse(await readFile("dist/release-manifest.json", "utf8"));
 const version = packageJson.version;
 const tag = `v${version}`;
 const expectedAssets = new Set([
@@ -9,6 +10,7 @@ const expectedAssets = new Set([
   `tabula-mcp-${version}.mcpb.sha256`,
   "tabula-mcp.mcpb",
   "tabula-mcp.mcpb.sha256",
+  "release-manifest.json",
 ]);
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -44,4 +46,30 @@ for (const asset of expectedAssets) {
   assert.ok(actualAssets.has(asset), `GitHub Release ${tag} is missing ${asset}.`);
 }
 
-console.log(`Published npm package and GitHub Release verified for ${tag}`);
+const manifestAsset = release.assets.find((asset) => asset.name === "release-manifest.json");
+const manifestResponse = await fetch(manifestAsset.browser_download_url, {
+  headers: process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {},
+});
+assert.equal(manifestResponse.status, 200, "Published release manifest could not be downloaded.");
+const publishedManifest = await manifestResponse.json();
+assert.equal(publishedManifest.releaseVersion, version);
+assert.equal(publishedManifest.releaseTag, tag);
+assert.equal(publishedManifest.sourceCommit, releaseManifest.sourceCommit);
+
+const healthUrl = new URL(releaseManifest.worker.healthPath, releaseManifest.worker.origin);
+let productionHealth;
+for (let attempt = 1; attempt <= 12; attempt += 1) {
+  const response = await fetch(healthUrl);
+  if (response.ok) {
+    const health = await response.json();
+    if (health.ok === true && health.version === version) {
+      productionHealth = health;
+      break;
+    }
+  }
+  if (attempt < 12) await sleep(5_000);
+}
+assert(productionHealth, `Production health did not report Tabula MCP ${version} within 60 seconds.`);
+assert.equal(productionHealth.service, releaseManifest.worker.name);
+
+console.log(`Published npm package, GitHub Release, and production Worker verified for ${tag}`);

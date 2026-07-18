@@ -110,6 +110,7 @@ recognized as moves. See [Local folder sync](docs/local-sync.md).
 - [Local folder sync](docs/local-sync.md)
 - [Self-hosting](docs/deployment.md)
 - [Security model](docs/security-model.md)
+- [Release process](docs/releasing.md)
 - [Privacy policy](PRIVACY.md)
 - [Changelog](CHANGELOG.md)
 

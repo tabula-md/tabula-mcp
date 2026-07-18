@@ -21,10 +21,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20.19.0
           cache: npm
@@ -42,10 +42,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22.12.0
           cache: npm
@@ -59,6 +59,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Load pinned interoperability revisions
+        id: manifest
+        run: node scripts/export-release-manifest.mjs
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
@@ -66,22 +70,28 @@ jobs:
         run: npm run release:verify
 
       - name: Checkout Tabula browser dependencies
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          repository: tabula-md/tabula-md
+          repository: ${{ steps.manifest.outputs.tabula_md_repository }}
+          ref: ${{ steps.manifest.outputs.tabula_md_ref }}
           path: deps/tabula-md
 
       - name: Checkout Room service
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          repository: tabula-md/tabula-room
+          repository: ${{ steps.manifest.outputs.tabula_room_repository }}
+          ref: ${{ steps.manifest.outputs.tabula_room_ref }}
           path: deps/tabula-room
 
       - name: Checkout Copy service
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          repository: tabula-md/tabula-json
+          repository: ${{ steps.manifest.outputs.tabula_json_repository }}
+          ref: ${{ steps.manifest.outputs.tabula_json_ref }}
           path: deps/tabula-json
+
+      - name: Verify pinned interoperability commits
+        run: node scripts/check-interoperability-checkouts.mjs
 
       - name: Install interoperability dependencies
         run: npm ci --prefix deps/tabula-md && npm ci --prefix deps/tabula-room && npm ci --prefix deps/tabula-json

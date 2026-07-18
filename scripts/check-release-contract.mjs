@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadReleaseManifest } from "./lib/release-manifest.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const readText = (relativePath) => readFile(path.join(rootDir, relativePath), "utf8");
@@ -17,6 +18,8 @@ const packageJson = await readJson("package.json");
 const manifest = await readJson("mcpb/manifest.json");
 const plugin = await readJson("plugins/tabula-mcp/.claude-plugin/plugin.json");
 const mcpConfig = await readJson("plugins/tabula-mcp/.mcp.json");
+const releaseManifest = await loadReleaseManifest(path.join(rootDir, "release-manifest.json"));
+const wrangler = JSON.parse((await readText("wrangler.jsonc")).replace(/^\s*\/\/.*$/gm, ""));
 const sourceVersion = await readText("src/version.ts");
 const appSource = await readText("src/app/document-app.js");
 const changelog = await readText("CHANGELOG.md");
@@ -26,6 +29,20 @@ const expectedTag = `v${version}`;
 assert.match(version, /^\d+\.\d+\.\d+$/, "Package version must be semver without a prefix.");
 assert.equal(manifest.version, version, "MCPB manifest version must match package.json.");
 assert.equal(plugin.version, version, "Claude Code plugin version must match package.json.");
+assert.equal(releaseManifest.releaseVersion, version, "Release manifest version must match package.json.");
+assert.equal(releaseManifest.packages?.mcp?.version, version, "Release manifest MCP package must match package.json.");
+assert.equal(
+  releaseManifest.packages?.core?.version,
+  packageJson.dependencies?.["@tabula-md/tabula"],
+  "Release manifest core version must match the exact package dependency.",
+);
+assert.equal(releaseManifest.artifacts?.mcpb, `tabula-mcp-${version}.mcpb`);
+assert.equal(releaseManifest.artifacts?.mcpbStable, "tabula-mcp.mcpb");
+assert.equal(releaseManifest.artifacts?.claudePluginVersion, version);
+assert.equal(releaseManifest.worker?.name, wrangler.name, "Release manifest Worker must match wrangler.jsonc.");
+for (const dependency of Object.values(releaseManifest.interoperability ?? {})) {
+  assert.match(dependency.ref, /^[0-9a-f]{40}$/, "Interoperability refs must be immutable commit SHAs.");
+}
 assert.deepEqual(
   mcpConfig.mcpServers?.tabula?.args,
   ["-y", `@tabula-md/mcp@${version}`],

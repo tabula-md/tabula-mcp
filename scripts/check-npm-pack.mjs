@@ -36,6 +36,7 @@ const requiredFiles = [
   "SECURITY.md",
   "CONTRIBUTING.md",
   "CHANGELOG.md",
+  "release-manifest.json",
 ];
 
 const isForbiddenGeneratedArtifact = (filePath) =>
