@@ -1,4 +1,9 @@
 import { sha256Text } from "../src/crypto.js";
+import {
+  WORKSPACE_ROOM_MAX_DOCUMENTS,
+  WORKSPACE_ROOM_MAX_FOLDERS,
+  validateWorkspaceRoomStructureLimits,
+} from "@tabula-md/tabula/workspace-limits";
 import type { SessionRegistry } from "../src/registry.js";
 import type { WorkspaceChange, WorkspaceRoomState } from "../src/workspace-contract.js";
 import {
@@ -6,6 +11,7 @@ import {
   deleteSessionPath,
   editSessionFile,
   listSessionFiles,
+  maxSessionListEntries,
   maxSessionReadCharacters,
   maxSessionReadFiles,
   moveSessionFile,
@@ -151,6 +157,68 @@ describe("workspace file service", () => {
     workspace.version += 1;
     await expect(listSessionFiles({ registry, sessionId, limit: 2, cursor: first.nextCursor }))
       .rejects.toMatchObject({ code: "stale_cursor" });
+  });
+
+  it("lists the largest shared workspace across every page without loss or duplication", async () => {
+    const { docs, registry, workspace } = await createHarness();
+    const now = "2026-07-17T00:00:00.000Z";
+    const existingDocuments = workspace.nodes.filter((node) => node.type === "document").length;
+    const existingFolders = workspace.nodes.filter((node) => node.type === "folder").length;
+
+    for (let index = existingDocuments; index < WORKSPACE_ROOM_MAX_DOCUMENTS; index += 1) {
+      const id = `document-${index.toString().padStart(3, "0")}`;
+      const content = `# Document ${index}\n`;
+      docs[id] = content;
+      workspace.nodes.push({
+        id,
+        type: "document",
+        parentId: workspace.rootId,
+        title: `${id}.md`,
+        order: index,
+        createdAt: now,
+        updatedAt: now,
+        sha256: await sha256Text(content),
+        textLength: content.length,
+      });
+    }
+    for (let index = existingFolders; index < WORKSPACE_ROOM_MAX_FOLDERS; index += 1) {
+      const id = `folder-${index.toString().padStart(3, "0")}`;
+      workspace.nodes.push({
+        id,
+        type: "folder",
+        parentId: workspace.rootId,
+        title: id,
+        order: index,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    expect(validateWorkspaceRoomStructureLimits({
+      rootId: workspace.rootId,
+      nodes: workspace.nodes,
+    })).toEqual({ ok: true });
+
+    const paths: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const page = await listSessionFiles({
+        registry,
+        sessionId,
+        limit: maxSessionListEntries,
+        ...(cursor ? { cursor } : {}),
+      });
+      paths.push(...page.files.map((file) => file.path));
+      pages += 1;
+      cursor = page.nextCursor;
+      expect(page.truncated).toBe(Boolean(cursor));
+    } while (cursor);
+
+    const expectedEntries = workspace.nodes.length - 1;
+    expect(paths).toHaveLength(expectedEntries);
+    expect(new Set(paths).size).toBe(expectedEntries);
+    expect(pages).toBe(Math.ceil(expectedEntries / maxSessionListEntries));
   });
 
   it("reads and searches Markdown without exposing document ids", async () => {
