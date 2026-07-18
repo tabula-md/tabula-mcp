@@ -443,6 +443,23 @@ describe("workspace file service", () => {
     expect(checkpoint.flushes).toBe(3);
   });
 
+  it("reports a missing destination parent before applying a move", async () => {
+    const { checkpoint, registry } = await createHarness();
+    const readme = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;
+    await expect(moveSessionFile({
+      registry,
+      sessionId,
+      source: "README.md",
+      destination: "missing/overview.md",
+      expectedRevision: readme.revision,
+    })).rejects.toMatchObject({
+      code: "parent_folder_not_found",
+      details: { path: "missing" },
+      retry: expect.stringContaining("Create the destination directory first"),
+    });
+    expect(checkpoint.flushes).toBe(0);
+  });
+
   it("guards deletion with file revisions and explicit recursive intent", async () => {
     const { checkpoint, registry } = await createHarness();
     const readme = (await readSessionFiles({ registry, sessionId, paths: ["README.md"] })).files[0]!;

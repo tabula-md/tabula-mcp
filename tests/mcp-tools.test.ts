@@ -332,7 +332,9 @@ describe("core MCP contract", () => {
       expect(tools.write_files?.description).toContain("Atomically");
       expect(tools.edit_file?.description).toContain("safe match");
       expect(tools.create_directory?.description).toContain("missing parents");
-      expect(tools.move_file?.description).toContain("Move or rename");
+      expect(tools.move_file?.description).toContain("destination parent must already exist");
+      expect(tools.move_file?.inputSchema.properties?.destination?.description)
+        .toContain("parent directory already exists");
       expect(tools.delete_path?.description).toContain("recursive true");
       expect(tools.import_copy?.description).toContain("does not join");
       expect(tools.export_copy?.description).toContain("exactly one of files or sessionId");
