@@ -78,6 +78,11 @@ const mutationStateOutputSchema = {
   persisted: z.boolean(),
   checkpointPending: z.boolean(),
 };
+const sessionFileOutputSchema = z.object({
+  path: z.string(),
+  revision: sha256Schema,
+  textLength: z.number().int().nonnegative(),
+});
 
 const annotations = (readOnly: boolean, openWorld = false, destructive = false, idempotent = readOnly) => ({
   readOnlyHint: readOnly,
@@ -151,6 +156,7 @@ export const registerCoreTools = (
         ready: z.boolean(),
         canWrite: z.boolean(),
         fileCount: z.number().int().nonnegative(),
+        files: z.array(sessionFileOutputSchema),
         otherCollaboratorCount: z.number().int().nonnegative(),
         sessionUrl: z.string().url(),
         ...mutationStateOutputSchema,
