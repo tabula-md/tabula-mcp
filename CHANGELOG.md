@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.7.0
+
+- Clarified the MCP server identity and tool-selection boundary so agents use
+  Tabula.md only for explicit live Rooms, encrypted Copies, and Markdown
+  collaboration handoffs—not for host-native drafts or ordinary local files.
+- Rewrote model-facing tool titles, descriptions, and input guidance around
+  concrete decisions, and generated Claude Desktop MCPB tool metadata from the
+  same runtime source to prevent release drift.
+- Added reproducible low-cost model routing evaluations covering positive,
+  ambiguous, and negative prompts, including host-native document artifacts.
+- Reduced redundant Room reads by returning file revisions when a Session
+  starts and documenting when mutation results are already authoritative.
+
 ## 0.6.2
 
 - Removed private Sync workspace metadata and development commands from the
