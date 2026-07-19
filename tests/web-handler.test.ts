@@ -35,11 +35,11 @@ describe("Tabula MCP Web handler", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       service: "tabula-mcp",
-      version: "0.6.2",
+      version: "0.7.0",
       writeAccess: "enabled",
       deploymentMode: "remote",
     });
-    expect(handler.version).toBe("0.6.2");
+    expect(handler.version).toBe("0.7.0");
     expect(handler.writeAccess).toBe("enabled");
   });
 
@@ -53,7 +53,7 @@ describe("Tabula MCP Web handler", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       service: "tabula-mcp",
-      version: "0.6.2",
+      version: "0.7.0",
       writeAccess: "enabled",
       deploymentMode: "remote",
     });
