@@ -517,7 +517,40 @@ describe("core MCP workflows", () => {
         ready: true,
         canWrite: true,
         fileCount: 2,
+        files: [
+          {
+            path: "research.md",
+            revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+            textLength: "# Research\n".length,
+          },
+          {
+            path: "sources/notes.md",
+            revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+            textLength: "# Notes\n".length,
+          },
+        ],
         sessionUrl: expect.stringMatching(/^https:\/\/tabula\.md\/#room=/),
+      });
+
+      const session = started.structuredContent as {
+        sessionId: string;
+        files: Array<{ path: string; revision: string }>;
+      };
+      const research = session.files.find((file) => file.path === "research.md")!;
+      const edited = await client.callTool({
+        name: "edit_file",
+        arguments: {
+          sessionId: session.sessionId,
+          path: research.path,
+          expectedRevision: research.revision,
+          edits: [{ oldText: "Research", newText: "Reviewed Research" }],
+        },
+      });
+      expect(edited.isError).not.toBe(true);
+      expect(edited.structuredContent).toMatchObject({
+        path: "research.md",
+        changed: true,
+        revision: expect.stringMatching(/^[a-f0-9]{64}$/),
       });
     });
   });

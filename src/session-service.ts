@@ -120,6 +120,11 @@ export const startWorkspaceSession = async ({
     ready: started.stateReceived,
     canWrite: started.writeAccess,
     fileCount: started.published.emittedDocumentCount,
+    files: workspace.documents.map((document) => ({
+      path: document.path,
+      revision: document.sha256,
+      textLength: document.textLength,
+    })),
     otherCollaboratorCount: started.collaborators.length,
     sessionUrl: started.roomUrl,
     applied: true as const,

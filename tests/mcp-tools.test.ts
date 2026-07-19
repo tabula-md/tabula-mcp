@@ -194,6 +194,9 @@ describe("core MCP contract", () => {
       expect(instructions).toContain("Keep every room and copy URL private");
       expect(instructions).toContain("Use Read File for one file");
       expect(instructions).toContain("Read Multiple Files for a small batch");
+      expect(instructions).toContain("Start Session returns the initial file paths and revisions");
+      expect(instructions).toContain("mutation result is authoritative");
+      expect(instructions).toContain("Do not read or list again only to verify it");
       expect(instructions).toContain("pass their revisions to Write File, Write Files, Edit File, Move or Rename, or Delete Path");
       expect(instructions).toContain("Use Edit File for small exact replacements");
       expect(instructions).toContain("Move or Rename accepts files and directories");
