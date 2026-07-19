@@ -21,10 +21,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 20.19.0
           cache: npm
@@ -42,10 +42,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 22.12.0
           cache: npm
@@ -70,21 +70,21 @@ jobs:
         run: npm run release:verify
 
       - name: Checkout Tabula browser dependencies
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ steps.manifest.outputs.tabula_md_repository }}
           ref: ${{ steps.manifest.outputs.tabula_md_ref }}
           path: deps/tabula-md
 
       - name: Checkout Room service
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ steps.manifest.outputs.tabula_room_repository }}
           ref: ${{ steps.manifest.outputs.tabula_room_ref }}
           path: deps/tabula-room
 
       - name: Checkout Copy service
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ steps.manifest.outputs.tabula_json_repository }}
           ref: ${{ steps.manifest.outputs.tabula_json_ref }}
