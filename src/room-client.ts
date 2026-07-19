@@ -252,10 +252,16 @@ export class TabulaRoomClient {
     return this.checkpointStore.enabled ? "durable" : "temporary";
   }
 
-  async connect({ waitForStateMs = 0 }: { waitForStateMs?: number } = {}) {
+  async connect({
+    waitForStateMs = 0,
+    waitForPresenceMs = 0,
+  }: {
+    waitForStateMs?: number;
+    waitForPresenceMs?: number;
+  } = {}) {
     const client = await this.ensureClient();
     const localBootstrap = this.initialWorkspacePublished;
-    await client.connect({ waitForStateMs });
+    await client.connect({ waitForStateMs, waitForPresenceMs });
     this.connected = true;
     if (client.getState().hydrationStatus === "ready") this.markReceivedState();
     return localBootstrap ? "local-bootstrap" : this.recoveryStatus();
@@ -281,7 +287,9 @@ export class TabulaRoomClient {
       sha256: await sha256Text(this.markdown),
       socketConnected: state.status === "connected",
       ...this.roomStateReadiness(),
-      peerCount: state.collaborators.length,
+      presenceStatus: state.presenceStatus,
+      connectedPeerCount: state.connectedPeerCount,
+      peerCount: state.connectedPeerCount,
       collaborators: this.collaboratorList,
       workspaceMode: true,
       activeDocumentId: this.activeDocumentId,

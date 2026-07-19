@@ -6,6 +6,7 @@ const roomMock = vi.hoisted(() => {
   const hash = (value: string) => `${value.length.toString(16).padStart(64, "0")}`;
   let sequence = 0;
   let stateReceived = true;
+  let presenceReady = true;
   const actorIds: string[] = [];
   class MockRoomClient {
     readonly sessionId = `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`;
@@ -54,6 +55,7 @@ const roomMock = vi.hoisted(() => {
       this.workspace.roomId = parsedRoom.roomId;
     }
     async connect() { return "checkpoint-disabled"; }
+    async waitForPresence() { return presenceReady ? "ready" as const : "degraded" as const; }
     async getStatus() {
       return {
         sessionId: this.sessionId,
@@ -62,6 +64,8 @@ const roomMock = vi.hoisted(() => {
         roomServerUrl: this.roomServerUrl,
         stateReceived,
         hydrationStatus: stateReceived ? "ready" : "waiting-for-peer-state",
+        presenceStatus: presenceReady ? "ready" as const : "degraded" as const,
+        connectedPeerCount: 1,
         writeAccess: this.writeAccess,
         collaborators: [{ id: "human" }],
         recoveryMode: "temporary",
@@ -166,6 +170,9 @@ const roomMock = vi.hoisted(() => {
     setStateReceived(value: boolean) {
       stateReceived = value;
     },
+    setPresenceReady(value: boolean) {
+      presenceReady = value;
+    },
     actorIds,
   };
 });
@@ -198,6 +205,7 @@ const withClient = async (
 afterEach(() => {
   globalThis.fetch = originalFetch;
   roomMock.setStateReceived(true);
+  roomMock.setPresenceReady(true);
   roomMock.actorIds.splice(0);
   vi.restoreAllMocks();
 });
@@ -211,9 +219,16 @@ describe("core MCP workflows", () => {
         ready: boolean;
         canWrite: boolean;
         fileCount: number;
+        presenceReady: boolean;
         otherCollaboratorCount: number;
       };
-      expect(session).toMatchObject({ ready: true, canWrite: true, fileCount: 2, otherCollaboratorCount: 1 });
+      expect(session).toMatchObject({
+        ready: true,
+        canWrite: true,
+        fileCount: 2,
+        presenceReady: true,
+        otherCollaboratorCount: 1,
+      });
       expect(JSON.stringify(joined.structuredContent)).not.toContain(roomUrl);
 
       const resources = await client.listResources();
@@ -400,6 +415,33 @@ describe("core MCP workflows", () => {
         arguments: { sessionId: session.sessionId, commentId },
       });
       expect(deletedComment.structuredContent).toMatchObject({ deleted: true, commentId });
+    });
+  });
+
+  it("reuses a settled Room join while refreshing the reported state", async () => {
+    await withClient(async (client) => {
+      const first = (await client.callTool({ name: "join_room", arguments: { roomUrl } })).structuredContent as {
+        sessionId: string;
+        reused: boolean;
+      };
+      const second = (await client.callTool({ name: "join_room", arguments: { roomUrl } })).structuredContent as {
+        sessionId: string;
+        reused: boolean;
+      };
+
+      expect(first).toMatchObject({ reused: false });
+      expect(second).toEqual(expect.objectContaining({ sessionId: first.sessionId, reused: true }));
+      expect(roomMock.actorIds).toHaveLength(1);
+    });
+  });
+
+  it("does not present a collaborator count before presence converges", async () => {
+    roomMock.setPresenceReady(false);
+    await withClient(async (client) => {
+      const joined = await client.callTool({ name: "join_room", arguments: { roomUrl } });
+      expect(joined.isError).not.toBe(true);
+      expect(joined.structuredContent).toMatchObject({ ready: true, presenceReady: false });
+      expect(joined.structuredContent).not.toHaveProperty("otherCollaboratorCount");
     });
   });
 

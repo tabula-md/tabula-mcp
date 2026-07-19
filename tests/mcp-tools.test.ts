@@ -321,6 +321,9 @@ describe("core MCP contract", () => {
       }
       expect(tools.move_file?.inputSchema.properties?.destination?.description)
         .toContain("parent directory already exists");
+      expect(tools.join_room?.annotations?.idempotentHint).toBe(true);
+      expect(tools.join_room?.outputSchema?.required).toContain("presenceReady");
+      expect(tools.join_room?.outputSchema?.required).not.toContain("otherCollaboratorCount");
     });
   });
 

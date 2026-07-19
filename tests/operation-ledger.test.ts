@@ -19,6 +19,24 @@ describe("operation result ledger", () => {
     await expect(operation()).resolves.toEqual({ call: 1 });
   });
 
+  it("coalesces only concurrent calls when settled state must be refreshed", async () => {
+    const ledger = new OperationLedger();
+    let calls = 0;
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const operation = () => ledger.runInFlight("join_room", { roomUrl: "private" }, async () => {
+      calls += 1;
+      await gate;
+      return { call: calls };
+    });
+
+    const first = operation();
+    const concurrent = operation();
+    release?.();
+    await expect(Promise.all([first, concurrent])).resolves.toEqual([{ call: 1 }, { call: 1 }]);
+    await expect(operation()).resolves.toEqual({ call: 2 });
+  });
+
   it("allows retry after a pre-commit failure and expires completed results", async () => {
     let now = 0;
     const ledger = new OperationLedger({ ttlMs: 10, now: () => now });

@@ -43,6 +43,23 @@ export class OperationLedger {
   }
 
   run<T>(toolName: string, input: unknown, operation: () => Promise<T>): Promise<T> {
+    return this.#run(toolName, input, operation, true);
+  }
+
+  /**
+   * Coalesces only concurrent calls. Once the operation settles, a later call
+   * executes again so it can report current session and presence state.
+   */
+  runInFlight<T>(toolName: string, input: unknown, operation: () => Promise<T>): Promise<T> {
+    return this.#run(toolName, input, operation, false);
+  }
+
+  #run<T>(
+    toolName: string,
+    input: unknown,
+    operation: () => Promise<T>,
+    retainSettledResult: boolean,
+  ): Promise<T> {
     const now = this.#now();
     this.#prune(now);
     const fingerprint = operationFingerprint(this.#namespace, toolName, input);
@@ -50,10 +67,21 @@ export class OperationLedger {
     if (existing) return existing.result;
 
     markOperationStarted(toolName);
-    const result = operationIdentities.run(fingerprint, operation).catch((error) => {
-      if (!currentOperationCommit().committed) this.#entries.delete(fingerprint);
-      throw error;
-    });
+    let result: Promise<T>;
+    result = operationIdentities.run(fingerprint, operation)
+      .catch((error) => {
+        if (
+          !currentOperationCommit().committed
+          && this.#entries.get(fingerprint)?.result === result
+        ) this.#entries.delete(fingerprint);
+        throw error;
+      })
+      .finally(() => {
+        if (
+          !retainSettledResult
+          && this.#entries.get(fingerprint)?.result === result
+        ) this.#entries.delete(fingerprint);
+      });
     this.#entries.set(fingerprint, { expiresAt: now + this.#ttlMs, result });
     return result;
   }
