@@ -103,6 +103,9 @@ jobs:
       - name: Resolve release provenance
         run: npm run build:release-manifest -- --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA"
 
+      - name: Verify pinned Tabula.md production
+        run: node scripts/verify-tabula-md-production.mjs
+
       - name: Publish npm package through OIDC
         run: node scripts/publish-npm-release.mjs
 
@@ -136,6 +139,9 @@ jobs:
 
       - name: Restore resolved manifest after Worker build
         run: npm run build:release-manifest -- --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA"
+
+      - name: Verify production collaboration and Copy round trip
+        run: node scripts/smoke-production-collab.mjs
 
       - name: Verify npm, GitHub, and production surfaces
         env:

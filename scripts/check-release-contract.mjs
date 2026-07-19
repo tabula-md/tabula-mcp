@@ -40,6 +40,11 @@ assert.equal(releaseManifest.artifacts?.mcpb, `tabula-mcp-${version}.mcpb`);
 assert.equal(releaseManifest.artifacts?.mcpbStable, "tabula-mcp.mcpb");
 assert.equal(releaseManifest.artifacts?.claudePluginVersion, version);
 assert.equal(releaseManifest.worker?.name, wrangler.name, "Release manifest Worker must match wrangler.jsonc.");
+assert.equal(
+  releaseManifest.interoperability?.tabulaMd?.origin,
+  "https://tabula.md",
+  "Release manifest must verify the canonical Tabula.md production origin.",
+);
 for (const dependency of Object.values(releaseManifest.interoperability ?? {})) {
   assert.match(dependency.ref, /^[0-9a-f]{40}$/, "Interoperability refs must be immutable commit SHAs.");
 }

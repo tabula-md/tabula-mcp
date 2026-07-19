@@ -25,6 +25,7 @@
   },
   "interoperability": {
     "tabulaMd": {
+      "origin": "https://tabula.md",
       "repository": "tabula-md/tabula-md",
       "ref": "37b2fb6d7083a4188d5aa7ad8034846f7b2cc6e7"
     },
