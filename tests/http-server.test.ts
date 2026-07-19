@@ -29,11 +29,11 @@ describe("Tabula MCP HTTP server", () => {
       await expect(response.json()).resolves.toMatchObject({
         ok: true,
         service: "tabula-mcp",
-        version: "0.7.0",
+        version: "0.8.0",
         writeAccess: "enabled",
         deploymentMode: "remote",
       });
-      expect(httpServer.version).toBe("0.7.0");
+      expect(httpServer.version).toBe("0.8.0");
       expect(httpServer.writeAccess).toBe("enabled");
     } finally {
       await httpServer.close();
@@ -76,7 +76,7 @@ describe("Tabula MCP HTTP server", () => {
       await expect(response.json()).resolves.toMatchObject({
         ok: true,
         service: "tabula-mcp",
-        version: "0.7.0",
+        version: "0.8.0",
         writeAccess: "enabled",
         deploymentMode: "remote",
       });
