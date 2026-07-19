@@ -2,6 +2,7 @@ import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it } from "vitest";
+import { TABULA_MCP_PRODUCT_DESCRIPTION } from "../src/public-copy.js";
 import { createTabulaMcpHttpServer, resolveHttpServerOptions } from "../src/server/http.js";
 
 const serverUrl = (address: string, port: number, path = "") => `http://${address}:${port}${path}`;
@@ -52,7 +53,7 @@ describe("Tabula MCP HTTP server", () => {
       const response = await fetch(serverUrl(address.address, address.port, "/"));
 
       await expect(response.json()).resolves.toMatchObject({
-        description: "Connect Codex, Claude, and other MCP clients to shared Tabula workspaces.",
+        description: TABULA_MCP_PRODUCT_DESCRIPTION,
       });
     } finally {
       await httpServer.close();

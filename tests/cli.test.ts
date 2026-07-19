@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CLI_HELP, collectDoctorChecks, formatDoctorReport, getPackageVersion, isDirectRun, parseCliOptions } from "../src/cli.js";
+import { TABULA_MCP_PRODUCT_DESCRIPTION } from "../src/public-copy.js";
 
 describe("CLI entrypoint detection", () => {
   it("recognizes direct execution through a symlinked path", () => {
@@ -57,7 +58,7 @@ describe("CLI options", () => {
 
   it("provides installable client commands in help", () => {
     expect(CLI_HELP).toContain("Tabula MCP");
-    expect(CLI_HELP).toContain("Connect Codex, Claude, and other MCP clients to shared Tabula workspaces.");
+    expect(CLI_HELP).toContain(TABULA_MCP_PRODUCT_DESCRIPTION);
     expect(CLI_HELP).toContain("Local stdio is the default");
     expect(CLI_HELP).toContain("codex mcp add tabula -- npx -y @tabula-md/mcp@latest");
     expect(CLI_HELP).toContain("claude mcp add tabula -- npx -y @tabula-md/mcp@latest");

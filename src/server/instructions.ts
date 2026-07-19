@@ -5,12 +5,14 @@ export const createCoreInstructions = ({
 }: {
   deploymentMode: DeploymentMode;
 }) => [
-  "Tabula turns Markdown produced by the host or local filesystem into live shared sessions or encrypted copies.",
-  "When given a #room URL, join it and keep the URL private.",
+  "Use Tabula.md only when the user explicitly names Tabula.md, provides a tabula.md #room or #json URL, or asks to hand Markdown off as a live encrypted collaboration session or fixed encrypted copy.",
+  "Do not use Tabula.md for private host-native drafts or ordinary local filesystem work.",
+  "New live collaboration: use Start Session. Existing #room URL: use Join Room. Fixed handoff: use Export Copy. Existing #json URL: use Import Copy.",
+  "Keep every room and copy URL private unless the user explicitly asks to share it.",
   "Keep the sessionId returned by Join Room or Start Session and pass it to every Room file tool; never guess or substitute another session.",
   "Use Leave Session when the user asks the agent to leave a live session; this disconnects the agent without deleting Room files.",
   "List files first when the target file is unknown.",
-  "Use Read File for one file or a bounded line range, and Read Files for a small batch.",
+  "Use Read File for one file or a bounded line range, and Read Multiple Files for a small batch.",
   "Read existing files before changing them and pass their revisions to Write File, Write Files, Edit File, Move or Rename, or Delete Path.",
   "Use Search Files to find content with nearby line context across a session.",
   "Use Write File for one complete file and Write Files once for an atomic multi-file change or import.",
