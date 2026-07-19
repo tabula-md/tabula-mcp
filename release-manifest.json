@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "releaseVersion": "0.8.0",
+  "releaseVersion": "0.8.1",
   "packages": {
     "mcp": {
       "name": "@tabula-md/mcp",
-      "version": "0.8.0"
+      "version": "0.8.1"
     },
     "core": {
       "name": "@tabula-md/tabula",
@@ -12,9 +12,9 @@
     }
   },
   "artifacts": {
-    "mcpb": "tabula-mcp-0.8.0.mcpb",
+    "mcpb": "tabula-mcp-0.8.1.mcpb",
     "mcpbStable": "tabula-mcp.mcpb",
-    "claudePluginVersion": "0.8.0"
+    "claudePluginVersion": "0.8.1"
   },
   "worker": {
     "name": "tabula-mcp",
