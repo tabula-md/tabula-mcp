@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.8.0
+
+- Made repeated joins to the same Room reuse one MCP session, including
+  concurrent joins, so agents no longer create duplicate Room connections.
+- Waited for Room presence to converge before reporting collaborators and
+  exposed explicit pending, ready, or degraded presence state instead of
+  treating the relay connection itself as a collaborator.
+- Added a real browser-and-two-MCP-process interoperability test covering
+  presence convergence, stable session reuse, live writes, and encrypted Copy
+  round trips against the pinned Tabula.md 0.8.0 core revision.
+
 ## 0.7.0
 
 - Clarified the MCP server identity and tool-selection boundary so agents use
