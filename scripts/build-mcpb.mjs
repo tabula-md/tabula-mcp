@@ -60,6 +60,9 @@ const writeBundlePackage = async (pkg) => {
 const main = async () => {
   const pkg = await readJson(packageJsonPath);
   const manifest = await readJson(manifestTemplatePath);
+  const { CORE_TOOL_METADATA, CORE_TOOL_NAMES } = await import(
+    new URL("../dist/server/tool-metadata.js", import.meta.url)
+  );
   const outputFile = path.join(distDir, `tabula-mcp-${pkg.version}.mcpb`);
 
   await rm(stageDir, { recursive: true, force: true });
@@ -94,6 +97,11 @@ const main = async () => {
   });
 
   manifest.version = pkg.version;
+  manifest.tools = CORE_TOOL_NAMES.map((name) => ({
+    name,
+    description: CORE_TOOL_METADATA[name].description,
+  }));
+  manifest.tools_generated = true;
   await writeFile(path.join(stageDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(path.join(stageDir, ".mcpbignore"), "package-lock.json\nnode_modules/.package-lock.json\n");
 

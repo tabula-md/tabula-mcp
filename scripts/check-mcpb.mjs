@@ -27,6 +27,7 @@ const requiredFiles = [
   "server/server/index.js",
   "server/server/create-server.js",
   "server/server/register-core-tools.js",
+  "server/server/tool-metadata.js",
   "server/server/instructions.js",
   "server/server/http.js",
   "server/server/operational-policy.js",
@@ -243,6 +244,11 @@ const checkBundleDir = async (bundleDir, label, rootPackage) => {
     `MCPB ${label} manifest tools must match the bundled direct-collaboration server's model-facing tools`,
   );
   for (const tool of modelFacingTools) {
+    const manifestTool = manifest.tools.find((candidate) => candidate.name === tool.name);
+    assert(
+      manifestTool?.description === tool.description,
+      `MCPB ${label} manifest description for ${tool.name} must match the bundled runtime`,
+    );
     assert(typeof tool.title === "string" && tool.title.trim(), `MCPB ${label} tool ${tool.name} must have a display title`);
     assert(tool.outputSchema, `MCPB ${label} tool ${tool.name} must have an output schema`);
     assert(tool.annotations, `MCPB ${label} tool ${tool.name} must have safety annotations`);
