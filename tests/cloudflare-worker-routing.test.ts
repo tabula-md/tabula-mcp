@@ -21,7 +21,7 @@ describe("Cloudflare Worker MCP session routing", () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       service: "tabula-mcp",
-      version: "0.8.0",
+      version: "0.8.1",
       deploymentMode: "remote",
       code: "runtime_not_ready",
       missing: ["TABULA_MCP_SESSIONS", "TABULA_MCP_QUOTA", "TABULA_MCP_QUOTA_HASH_SECRET"],
