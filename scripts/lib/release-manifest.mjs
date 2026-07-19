@@ -18,6 +18,11 @@ export const loadReleaseManifest = async (filePath = "release-manifest.json") =>
     assert.match(dependency.repository, /^[\w.-]+\/[\w.-]+$/, `${name} repository must be owner/name.`);
     assert.match(dependency.ref, shaPattern, `${name} ref must be an immutable 40-character commit SHA.`);
   }
+  assert.match(
+    manifest.interoperability?.tabulaMd?.origin,
+    /^https:\/\//,
+    "Tabula.md production origin must use HTTPS.",
+  );
   assert.equal(Object.keys(manifest.interoperability ?? {}).length, 3, "Release manifest must pin three companion repositories.");
   return manifest;
 };
