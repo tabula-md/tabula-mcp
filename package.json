@@ -103,6 +103,7 @@
     "release:verify:full": "npm run release:verify && npm run test:e2e:local-collab",
     "prepublishOnly": "npm run release:verify",
     "measure:mcp-context": "npm run build && node scripts/measure-mcp-context.mjs",
+    "eval:tool-routing": "npm run build && node scripts/eval-tool-routing.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "typecheck:worker": "tsc -p tsconfig.worker-tests.json --noEmit"
   },

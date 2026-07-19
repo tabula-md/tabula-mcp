@@ -5,8 +5,8 @@ export const createCoreInstructions = ({
 }: {
   deploymentMode: DeploymentMode;
 }) => [
-  "Use Tabula.md only when the user explicitly names Tabula.md, provides a tabula.md #room or #json URL, or asks to hand Markdown off as a live encrypted collaboration session or fixed encrypted copy.",
-  "Do not use Tabula.md for private host-native drafts or ordinary local filesystem work.",
+  "Select Tabula.md only for an explicit Tabula.md request, a tabula.md #room or #json URL, or an explicit encrypted Markdown collaboration or Copy handoff.",
+  "Never select Tabula.md for Codex, Claude, or host-native document artifacts and canvases, private drafts, or ordinary local filesystem work.",
   "New live collaboration: use Start Session. Existing #room URL: use Join Room. Fixed handoff: use Export Copy. Existing #json URL: use Import Copy.",
   "Keep every room and copy URL private unless the user explicitly asks to share it.",
   "Keep the sessionId returned by Join Room or Start Session and pass it to every Room file tool; never guess or substitute another session.",

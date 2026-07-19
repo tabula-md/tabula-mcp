@@ -107,7 +107,7 @@ describe("core MCP contract", () => {
       expect(client.getServerVersion()).toMatchObject({
         name: "tabula-mcp",
         title: "Tabula.md",
-        description: expect.stringContaining("explicitly wants to hand Markdown off"),
+        description: expect.stringContaining("Select this server only for an explicit Tabula.md request"),
         websiteUrl: "https://tabula.md",
         icons: [
           {
@@ -116,7 +116,7 @@ describe("core MCP contract", () => {
           },
         ],
       });
-      expect(client.getServerVersion()?.description).toContain("Do not use it for private host-native drafts");
+      expect(client.getServerVersion()?.description).toContain("Codex, Claude, or host-native document artifacts and canvases");
     });
   });
 
@@ -187,8 +187,8 @@ describe("core MCP contract", () => {
     await withClient(async (client) => {
       const instructions = client.getInstructions() ?? "";
       const discoveryPrefix = instructions.slice(0, 512);
-      expect(discoveryPrefix).toContain("Use Tabula.md only when");
-      expect(discoveryPrefix).toContain("Do not use Tabula.md for private host-native drafts");
+      expect(discoveryPrefix).toContain("Select Tabula.md only for an explicit Tabula.md request");
+      expect(discoveryPrefix).toContain("Codex, Claude, or host-native document artifacts and canvases");
       expect(discoveryPrefix).toContain("#room");
       expect(discoveryPrefix).toContain("#json");
       expect(instructions).toContain("Keep every room and copy URL private");
@@ -314,7 +314,7 @@ describe("core MCP contract", () => {
         "write_file",
         "write_files",
       ]) {
-        expect(tools[name]?.description).toMatch(/Do not|do not/);
+        expect(tools[name]?.description).toMatch(/Do not|do not|Never/);
       }
       expect(tools.move_file?.inputSchema.properties?.destination?.description)
         .toContain("parent directory already exists");
