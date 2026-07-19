@@ -12,12 +12,14 @@ import { abortableOperation, markOperationCommitted, throwIfOperationAborted } f
 const summarizeSession = async (client: TabulaRoomClient) => {
   const status = await client.getStatus();
   const workspace = status.stateReceived ? await client.readWorkspace() : null;
+  const presenceReady = status.presenceStatus === "ready";
   return {
     sessionId: status.sessionId,
     ready: status.stateReceived,
     canWrite: status.writeAccess,
     fileCount: workspace?.documents.length ?? 0,
-    otherCollaboratorCount: status.collaborators.length,
+    presenceReady,
+    ...(presenceReady ? { otherCollaboratorCount: status.collaborators.length } : {}),
   };
 };
 
@@ -50,43 +52,47 @@ export const joinRoomSession = async ({
     appOrigin: parsedRoom.appOrigin,
     ...(env ? { env } : {}),
   });
-  const existing = registry.findByShareUrl(parsedRoom.shareUrl);
-  if (existing) return { ...await summarizeSession(existing), reused: true };
-  const client = new TabulaRoomClient({
-    parsedRoom,
-    roomServerUrl,
-    writeAccess: writeEnabled,
-    identityId: identity.id,
-    identityName: identity.name,
-    identityColor: identity.color,
-    roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
+  const joined = await registry.ensureRoom(parsedRoom.shareUrl, async () => {
+    const client = new TabulaRoomClient({
+      parsedRoom,
+      roomServerUrl,
+      writeAccess: writeEnabled,
+      identityId: identity.id,
+      identityName: identity.name,
+      identityColor: identity.color,
+      roomCheckpointStore: createFirebaseWorkspaceRoomCheckpointStore(env),
+    });
+    await registry.reserve(client.sessionId);
+    let registered = false;
+    try {
+      throwIfOperationAborted();
+      await abortableOperation(
+        client.connect({ waitForStateMs: 30_000, waitForPresenceMs: 1_000 }),
+        () => client.disconnect(),
+      );
+      throwIfOperationAborted();
+      const session = await summarizeSession(client);
+      throwIfOperationAborted();
+      if (!session.ready) {
+        throw new TabulaCoreError("session_not_ready", "The Tabula session connected but its workspace state has not arrived.", {
+          retry: "Keep the Tabula room open and join it again after its workspace state is available.",
+        });
+      }
+      registry.add(client);
+      registered = true;
+      markOperationCommitted("join_room");
+      return client;
+    } catch (error) {
+      if (registered) {
+        await registry.leave(client.sessionId);
+      } else {
+        client.disconnect();
+        await registry.cancelReservation(client.sessionId);
+      }
+      throw error;
+    }
   });
-  await registry.reserve(client.sessionId);
-  let registered = false;
-  try {
-    throwIfOperationAborted();
-    await abortableOperation(client.connect({ waitForStateMs: 30_000 }), () => client.disconnect());
-    throwIfOperationAborted();
-    const session = await summarizeSession(client);
-    throwIfOperationAborted();
-    if (!session.ready) {
-      throw new TabulaCoreError("session_not_ready", "The Tabula session connected but its workspace state has not arrived.", {
-        retry: "Keep the Tabula room open and join it again after its workspace state is available.",
-      });
-    }
-    registry.add(client);
-    registered = true;
-    markOperationCommitted("join_room");
-    return { ...session, reused: false };
-  } catch (error) {
-    if (registered) {
-      await registry.leave(client.sessionId);
-    } else {
-      client.disconnect();
-      await registry.cancelReservation(client.sessionId);
-    }
-    throw error;
-  }
+  return { ...await summarizeSession(joined.client), reused: joined.reused };
 };
 
 export const startWorkspaceSession = async ({
@@ -115,6 +121,7 @@ export const startWorkspaceSession = async ({
     identityName: identity.name,
     identityColor: identity.color,
   });
+  const presenceReady = started.presenceStatus === "ready";
   return {
     sessionId: started.sessionId,
     ready: started.stateReceived,
@@ -125,7 +132,8 @@ export const startWorkspaceSession = async ({
       revision: document.sha256,
       textLength: document.textLength,
     })),
-    otherCollaboratorCount: started.collaborators.length,
+    presenceReady,
+    ...(presenceReady ? { otherCollaboratorCount: started.collaborators.length } : {}),
     sessionUrl: started.roomUrl,
     applied: true as const,
     persisted: !started.checkpointPending && started.recoveryMode !== "temporary",

@@ -138,6 +138,11 @@ export const registerCoreTools = (
     input: unknown,
     handler: () => Promise<{ value: Record<string, unknown>; text: string }>,
   ) => run(() => operationLedger.run(toolName, input, handler));
+  const runInFlightMutation = (
+    toolName: string,
+    input: unknown,
+    handler: () => Promise<{ value: Record<string, unknown>; text: string }>,
+  ) => run(() => operationLedger.runInFlight(toolName, input, handler));
 
   registerCoreAppTool(
     server,
@@ -157,7 +162,8 @@ export const registerCoreTools = (
         canWrite: z.boolean(),
         fileCount: z.number().int().nonnegative(),
         files: z.array(sessionFileOutputSchema),
-        otherCollaboratorCount: z.number().int().nonnegative(),
+        presenceReady: z.boolean(),
+        otherCollaboratorCount: z.number().int().nonnegative().optional(),
         sessionUrl: z.string().url(),
         ...mutationStateOutputSchema,
       },
@@ -197,12 +203,13 @@ export const registerCoreTools = (
         ready: z.boolean(),
         canWrite: z.boolean(),
         fileCount: z.number().int().nonnegative(),
-        otherCollaboratorCount: z.number().int().nonnegative(),
+        presenceReady: z.boolean(),
+        otherCollaboratorCount: z.number().int().nonnegative().optional(),
         reused: z.boolean(),
       },
-      annotations: annotations(false, true),
+      annotations: annotations(false, true, false, true),
     },
-    async ({ roomUrl }: { roomUrl: string }) => runMutation("join_room", { roomUrl }, async () => {
+    async ({ roomUrl }: { roomUrl: string }) => runInFlightMutation("join_room", { roomUrl }, async () => {
       const session = await joinRoomSession({
         registry,
         roomUrl,

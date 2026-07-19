@@ -81,7 +81,10 @@ export const startWorkspaceRoom = async ({
       persistCheckpoint: false,
     });
     throwIfOperationAborted();
-    const recoveryStatus = await abortableOperation(client.connect(), () => client.disconnect());
+    const recoveryStatus = await abortableOperation(
+      client.connect({ waitForPresenceMs: 1_000 }),
+      () => client.disconnect(),
+    );
     throwIfOperationAborted();
     const status = await client.getStatus();
     throwIfOperationAborted();

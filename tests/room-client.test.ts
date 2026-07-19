@@ -432,10 +432,14 @@ describe("TabulaRoomClient protocol v2", () => {
       });
       await browserPeer.connect();
 
-      await expect(mcpClient.connect({ waitForStateMs: 500 })).resolves.toBe("checkpoint-disabled");
+      await expect(mcpClient.connect({ waitForStateMs: 500, waitForPresenceMs: 500 }))
+        .resolves.toBe("checkpoint-disabled");
       await expect(mcpClient.getStatus()).resolves.toMatchObject({
         status: "connected",
         hydrationStatus: "ready",
+        presenceStatus: "ready",
+        connectedPeerCount: 1,
+        collaborators: [expect.objectContaining({ name: "Browser Peer" })],
         checkpointStatus: { enabled: false, status: "disabled" },
       });
       await expect(mcpClient.readWorkspaceDocument({ documentId: "doc_1" })).resolves.toMatchObject({

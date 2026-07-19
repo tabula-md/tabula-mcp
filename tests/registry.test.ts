@@ -72,4 +72,46 @@ describe("SessionRegistry", () => {
     expect(release).toHaveBeenCalledWith("session-3");
     expect(registry.size).toBe(0);
   });
+
+  it("connects one client for concurrent joins and reuses it after settlement", async () => {
+    const registry = new SessionRegistry();
+    const shareUrl = "https://tabula.md/#room=private,secret";
+    const connected = client("session-1", shareUrl);
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const connect = vi.fn(async () => {
+      await gate;
+      await registry.reserve(connected.sessionId);
+      registry.add(connected);
+      return connected;
+    });
+
+    const first = registry.ensureRoom(shareUrl, connect);
+    const concurrent = registry.ensureRoom(shareUrl, connect);
+    release?.();
+
+    await expect(first).resolves.toEqual({ client: connected, reused: false });
+    await expect(concurrent).resolves.toEqual({ client: connected, reused: true });
+    await expect(registry.ensureRoom(shareUrl, connect)).resolves.toEqual({ client: connected, reused: true });
+    expect(connect).toHaveBeenCalledOnce();
+    await registry.clear();
+  });
+
+  it("allows a fresh join after the single-flight connector fails", async () => {
+    const registry = new SessionRegistry();
+    const shareUrl = "https://tabula.md/#room=private,secret";
+    const connect = vi.fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockImplementationOnce(async () => {
+        const connected = client("session-2", shareUrl);
+        await registry.reserve(connected.sessionId);
+        registry.add(connected);
+        return connected;
+      });
+
+    await expect(registry.ensureRoom(shareUrl, connect)).rejects.toThrow("offline");
+    await expect(registry.ensureRoom(shareUrl, connect)).resolves.toMatchObject({ reused: false });
+    expect(connect).toHaveBeenCalledTimes(2);
+    await registry.clear();
+  });
 });

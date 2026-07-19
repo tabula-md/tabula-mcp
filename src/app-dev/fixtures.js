@@ -11,5 +11,5 @@ export const roomFixture = {
   ready: true,
   canWrite: true,
   fileCount: 2,
-  otherCollaboratorCount: 1,
+  presenceReady: true,
 };

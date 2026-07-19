@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { TabulaCoreError } from "./core-errors.js";
 import { TabulaRoomClient } from "./room-client.js";
 
@@ -14,6 +15,8 @@ export type SessionRegistryLifecycle = {
 export class SessionRegistry {
   private readonly sessions = new Map<string, ConnectedSession>();
   private readonly reservations = new Set<string>();
+  private readonly roomJoins = new Map<string, Promise<{ client: TabulaRoomClient; created: boolean }>>();
+  private readonly roomJoinNamespace = randomBytes(32).toString("hex");
 
   constructor({
     lifecycle = {},
@@ -89,6 +92,42 @@ export class SessionRegistry {
     return entry.client;
   }
 
+  /**
+   * Returns the existing client for a Room or lets exactly one caller create
+   * it. The private Room URL is salted and hashed before it becomes a map key.
+   */
+  async ensureRoom(
+    shareUrl: string,
+    connect: () => Promise<TabulaRoomClient>,
+  ): Promise<{ client: TabulaRoomClient; reused: boolean }> {
+    const existing = this.findByShareUrl(shareUrl);
+    if (existing) return { client: existing, reused: true };
+
+    const key = createHash("sha256")
+      .update(this.roomJoinNamespace)
+      .update("\0")
+      .update(shareUrl)
+      .digest("hex");
+    const pending = this.roomJoins.get(key);
+    if (pending) {
+      const result = await pending;
+      return { client: result.client, reused: true };
+    }
+
+    const operation = (async () => {
+      const racedExisting = this.findByShareUrl(shareUrl);
+      if (racedExisting) return { client: racedExisting, created: false };
+      return { client: await connect(), created: true };
+    })();
+    this.roomJoins.set(key, operation);
+    try {
+      const result = await operation;
+      return { client: result.client, reused: !result.created };
+    } finally {
+      if (this.roomJoins.get(key) === operation) this.roomJoins.delete(key);
+    }
+  }
+
   has() {
     return this.sessions.size > 0;
   }
@@ -109,6 +148,7 @@ export class SessionRegistry {
     }
     this.sessions.clear();
     this.reservations.clear();
+    this.roomJoins.clear();
     await Promise.allSettled(sessionIds.map((sessionId) => this.lifecycle.release?.(sessionId)));
   }
 

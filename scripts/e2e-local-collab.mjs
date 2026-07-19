@@ -565,6 +565,15 @@ const run = async () => {
       }, async (peerClient) => {
         const joined = await callTool(peerClient, "join_room", { roomUrl: peerSession.sessionUrl });
         assert.equal(joined.ready, true);
+        assert.equal(joined.presenceReady, true, "Join should wait for the initial peer roster and awareness state");
+        assert(
+          joined.otherCollaboratorCount >= 1,
+          "The second MCP client should observe at least the first MCP collaborator",
+        );
+        const reusedJoin = await callTool(peerClient, "join_room", { roomUrl: peerSession.sessionUrl });
+        assert.equal(reusedJoin.sessionId, joined.sessionId, "Repeated Join Room should reuse the connected client");
+        assert.equal(reusedJoin.reused, true, "Repeated Join Room should report reuse after the first call settles");
+        assert.equal(reusedJoin.presenceReady, true);
         const peerReadBatch = await callTool(peerClient, "read_multiple_files", {
           sessionId: joined.sessionId,
           paths: ["README.md"],
@@ -574,6 +583,10 @@ const run = async () => {
 
         const left = await callTool(client, "leave_session", { sessionId: peerSession.sessionId });
         assert.equal(left.left, true);
+        const afterLeaveJoin = await callTool(peerClient, "join_room", { roomUrl: peerSession.sessionUrl });
+        assert.equal(afterLeaveJoin.sessionId, joined.sessionId);
+        assert.equal(afterLeaveJoin.reused, true);
+        assert.equal(afterLeaveJoin.presenceReady, true);
         const stillConnectedPeer = await callTool(peerClient, "read_file", {
           sessionId: joined.sessionId,
           path: "README.md",
