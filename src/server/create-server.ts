@@ -12,6 +12,7 @@ import {
   TABULA_MCP_PRODUCT_WEBSITE_URL,
 } from "../public-copy.js";
 import { SessionRegistry, type SessionRegistryLifecycle } from "../registry.js";
+import { DEFAULT_SESSION_IDLE_TTL_MS } from "../session-timeouts.js";
 import { TABULA_MCP_VERSION } from "../version.js";
 import { createCoreInstructions } from "./instructions.js";
 import { registerCoreTools } from "./register-core-tools.js";
@@ -25,6 +26,7 @@ export type TabulaMcpServerOptions = {
   deploymentMode?: DeploymentMode;
   env?: RuntimeEnvironment;
   roomSessionLifecycle?: SessionRegistryLifecycle;
+  sessionIdleTtlMs?: number;
 };
 
 export type TabulaMcpServerInstance = {
@@ -42,6 +44,9 @@ export const createTabulaMcpServer = (options: TabulaMcpServerOptions = {}): Tab
   const deploymentMode = resolveDeploymentMode({ deploymentMode: options.deploymentMode, env });
   const allowTemporaryRooms = deploymentMode === "local";
   const registry = new SessionRegistry({
+    idleTtlMs:
+      options.sessionIdleTtlMs ??
+      positiveIntegerFromEnv(env?.TABULA_MCP_SESSION_IDLE_TTL_MS, DEFAULT_SESSION_IDLE_TTL_MS),
     lifecycle: options.roomSessionLifecycle,
     maxSessions: positiveIntegerFromEnv(env?.TABULA_MCP_MAX_ROOMS_PER_SESSION, 8),
   });

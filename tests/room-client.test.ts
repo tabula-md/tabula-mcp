@@ -150,6 +150,32 @@ const createClient = ({
 afterEach(() => vi.useRealTimers());
 
 describe("TabulaRoomClient protocol v2", () => {
+  it("waits for the final encrypted checkpoint before closing an idle Room", async () => {
+    const relay = createMemoryRelay();
+    let finishSave: ((value: { ok: true; generation: number }) => void) | undefined;
+    const saved = new Promise<{ ok: true; generation: number }>((resolve) => { finishSave = resolve; });
+    const checkpointStore: WorkspaceRoomCheckpointStore = {
+      enabled: true,
+      async loadEncryptedCheckpoint() { return null; },
+      async saveEncryptedCheckpoint() { return saved; },
+    };
+    const client = createClient({ relay, checkpointStore });
+    await client.publishWorkspaceSnapshot({
+      workspace: await createWorkspaceState(),
+      documents: [{ documentId: "doc_1", title: "Draft.md", markdown: "# Draft\n" }],
+      persistCheckpoint: false,
+    });
+    await client.connect();
+
+    const closing = client.close();
+    expect(relay.peerCount()).toBe(1);
+    finishSave?.({ ok: true, generation: 1 });
+    await closing;
+
+    expect(relay.peerCount()).toBe(0);
+    await expect(client.getStatus()).resolves.toMatchObject({ status: "closed", socketConnected: false });
+  });
+
   it("disconnects a Room transport when readiness is aborted before commit", async () => {
     const relay = createMemoryRelay();
     const client = createClient({ relay, checkpointStore: createDisabledCheckpointStore() });

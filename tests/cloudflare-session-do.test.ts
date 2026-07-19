@@ -12,6 +12,32 @@ class MemoryStorage {
 }
 
 describe("TabulaMcpSessionDurableObject lifecycle", () => {
+  it("uses the shared MCP and Room idle TTL for its durable cleanup alarm", async () => {
+    const TabulaMcpSessionDurableObject = createTabulaMcpSessionDurableObject("");
+    const storage = new MemoryStorage();
+    const quotaFetch = vi.fn(async () => Response.json({ released: true }));
+    const session = new TabulaMcpSessionDurableObject(
+      { storage },
+      {
+        TABULA_MCP_QUOTA: { getByName: () => ({ fetch: quotaFetch }) },
+        TABULA_MCP_SESSION_IDLE_TTL_MS: "1234",
+      },
+    );
+    const startedAt = Date.now();
+
+    const response = await session.fetch(new Request("https://mcp.tabula.md/health", {
+      headers: {
+        "x-tabula-mcp-client-key": "client-key",
+        "x-tabula-mcp-session-id": "mcp-session",
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(storage.alarmAt).toBeGreaterThanOrEqual(startedAt + 1_234);
+    expect(storage.alarmAt).toBeLessThanOrEqual(Date.now() + 1_234);
+    await session.alarm();
+  });
+
   it("releases its client quota lease when an idle alarm fires", async () => {
     const TabulaMcpSessionDurableObject = createTabulaMcpSessionDurableObject("");
     const storage = new MemoryStorage();

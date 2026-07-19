@@ -32,6 +32,10 @@ Consequently:
   reported by the operation that uses them.
 - closing an MCP session must close its Room connections and clear decrypted
   working state.
+- local stdio and hosted HTTP apply the same per-Room idle lease. Each Room
+  tool call refreshes only that Room; expiry disconnects the agent, clears the
+  in-memory key and working state, and releases its quota without deleting the
+  encrypted Room checkpoint.
 
 ## HTTP surface
 
@@ -116,6 +120,13 @@ npm run deploy:cloudflare
 The Session Durable Object owns live plaintext working state only while its MCP
 session is active. The Quota Durable Object stores leases and counters, never
 Room/Copy URLs, keys, or Markdown.
+
+`TABULA_MCP_SESSION_IDLE_TTL_MS` controls both the hosted MCP transport lease
+and every connected Room handle. The default is 15 minutes. Local stdio uses
+the same value with an in-process timer, while Cloudflare additionally uses a
+Durable Object alarm so abandoned sessions are cleaned after isolate eviction.
+An expired handle returns `session_expired`; join the private `#room` URL again
+to continue. `leave_session` performs the same cleanup immediately.
 
 ## Vercel (preview/self-host compatibility)
 

@@ -679,6 +679,10 @@ export class TabulaRoomClient {
   }
 
   disconnect() {
+    void this.close();
+  }
+
+  async close() {
     if (this.closed) return;
     this.closed = true;
     if (this.checkpointRetryTimer) clearTimeout(this.checkpointRetryTimer);
@@ -687,7 +691,7 @@ export class TabulaRoomClient {
     this.unsubscribe = null;
     for (const waiter of this.waiters) clearTimeout(waiter.timer);
     this.waiters.clear();
-    if (this.client) void this.client.disconnect();
+    if (this.client) await this.client.disconnect();
   }
 
   private async ensureClient(initialWorkspace?: WorkspaceRoomSnapshot) {

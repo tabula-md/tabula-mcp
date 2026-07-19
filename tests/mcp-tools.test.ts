@@ -99,6 +99,17 @@ describe("write access configuration", () => {
     expect(resolveWriteEnabled({ env: {}, argv: [] })).toBe(true);
     expect(resolveWriteEnabled({ env: {}, argv: ["--read-only"] })).toBe(false);
   });
+
+  it("applies an explicit idle timeout to every Room handle", async () => {
+    const instance = createTabulaMcpServer({
+      env: { TABULA_MCP_DEPLOYMENT: "local" },
+      sessionIdleTtlMs: 1_234,
+    });
+
+    expect(instance.registry.idleTimeoutSeconds).toBe(2);
+    await instance.registry.clear();
+    await instance.server.close();
+  });
 });
 
 describe("core MCP contract", () => {

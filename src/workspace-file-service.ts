@@ -16,16 +16,7 @@ import {
   persistAppliedMutation,
 } from "./mutation-receipt.js";
 
-const requireSession = (registry: SessionRegistry, sessionId: string) => {
-  try {
-    return registry.get(sessionId);
-  } catch {
-    throw new TabulaCoreError("session_not_found", "The Tabula session is not connected.", {
-      details: { sessionId },
-      retry: "Join the room again.",
-    });
-  }
-};
+const requireSession = (registry: SessionRegistry, sessionId: string) => registry.get(sessionId);
 
 const readReadySnapshot = async (registry: SessionRegistry, sessionId: string) => {
   const session = requireSession(registry, sessionId);

@@ -7,6 +7,7 @@ const client = (sessionId: string, shareUrl = `https://tabula.md/#room=${session
   sessionId,
   shareUrl,
   disconnect: vi.fn(),
+  close: vi.fn(async () => undefined),
 }) as unknown as TabulaRoomClient;
 
 describe("SessionRegistry", () => {
@@ -45,7 +46,7 @@ describe("SessionRegistry", () => {
     expect(reserve).toHaveBeenCalledTimes(1);
 
     await expect(registry.leave(first.sessionId)).resolves.toBe(true);
-    expect(first.disconnect).toHaveBeenCalledOnce();
+    expect(first.close).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledWith(first.sessionId);
     await expect(registry.leave(first.sessionId)).resolves.toBe(false);
     expect(release).toHaveBeenCalledTimes(1);
@@ -65,8 +66,8 @@ describe("SessionRegistry", () => {
     await registry.cancelReservation("session-3");
     await registry.clear();
 
-    expect(first.disconnect).toHaveBeenCalledOnce();
-    expect(second.disconnect).toHaveBeenCalledOnce();
+    expect(first.close).toHaveBeenCalledOnce();
+    expect(second.close).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledWith("session-1");
     expect(release).toHaveBeenCalledWith("session-2");
     expect(release).toHaveBeenCalledWith("session-3");
@@ -113,5 +114,62 @@ describe("SessionRegistry", () => {
     await expect(registry.ensureRoom(shareUrl, connect)).resolves.toMatchObject({ reused: false });
     expect(connect).toHaveBeenCalledTimes(2);
     await registry.clear();
+  });
+
+  it("expires each idle Room independently while active Rooms keep their handles", async () => {
+    let now = 0;
+    const release = vi.fn(async () => undefined);
+    const registry = new SessionRegistry({
+      idleTtlMs: 1_000,
+      lifecycle: { release },
+      now: () => now,
+    });
+    const first = client("session-1");
+    const second = client("session-2");
+    await registry.reserve(first.sessionId);
+    registry.add(first);
+    now = 500;
+    await registry.reserve(second.sessionId);
+    registry.add(second);
+    now = 800;
+    expect(registry.get(first.sessionId)).toBe(first);
+
+    now = 1_500;
+    await registry.pruneIdle();
+
+    expect(second.close).toHaveBeenCalledOnce();
+    expect(first.close).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledWith(second.sessionId);
+    expect(() => registry.get(second.sessionId)).toThrowError(TabulaCoreError);
+    try {
+      registry.get(second.sessionId);
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "session_expired",
+        details: { idleTimeoutSeconds: 1 },
+      });
+    }
+    expect(registry.get(first.sessionId)).toBe(first);
+    await registry.clear();
+  });
+
+  it("automatically closes an idle local Room without another MCP request", async () => {
+    vi.useFakeTimers();
+    try {
+      const release = vi.fn(async () => undefined);
+      const registry = new SessionRegistry({ idleTtlMs: 1_000, lifecycle: { release } });
+      const connected = client("session-1");
+      await registry.reserve(connected.sessionId);
+      registry.add(connected);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(connected.close).toHaveBeenCalledOnce();
+      expect(release).toHaveBeenCalledWith(connected.sessionId);
+      expect(registry.size).toBe(0);
+      await registry.clear();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

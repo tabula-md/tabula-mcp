@@ -9,12 +9,13 @@ import type { StoredWorkspace } from "./workspaces.js";
 import type { TabulaAgentIdentity } from "./agent-identity.js";
 import { abortableOperation, markOperationCommitted, throwIfOperationAborted } from "./server/operation-context.js";
 
-const summarizeSession = async (client: TabulaRoomClient) => {
+const summarizeSession = async (registry: SessionRegistry, client: TabulaRoomClient) => {
   const status = await client.getStatus();
   const workspace = status.stateReceived ? await client.readWorkspace() : null;
   const presenceReady = status.presenceStatus === "ready";
   return {
     sessionId: status.sessionId,
+    idleTimeoutSeconds: registry.idleTimeoutSeconds,
     ready: status.stateReceived,
     canWrite: status.writeAccess,
     fileCount: workspace?.documents.length ?? 0,
@@ -71,7 +72,7 @@ export const joinRoomSession = async ({
         () => client.disconnect(),
       );
       throwIfOperationAborted();
-      const session = await summarizeSession(client);
+      const session = await summarizeSession(registry, client);
       throwIfOperationAborted();
       if (!session.ready) {
         throw new TabulaCoreError("session_not_ready", "The Tabula session connected but its workspace state has not arrived.", {
@@ -86,13 +87,13 @@ export const joinRoomSession = async ({
       if (registered) {
         await registry.leave(client.sessionId);
       } else {
-        client.disconnect();
+        await client.close();
         await registry.cancelReservation(client.sessionId);
       }
       throw error;
     }
   });
-  return { ...await summarizeSession(joined.client), reused: joined.reused };
+  return { ...await summarizeSession(registry, joined.client), reused: joined.reused };
 };
 
 export const startWorkspaceSession = async ({
@@ -124,6 +125,7 @@ export const startWorkspaceSession = async ({
   const presenceReady = started.presenceStatus === "ready";
   return {
     sessionId: started.sessionId,
+    idleTimeoutSeconds: registry.idleTimeoutSeconds,
     ready: started.stateReceived,
     canWrite: started.writeAccess,
     fileCount: started.published.emittedDocumentCount,

@@ -10,6 +10,7 @@ export const createCoreInstructions = ({
   "New live collaboration: use Start Session. Existing #room URL: use Join Room. Fixed handoff: use Export Copy. Existing #json URL: use Import Copy.",
   "Keep every room and copy URL private unless the user explicitly asks to share it.",
   "Keep the sessionId returned by Join Room or Start Session and pass it to every Room file tool; never guess or substitute another session.",
+  "A live session handle expires after the returned idleTimeoutSeconds without Room tool use. Join the private #room URL again after session_expired.",
   "Start Session returns the initial file paths and revisions; use them for immediate changes instead of reading the same files only to obtain revisions.",
   "Use Leave Session when the user asks the agent to leave a live session; this disconnects the agent without deleting Room files.",
   "List files first when the target file is unknown.",
