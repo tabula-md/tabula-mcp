@@ -46,6 +46,12 @@ is no implicit active Room. Ask Claude to leave a Session when it is finished;
 this disconnects the agent but does not delete the Room or its files. Connected
 Room handles and file paths are not enumerated through MCP Resources.
 
+Local and hosted connectors both expire an individual Room handle after 15
+minutes without a Room tool call by default. Using one Room does not keep other
+idle Rooms connected. After `session_expired`, give Claude the private Room URL
+again; the encrypted Room checkpoint remains independent from the agent's
+presence.
+
 For a fixed handoff, Claude can call **Import Copy** with a private `#json`
 link. It receives relative Markdown paths and contents for host-native local
 file creation; it does not join a live Session or write files by itself.

@@ -249,6 +249,7 @@ export const createTabulaMcpWebHandler = (options: TabulaMcpWebHandlerOptions = 
       writeEnabled,
       env,
       roomSessionLifecycle: options.roomSessionLifecycle,
+      sessionIdleTtlMs: policy.sessionIdleTtlMs,
     });
 
   const createStatefulSession = async () => {

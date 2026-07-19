@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Unified local and hosted Room-handle cleanup with the same configurable idle
+  lease, per-Room activity tracking, immediate collaborator disconnection, and
+  a recoverable `session_expired` result instead of indefinite local presence.
+
 ## 0.8.0
 
 - Made repeated joins to the same Room reuse one MCP session, including

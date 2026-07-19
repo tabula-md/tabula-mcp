@@ -164,6 +164,7 @@ const roomMock = vi.hoisted(() => {
     async flushCheckpoint() {}
     async persistCheckpointAfterMutation() { return "disabled" as const; }
     disconnect() {}
+    async close() {}
   }
   return {
     MockRoomClient,
@@ -216,6 +217,7 @@ describe("core MCP workflows", () => {
       const joined = await client.callTool({ name: "join_room", arguments: { roomUrl } });
       const session = joined.structuredContent as {
         sessionId: string;
+        idleTimeoutSeconds: number;
         ready: boolean;
         canWrite: boolean;
         fileCount: number;
@@ -223,6 +225,7 @@ describe("core MCP workflows", () => {
         otherCollaboratorCount: number;
       };
       expect(session).toMatchObject({
+        idleTimeoutSeconds: 900,
         ready: true,
         canWrite: true,
         fileCount: 2,
@@ -556,6 +559,7 @@ describe("core MCP workflows", () => {
         },
       });
       expect(started.structuredContent).toMatchObject({
+        idleTimeoutSeconds: 900,
         ready: true,
         canWrite: true,
         fileCount: 2,

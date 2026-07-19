@@ -1,6 +1,7 @@
 import { TabulaCoreError } from "../src/core-errors.js";
 import { positiveIntegerFromEnv } from "../src/env.js";
 import type { QuotaDecision } from "../src/server/cloudflare-quota.js";
+import { DEFAULT_SESSION_IDLE_TTL_MS } from "../src/session-timeouts.js";
 import {
   createTabulaMcpWebHandler,
   type TabulaMcpWebHandler,
@@ -39,8 +40,6 @@ export const internalClientKeyHeader = "x-tabula-mcp-client-key";
 export const internalSessionIdHeader = "x-tabula-mcp-session-id";
 
 const sessionMetadataKey = "mcp-session-metadata-v1";
-const defaultSessionIdleTtlMs = 15 * 60_000;
-
 type SessionMetadata = { clientKey: string; sessionId: string };
 
 const stringEnv = (env: Record<string, unknown>): WebEnvironment =>
@@ -119,7 +118,10 @@ export const createTabulaMcpSessionDurableObject = (documentAppHtml: string) =>
       if (metadata) {
         await this.state.storage.put(sessionMetadataKey, metadata);
         await this.state.storage.setAlarm(
-          Date.now() + positiveIntegerFromEnv(this.env.TABULA_MCP_SESSION_IDLE_TTL_MS, defaultSessionIdleTtlMs),
+          Date.now() + positiveIntegerFromEnv(
+            this.env.TABULA_MCP_SESSION_IDLE_TTL_MS,
+            DEFAULT_SESSION_IDLE_TTL_MS,
+          ),
         );
       }
       const forcedSessionId = request.headers.get(forcedSessionIdHeader) ?? undefined;

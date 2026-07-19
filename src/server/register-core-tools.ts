@@ -158,6 +158,7 @@ export const registerCoreTools = (
       },
       outputSchema: {
         sessionId: z.string().uuid(),
+        idleTimeoutSeconds: z.number().int().positive(),
         ready: z.boolean(),
         canWrite: z.boolean(),
         fileCount: z.number().int().nonnegative(),
@@ -200,6 +201,7 @@ export const registerCoreTools = (
       },
       outputSchema: {
         sessionId: z.string().uuid(),
+        idleTimeoutSeconds: z.number().int().positive(),
         ready: z.boolean(),
         canWrite: z.boolean(),
         fileCount: z.number().int().nonnegative(),

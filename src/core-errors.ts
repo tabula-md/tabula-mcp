@@ -13,6 +13,7 @@ export const tabulaCoreErrorCodes = [
   "path_exists",
   "read_too_large",
   "session_not_found",
+  "session_expired",
   "session_limit",
   "session_not_ready",
   "stale_cursor",

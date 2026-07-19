@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { TabulaMcpError } from "../protocol.js";
 import { isTruthyEnvValue, positiveIntegerFromEnv, resolveProductionMode, type RuntimeEnvironment } from "../env.js";
 import type { DeploymentMode } from "../deployment.js";
+import { DEFAULT_SESSION_IDLE_TTL_MS } from "../session-timeouts.js";
 import { operationCommitForSignal } from "./operation-context.js";
 
 export type LogLevel = "silent" | "error" | "warn" | "info" | "debug";
@@ -51,7 +52,6 @@ export type OperationalLogEntry = Record<string, boolean | number | string | nul
 
 const defaultMaxRequestBytes = 6 * 1024 * 1024;
 const defaultMaxActiveSessions = 100;
-const defaultSessionIdleTtlMs = 15 * 60 * 1000;
 const defaultRequestTimeoutMs = 55 * 1000;
 const defaultRateLimitMax = 120;
 const defaultRateLimitWindowMs = 60 * 1000;
@@ -190,7 +190,7 @@ export const resolveOperationalPolicy = ({
       positiveIntegerFromEnv(env.TABULA_MCP_REQUEST_TIMEOUT_MS, defaultRequestTimeoutMs),
     sessionIdleTtlMs:
       options.sessionIdleTtlMs ??
-      positiveIntegerFromEnv(env.TABULA_MCP_SESSION_IDLE_TTL_MS, defaultSessionIdleTtlMs),
+      positiveIntegerFromEnv(env.TABULA_MCP_SESSION_IDLE_TTL_MS, DEFAULT_SESSION_IDLE_TTL_MS),
     statelessHttp,
     publicUnauthenticated,
   };

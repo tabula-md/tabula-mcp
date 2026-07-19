@@ -106,7 +106,7 @@ export const startWorkspaceRoom = async ({
         : "Started a durable Tabula session with an encrypted room checkpoint. Claude is connected as a collaborator.",
     };
   } catch (error) {
-    if (!committed) client.disconnect();
+    if (!committed) await client.close();
     if (!committed) await registry.cancelReservation(client.sessionId);
     throw error;
   }

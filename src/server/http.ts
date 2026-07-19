@@ -239,6 +239,7 @@ export const createTabulaMcpHttpServer = (options: TabulaMcpHttpServerOptions = 
       forceDocumentAppTools: policy.statelessHttp,
       writeEnabled,
       env: process.env,
+      sessionIdleTtlMs: policy.sessionIdleTtlMs,
     });
 
   const createStatefulTransport = async () => {
