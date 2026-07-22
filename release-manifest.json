@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "releaseVersion": "0.8.1",
+  "releaseVersion": "0.8.2",
   "packages": {
     "mcp": {
       "name": "@tabula-md/mcp",
-      "version": "0.8.1"
+      "version": "0.8.2"
     },
     "core": {
       "name": "@tabula-md/tabula",
-      "version": "0.8.0"
+      "version": "0.9.0"
     }
   },
   "artifacts": {
-    "mcpb": "tabula-mcp-0.8.1.mcpb",
+    "mcpb": "tabula-mcp-0.8.2.mcpb",
     "mcpbStable": "tabula-mcp.mcpb",
-    "claudePluginVersion": "0.8.1"
+    "claudePluginVersion": "0.8.2"
   },
   "worker": {
     "name": "tabula-mcp",
@@ -27,7 +27,7 @@
     "tabulaMd": {
       "origin": "https://tabula.md",
       "repository": "tabula-md/tabula-md",
-      "ref": "1751b3511a4c96b1be17ba9b104ca4c2aeddd7f5"
+      "ref": "64d9dc1df5ad5bc20acb917e2ee691134444e32f"
     },
     "tabulaRoom": {
       "repository": "tabula-md/tabula-room",
