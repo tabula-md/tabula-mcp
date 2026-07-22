@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.8.2
+
+- Ignored Markdown heading markers inside fenced code blocks when generating
+  document outlines, while preserving source line and offset locations.
+- Updated the shared `@tabula-md/tabula` core to 0.9.0 and pinned
+  interoperability to the matching Tabula.md production build.
+
 ## 0.8.1
 
 - Unified local and hosted Room-handle cleanup with the same configurable idle
