@@ -33,4 +33,28 @@ describe("Markdown outline", () => {
       { depth: 2, text: "Next", line: 3, offset: 13 },
     ]);
   });
+
+  it("ignores headings inside fenced code while preserving source positions", () => {
+    const markdown = [
+      "# Visible",
+      "```markdown",
+      "## Hidden",
+      "````",
+      "~~~",
+      "### Also hidden",
+      "~~~",
+      "###### Final",
+    ].join("\r\n");
+
+    expect(getMarkdownOutline(markdown)).toEqual([
+      { depth: 1, text: "Visible", line: 1, offset: 0 },
+      { depth: 6, text: "Final", line: 8, offset: markdown.indexOf("###### Final") },
+    ]);
+  });
+
+  it("keeps headings hidden after an unclosed fence", () => {
+    expect(getMarkdownOutline("# Visible\n```\n## Hidden")).toEqual([
+      { depth: 1, text: "Visible", line: 1, offset: 0 },
+    ]);
+  });
 });
