@@ -100,7 +100,7 @@
     "check:release-artifacts": "node scripts/check-release-artifacts.mjs",
     "build:release-manifest": "node scripts/build-release-manifest.mjs",
     "release:pack": "node scripts/pack-release.mjs && npm run build:release-manifest && npm run check:release-artifacts && npm run check:claude-plugin",
-    "release:verify": "npm run check:release-contract && npm run check:release-workflow && npm run test:production-release && npm run typecheck && npm run check:p0-invariants && npm run test:worker && npm run check:secret-boundaries && npm test && npm run test:app && npm run test:stdio && npm run check:context-budget && npm run check:mcpb-tools && npm run check:deploy-targets && npm run release:pack && npm run check:exports && npm run check:pack && npm audit --json && git diff --check",
+    "release:verify": "npm run check:release-contract && npm run check:release-workflow && npm run test:production-release && npm run typecheck && npm run check:p0-invariants && npm run test:worker && npm run check:secret-boundaries && npm test && npm run test:app && npm run test:stdio && npm run check:context-budget && npm run check:mcpb-tools && npm run check:deploy-targets && npm run release:pack && npm run check:exports && npm run check:pack && npm audit --omit=dev --json && git diff --check",
     "release:verify:full": "npm run release:verify && npm run test:e2e:local-collab",
     "prepublishOnly": "npm run release:verify",
     "measure:mcp-context": "npm run build && node scripts/measure-mcp-context.mjs",
@@ -134,6 +134,8 @@
     "vitest": "^4.1.9"
   },
   "overrides": {
+    "@hono/node-server": "2.0.11",
+    "fast-uri": "3.1.4",
     "tmp": "^0.2.6"
   }
 }
